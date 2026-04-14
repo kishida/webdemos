@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>オフライン翻訳 — WebLLM + LFM2</title>
+<meta property="og:title" content="オフライン翻訳 — WebLLM + LFM2">
+<meta property="og:description" content="ブラウザ内で動作する完全オフラインのAI翻訳ツール。WebLLMとLFM2を活用し、データを外部に送信せずに高品質な翻訳を提供します。">
+<meta property="og:image" content="/ogp.png">
+<meta property="og:type" content="website">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@300;400;500&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0f11;
+    --surface: #161819;
+    --surface2: #1e2022;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #e8e9eb;
+    --muted: #7a7d82;
+    --accent: #4ade80;
+    --accent-dim: rgba(74,222,128,0.12);
+    --accent-glow: rgba(74,222,128,0.25);
+    --liquid: #38bdf8;
+    --liquid-dim: rgba(56,189,248,0.12);
+    --liquid-glow: rgba(56,189,248,0.3);
+    --warn: #fb923c;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans JP', sans-serif;
+  }
+
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+
+  header {
+    padding: 1.25rem 2rem 1rem;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  }
+
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: var(--accent-dim); border: 1px solid var(--accent-glow);
+    border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  }
+  .logo-icon svg { width: 16px; height: 16px; stroke: var(--accent); fill: none; stroke-width: 2; }
+  h1 { font-size: 16px; font-weight: 500; letter-spacing: 0.02em; }
+
+  .badge {
+    font-family: var(--mono); font-size: 11px; padding: 3px 8px; border-radius: 4px;
+    background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+  }
+  .badge.liquid { background: var(--liquid-dim); border-color: var(--liquid-glow); color: var(--liquid); }
+
+  .status-bar { display: flex; align-items: center; gap: 8px; font-size: 12px; font-family: var(--mono); color: var(--muted); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background 0.3s; }
+  .dot.ready { background: var(--accent); box-shadow: 0 0 6px var(--accent-glow); }
+  .dot.loading { background: var(--warn); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+
+  main { flex: 1; padding: 1.5rem 2rem; display: flex; flex-direction: column; gap: 1.5rem; max-width: 980px; width: 100%; margin: 0 auto; }
+
+  .setup-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem 1.5rem; }
+  .setup-panel h2 { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 1rem; }
+
+  .model-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; margin-bottom: 1rem; }
+
+  .model-card {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; cursor: pointer; transition: border-color 0.2s, background 0.2s; position: relative;
+  }
+  .model-card:hover { border-color: var(--border2); }
+  .model-card.selected { border-color: var(--accent-glow); background: var(--accent-dim); }
+  .model-card.selected.liquid-model { border-color: var(--liquid-glow); background: var(--liquid-dim); }
+
+  .model-card .name { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--text); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+  .model-card .meta { font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .model-card .check { position: absolute; top: 8px; right: 10px; font-size: 14px; color: var(--accent); opacity: 0; transition: opacity 0.2s; }
+  .model-card.selected .check { opacity: 1; }
+  .model-card.selected.liquid-model .check { color: var(--liquid); }
+
+  .tag {
+    font-family: var(--mono); font-size: 9px; padding: 1px 5px; border-radius: 3px;
+    background: var(--liquid-dim); color: var(--liquid); border: 1px solid var(--liquid-glow); letter-spacing: 0.04em;
+  }
+
+  .load-btn {
+    font-family: var(--sans); font-size: 14px; font-weight: 500; padding: 10px 20px;
+    background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-glow);
+    border-radius: 8px; cursor: pointer; transition: background 0.2s; display: inline-flex; align-items: center; gap: 8px;
+  }
+  .load-btn:hover { background: rgba(74,222,128,0.2); }
+  .load-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .progress-wrap { display: none; margin-top: 1rem; }
+  .progress-wrap.show { display: block; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 12px; font-family: var(--mono); color: var(--muted); margin-bottom: 6px; }
+  .progress-bar { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s; width: 0%; }
+  .log-line { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .translator { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+
+  .lang-bar {
+    display: flex; align-items: center; border-bottom: 1px solid var(--border); background: var(--surface2);
+  }
+  .lang-select { flex: 1; display: flex; align-items: center; gap: 8px; padding: 12px 16px; font-size: 13px; color: var(--text); }
+  .lang-select select {
+    background: transparent; border: none; outline: none; color: var(--text);
+    font-size: 13px; font-family: var(--sans); cursor: pointer; flex: 1;
+  }
+  .lang-select select option { background: #1e2022; }
+  .lang-select select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .swap-btn {
+    background: transparent; border: none; border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+    color: var(--muted); cursor: pointer; padding: 12px 16px; font-size: 16px; transition: color 0.2s, background 0.2s;
+  }
+  .swap-btn:hover { color: var(--text); background: var(--surface); }
+
+  .text-area { display: grid; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 600px) { .text-area { grid-template-columns: 1fr; } }
+
+  .pane { padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 8px; min-height: 180px; }
+  .pane:first-child { border-right: 1px solid var(--border); }
+  .pane-label { font-size: 11px; font-family: var(--mono); color: var(--muted); letter-spacing: 0.06em; }
+
+  textarea {
+    flex: 1; background: transparent; border: none; outline: none; color: var(--text);
+    font-family: var(--sans); font-size: 15px; line-height: 1.7; resize: none; min-height: 140px;
+  }
+  textarea::placeholder { color: var(--muted); }
+
+  .output-text { flex: 1; font-size: 15px; line-height: 1.7; color: var(--text); white-space: pre-wrap; word-break: break-word; min-height: 140px; }
+  .output-text.placeholder { color: var(--muted); font-style: italic; font-size: 13px; }
+  .output-text.thinking { color: var(--muted); font-style: italic; font-size: 13px; }
+
+  .action-bar {
+    padding: 10px 1.25rem; border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+  .char-count { font-size: 11px; font-family: var(--mono); color: var(--muted); }
+
+  .translate-btn {
+    font-family: var(--sans); font-size: 13px; font-weight: 500; padding: 8px 18px;
+    background: var(--accent); color: #0a0f0a; border: none; border-radius: 6px;
+    cursor: pointer; transition: opacity 0.2s; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .translate-btn:hover { opacity: 0.88; }
+  .translate-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .copy-btn {
+    background: transparent; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--muted); font-size: 11px; font-family: var(--mono); padding: 6px 12px;
+    cursor: pointer; transition: color 0.2s, border-color 0.2s;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--border2); }
+
+  .lang-note {
+    font-size: 11px; font-family: var(--mono); color: var(--liquid);
+    background: var(--liquid-dim); border: 1px solid var(--liquid-glow);
+    border-radius: 6px; padding: 6px 10px; display: none;
+  }
+  .lang-note.show { display: block; }
+
+  .info-strip {
+    padding: 0.75rem 2rem; border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    font-size: 11px; font-family: var(--mono); color: var(--muted); margin-top: auto;
+  }
+  .info-strip span { display: flex; align-items: center; gap: 5px; }
+  .timing { margin-left: auto; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    </div>
+    <h1>オフライン翻訳</h1>
+    <span class="badge">WebLLM</span>
+    <span class="badge liquid">LFM2</span>
+  </div>
+  <div class="status-bar">
+    <div class="dot" id="statusDot"></div>
+    <span id="statusText">モデル未ロード</span>
+  </div>
+</header>
+
+<main>
+  <div class="setup-panel">
+    <h2>モデル選択</h2>
+    <div class="model-grid" id="modelGrid">
+
+      <div class="model-card liquid-model selected" data-model="lfm2-enjpmt" data-backend="transformers">
+        <div class="check">✓</div>
+        <div class="name">LFM2 350M ENJP-MT <!-- <span class="tag">NEW</span>--></div>
+        <div class="meta">~300MB · Liquid AI製<br>英↔日専用翻訳モデル<br>Transformers.js + ONNX (GPU/WASM)</div>
+      </div>
+
+      <div class="model-card" data-model="Qwen3-0.6B-q4f16_1-MLC" data-backend="webllm">
+        <div class="check">✓</div>
+        <div class="name">Qwen3 0.6B</div>
+        <div class="meta">~400MB · 超軽量多言語<br>WebLLM + WebGPU</div>
+      </div>
+
+      <div class="model-card" data-model="Qwen3-1.7B-q4f16_1-MLC" data-backend="webllm">
+        <div class="check">✓</div>
+        <div class="name">Qwen3 1.7B</div>
+        <div class="meta">~1.0GB · 高精度多言語<br>WebLLM + WebGPU</div>
+      </div>
+
+    </div>
+
+    <button class="load-btn" id="loadBtn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      モデルをロード
+    </button>
+
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-label">
+        <span id="progressLabel">ダウンロード中...</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="log-line" id="logLine">初期化中...</div>
+    </div>
+  </div>
+
+  <div class="translator">
+    <div class="lang-bar">
+      <div class="lang-select">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:0.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+        <select id="srcLang">
+          <option value="English" selected>英語</option>
+          <option value="Japanese">日本語</option>
+          <option value="Chinese">中国語（簡体）</option>
+          <option value="Korean">韓国語</option>
+          <option value="French">フランス語</option>
+          <option value="German">ドイツ語</option>
+          <option value="Spanish">スペイン語</option>
+        </select>
+      </div>
+      <button class="swap-btn" id="swapBtn" title="言語を入れ替え">⇄</button>
+      <div class="lang-select">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:0.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+        <select id="dstLang">
+          <option value="Japanese" selected>日本語</option>
+          <option value="English">英語</option>
+          <option value="Chinese">中国語（簡体）</option>
+          <option value="Korean">韓国語</option>
+          <option value="French">フランス語</option>
+          <option value="German">ドイツ語</option>
+          <option value="Spanish">スペイン語</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="langNote" class="lang-note" style="margin: 8px 16px 0;">LFM2 ENJP-MT は英語↔日本語専用です。現在の言語ペアは対応していません。</div>
+
+    <div class="text-area">
+      <div class="pane">
+        <div class="pane-label">入力テキスト</div>
+        <textarea id="inputText" placeholder="翻訳するテキストを入力してください..."></textarea>
+      </div>
+      <div class="pane">
+        <div class="pane-label">翻訳結果</div>
+        <div class="output-text placeholder" id="outputText">翻訳結果がここに表示されます</div>
+      </div>
+    </div>
+
+    <div class="action-bar">
+      <div class="char-count"><span id="charCount">0</span> 文字</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="copy-btn" id="copyBtn" disabled>コピー</button>
+        <button class="translate-btn" id="translateBtn" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>
+          翻訳する
+        </button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="info-strip">
+  <span>
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+    完全オフライン動作
+  </span>
+  <span>
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    データはブラウザ内のみ
+  </span>
+  <span id="backendInfo">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/></svg>
+    Transformers.js + ONNX
+  </span>
+  <span class="timing" id="timingInfo"></span>
+</div>
+
+<script type="module">
+// ── State ──────────────────────────────────────────────────────────────────
+let engine = null;        // WebLLM engine
+let tfGenerator = null;   // Transformers.js pipeline
+let modelReady = false;
+let currentBackend = 'transformers';
+let selectedModel = 'lfm2-enjpmt';
+const isFirefox = /Firefox/.test(navigator.userAgent);
+
+const LFM2_MODEL_ID = 'onnx-community/LFM2-350M-ENJP-MT-ONNX';
+
+// ── UI helpers ──────────────────────────────────────────────────────────────
+function setStatus(state, text) {
+  document.getElementById('statusDot').className = 'dot ' + state;
+  document.getElementById('statusText').textContent = text;
+}
+
+function setProgress(pct, label, log) {
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressPct').textContent = Math.round(pct) + '%';
+  if (label) document.getElementById('progressLabel').textContent = label;
+  if (log)   document.getElementById('logLine').textContent = log;
+}
+
+// ── Model card selection ────────────────────────────────────────────────────
+document.querySelectorAll('.model-card').forEach(card => {
+  card.addEventListener('click', () => {
+    if (modelReady) return;
+    document.querySelectorAll('.model-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    selectedModel  = card.dataset.model;
+    currentBackend = card.dataset.backend;
+    updateLangUI();
+    updateBackendBadge();
+  });
+});
+
+function updateBackendBadge() {
+  const el = document.getElementById('backendInfo');
+  el.innerHTML = currentBackend === 'transformers'
+    ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/></svg>Transformers.js + ONNX`
+    : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/></svg>WebLLM + WebGPU`;
+}
+
+// ── Language UI helpers ─────────────────────────────────────────────────────
+const ENJP_LANGS = new Set(['English', 'Japanese']);
+
+function isLfm2() { return currentBackend === 'transformers'; }
+
+function updateLangUI() {
+  const src = document.getElementById('srcLang').value;
+  const dst = document.getElementById('dstLang').value;
+
+  if (isLfm2()) {
+    // Lock selects to English/Japanese only
+    const note = document.getElementById('langNote');
+    const bad = !ENJP_LANGS.has(src) || !ENJP_LANGS.has(dst) || src === dst;
+    note.classList.toggle('show', bad);
+    // Set sensible defaults
+    if (!ENJP_LANGS.has(src)) document.getElementById('srcLang').value = 'English';
+    if (!ENJP_LANGS.has(dst)) document.getElementById('dstLang').value = 'Japanese';
+  } else {
+    document.getElementById('langNote').classList.remove('show');
+  }
+}
+
+document.getElementById('srcLang').addEventListener('change', updateLangUI);
+document.getElementById('dstLang').addEventListener('change', updateLangUI);
+
+// ── Load model ──────────────────────────────────────────────────────────────
+async function loadModel() {
+  const btn = document.getElementById('loadBtn');
+  btn.disabled = true;
+  document.getElementById('progressWrap').classList.add('show');
+  setStatus('loading', 'ロード中...');
+  modelReady = false;
+  engine = null;
+  tfGenerator = null;
+
+  try {
+    if (currentBackend === 'transformers') {
+      await loadLFM2();
+    } else {
+      await loadWebLLM();
+    }
+
+    modelReady = true;
+    document.getElementById('translateBtn').disabled = false;
+    document.getElementById('copyBtn').disabled = false;
+    const backendLabel = isLfm2()
+      ? `LFM2 ENJP-MT · ${isFirefox ? 'WASM' : 'ONNX GPU'}`
+      : `${selectedModel.split('-').slice(0,2).join(' ')} · WebLLM + WebGPU`;
+    setProgress(100, '完了！', `${backendLabel} で起動中`);
+    setStatus('ready', '準備完了 — ' + backendLabel);
+
+  } catch (e) {
+    console.error(e);
+    setStatus('', 'エラー: ' + (e.message || String(e)));
+    document.getElementById('logLine').textContent = 'エラー: ' + e.message;
+    btn.disabled = false;
+  }
+};
+
+// ── LFM2 via Transformers.js ────────────────────────────────────────────────
+let tfTextStreamer = null;
+
+async function loadLFM2() {
+  const tfjs = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/dist/transformers.min.js');
+  const { pipeline, TextStreamer, env } = tfjs;
+  tfTextStreamer = TextStreamer;
+  env.allowLocalModels = false;
+
+  setProgress(5, 'Transformers.js を初期化中...', 'モデルのダウンロードを開始します...');
+
+  // Firefox は WebGPU の ONNX サポートが不完全なので UA で判定（モジュールスコープの isFirefox を使用）
+  const device = isFirefox ? 'wasm' : 'webgpu';
+  const deviceLabel = isFirefox
+    ? 'WASM モード (Firefox)'
+    : 'WebGPU モード (Chrome/Edge)';
+
+  setProgress(6, deviceLabel, '');
+
+  let lastProgress = 6;
+  tfGenerator = await pipeline(
+    'text-generation',
+    LFM2_MODEL_ID,
+    {
+      dtype: 'q4',
+      device,
+      progress_callback: (prog) => {
+        if (prog.status === 'downloading' || prog.status === 'loading') {
+          const pct = prog.progress != null ? 6 + prog.progress * 88 : lastProgress;
+          lastProgress = pct;
+          setProgress(pct, `ダウンロード中: ${prog.file || ''}`, `${prog.status} — ${Math.round(pct)}%`);
+        } else if (prog.status === 'initiate') {
+          setProgress(lastProgress, 'モデルを初期化中...', prog.file || '');
+        } else if (prog.status === 'ready') {
+          setProgress(95, '準備中...', '');
+        }
+      },
+    }
+  );
+}
+
+// ── WebLLM ──────────────────────────────────────────────────────────────────
+async function loadWebLLM() {
+  const webllm = await import('https://esm.run/@mlc-ai/web-llm');
+
+  const initProgressCallback = (report) => {
+    const pct = report.progress * 100;
+    const label = pct < 30 ? 'モデルをダウンロード中...' : pct < 80 ? 'WebGPU用にコンパイル中...' : '初期化中...';
+    setProgress(pct, label, report.text || '');
+  };
+
+  engine = await webllm.CreateMLCEngine(selectedModel, { initProgressCallback });
+}
+
+// ── Translate ───────────────────────────────────────────────────────────────
+async function doTranslate() {
+  if (!modelReady) return;
+  const text = document.getElementById('inputText').value.trim();
+  if (!text) return;
+
+  const src = document.getElementById('srcLang').value;
+  const dst = document.getElementById('dstLang').value;
+  const out = document.getElementById('outputText');
+  const btn = document.getElementById('translateBtn');
+
+  out.className = 'output-text thinking';
+  out.textContent = '翻訳中...';
+  out.dataset.translation = '';
+  btn.disabled = true;
+  document.getElementById('timingInfo').textContent = '';
+
+  const t0 = performance.now();
+
+  try {
+    if (currentBackend === 'transformers') {
+      await translateLFM2(text, src, dst, out);
+    } else {
+      await translateWebLLM(text, src, dst, out);
+    }
+
+    const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+    document.getElementById('timingInfo').textContent = elapsed + 's';
+  } catch (e) {
+    out.className = 'output-text';
+    out.textContent = 'エラー: ' + e.message;
+    console.error(e);
+  }
+
+  btn.disabled = false;
+};
+
+async function translateLFM2(text, src, dst, outEl) {
+  if (!ENJP_LANGS.has(src) || !ENJP_LANGS.has(dst) || src === dst) {
+    throw new Error('LFM2 ENJP-MT は英語↔日本語のみ対応しています');
+  }
+
+  const systemPrompt = dst === 'Japanese' ? 'Translate to Japanese.' : 'Translate to English.';
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user',   content: text },
+  ];
+
+  outEl.className = 'output-text';
+  outEl.textContent = '';
+
+  let streamed = '';
+
+  // TextStreamer for token-by-token display
+  // decode_kwargs ensures special tokens are stripped properly
+  const streamer = new tfTextStreamer(tfGenerator.tokenizer, {
+    skip_prompt: true,
+    skip_special_tokens: true,
+    decode_kwargs: { skip_special_tokens: true },
+    callback_function: (chunk) => {
+      streamed += chunk;
+      outEl.textContent = streamed;
+    },
+  });
+
+  const output = await tfGenerator(messages, {
+    max_new_tokens: 512,
+    do_sample: true,
+    temperature: 0.5,
+    top_p: 1.0,
+    repetition_penalty: 1.05,
+    streamer,
+  });
+
+  // Prefer streamed result; fall back to generated_text if streamer gave nothing
+  const result = (streamed || output[0].generated_text.at(-1)?.content || '').trim();
+  outEl.textContent = result;
+  outEl.dataset.translation = result;
+}
+
+async function translateWebLLM(text, src, dst, outEl) {
+  const prompt = `Translate the following text from ${src} to ${dst}. Output ONLY the translation, nothing else.\n\nText:\n${text}`;
+  let result = '';
+
+  const reply = await engine.chat.completions.create({
+    messages: [
+      { role: 'system', content: `You are a professional translator. Translate from ${src} to ${dst}. Output only the translated text.\n/no_think` },
+      { role: 'user',   content: prompt },
+    ],
+    temperature: 0.1,
+    max_tokens: 1024,
+    stream: true,
+  });
+
+  outEl.className = 'output-text';
+  outEl.textContent = '';
+
+  for await (const chunk of reply) {
+    const delta = chunk.choices[0]?.delta?.content || '';
+    result += delta;
+    outEl.textContent = result;
+  }
+  outEl.dataset.translation = result;
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+function swapLang() {
+  const s = document.getElementById('srcLang');
+  const d = document.getElementById('dstLang');
+  [s.value, d.value] = [d.value, s.value];
+  updateLangUI();
+  const inp = document.getElementById('inputText');
+  const out = document.getElementById('outputText');
+  if (out.dataset.translation) {
+    inp.value = out.dataset.translation;
+    out.textContent = '';
+    out.dataset.translation = '';
+    updateCount();
+  }
+}
+
+function updateCount() {
+  document.getElementById('charCount').textContent = document.getElementById('inputText').value.length;
+}
+
+function copyResult() {
+  const out = document.getElementById('outputText');
+  const text = out.dataset.translation || out.textContent;
+  if (text) {
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('copyBtn');
+      btn.textContent = '✓ コピー済み';
+      setTimeout(() => { btn.textContent = 'コピー'; }, 1500);
+    });
+  }
+}
+
+// ── Wire up all events ──────────────────────────────────────────────────────
+document.getElementById('loadBtn').addEventListener('click', loadModel);
+document.getElementById('translateBtn').addEventListener('click', doTranslate);
+document.getElementById('copyBtn').addEventListener('click', copyResult);
+document.getElementById('swapBtn').addEventListener('click', swapLang);
+document.getElementById('inputText').addEventListener('input', updateCount);
+
+// init
+updateLangUI();
+</script>
+</body>
+</html>
