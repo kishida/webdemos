@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>誤差拡散デモ</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0e0e0f;
+  --surface: #181819;
+  --surface2: #222224;
+  --border: #2e2e32;
+  --accent: #c8f050;
+  --accent2: #50c8f0;
+  --text: #f0ede8;
+  --muted: #888884;
+  --mono: 'DM Mono', monospace;
+  --sans: 'Syne', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); }
+
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 18px 28px;
+  border-bottom: 1px solid var(--border);
+}
+header h1 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+header span {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 28px;
+  gap: 20px;
+  max-width: 1600px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* Drop zone */
+#drop-zone {
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  background: var(--surface);
+  position: relative;
+}
+#drop-zone:hover, #drop-zone.drag-over {
+  border-color: var(--accent);
+  background: #1a1f10;
+}
+#drop-zone .drop-icon {
+  width: 40px; height: 40px;
+  margin: 0 auto 14px;
+  opacity: 0.4;
+}
+#drop-zone p {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+#drop-zone p strong { color: var(--text); font-weight: 500; }
+#hidden-input { display: none; }
+
+/* Controls bar */
+#controls {
+  display: none;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.ctrl-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ctrl-group label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+select, input[type=checkbox] { accent-color: var(--accent); }
+select {
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 5px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+}
+select:focus { border-color: var(--accent); }
+input[type=checkbox] { width: 14px; height: 14px; cursor: pointer; }
+#size-info {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: auto;
+}
+#size-info span { color: var(--accent2); }
+#btn-reopen {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 4px 10px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: border-color 0.15s, color 0.15s;
+}
+#btn-reopen:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Canvas area */
+#canvases {
+  display: none;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  flex: 1;
+}
+.canvas-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.canvas-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.canvas-label .tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 2px;
+}
+.tag-orig { background: #252520; color: var(--muted); border: 1px solid var(--border); }
+.tag-dither { background: #1a2010; color: var(--accent); border: 1px solid #3a4820; }
+.canvas-label .dim {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+canvas {
+  width: 100%;
+  display: block;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background: #000;
+}
+
+/* Processing overlay */
+#processing {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(14,14,15,0.7);
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+}
+#processing.show { display: flex; }
+
+@media (max-width: 700px) {
+  #canvases { grid-template-columns: 1fr; }
+  header { padding: 14px 16px; }
+  #main { padding: 16px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>誤差拡散デモ</h1>
+  <span>error diffusion / 8-color dithering</span>
+</header>
+
+<div id="main">
+  <div id="drop-zone" onclick="document.getElementById('hidden-input').click()">
+    <svg class="drop-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="4" y="8" width="32" height="24" rx="2" stroke="#f0ede8" stroke-width="1.5"/>
+      <circle cx="14" cy="17" r="3" stroke="#f0ede8" stroke-width="1.5"/>
+      <path d="M4 26 L12 19 L19 25 L26 18 L36 27" stroke="#f0ede8" stroke-width="1.5" stroke-linejoin="round"/>
+    </svg>
+    <p><strong>画像をここにドロップ</strong>、またはクリックして選択</p>
+    <p>JPG / PNG / GIF / WebP 対応</p>
+  </div>
+  <input type="file" id="hidden-input" accept="image/*">
+
+  <div id="controls">
+    <div class="ctrl-group">
+      <label>Max size</label>
+      <select id="maxsize">
+        <option value="1280" selected>1280 px</option>
+        <option value="1024">1024 px</option>
+        <option value="768">768 px</option>
+        <option value="640">640 px</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <label>Scale</label>
+      <select id="scale">
+        <option value="4" selected>1/4 → ×4</option>
+        <option value="2">1/2 → ×2</option>
+        <option value="8">1/8 → ×8</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <label>Mode</label>
+      <select id="mode">
+        <option value="color">カラー (8色)</option>
+        <option value="mono">モノクロ (2値)</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <label>Algorithm</label>
+      <select id="algo">
+        <option value="floyd">Floyd-Steinberg</option>
+        <option value="atkinson">Atkinson</option>
+        <option value="jarvis">Jarvis-Judice-Ninke</option>
+        <option value="stucki">Stucki</option>
+        <option value="sierra">Sierra</option>
+        <option value="ordered">Ordered (Bayer 4×4)</option>
+        <option value="threshold">Threshold (閾値のみ)</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <label>Grid</label>
+      <input type="checkbox" id="show-grid">
+    </div>
+    <div id="size-info"></div>
+    <button id="btn-reopen" onclick="document.getElementById('hidden-input').click()">画像を変更</button>
+  </div>
+
+  <div id="canvases">
+    <div class="canvas-wrap">
+      <div class="canvas-label">
+        <span class="tag tag-orig">Original</span>
+        <span class="dim" id="dim-orig"></span>
+      </div>
+      <canvas id="cv-orig"></canvas>
+    </div>
+    <div class="canvas-wrap">
+      <div class="canvas-label">
+        <span class="tag tag-dither" id="tag-dither">Dithered</span>
+        <span class="dim" id="dim-dither"></span>
+      </div>
+      <canvas id="cv-dither"></canvas>
+    </div>
+  </div>
+</div>
+
+<div id="processing">processing...</div>
+
+<script>
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('hidden-input');
+const controls = document.getElementById('controls');
+const canvasesEl = document.getElementById('canvases');
+const algoSel = document.getElementById('algo');
+const scaleSel = document.getElementById('scale');
+const maxSizeSel = document.getElementById('maxsize');
+const gridChk = document.getElementById('show-grid');
+const cvOrig = document.getElementById('cv-orig');
+const cvDither = document.getElementById('cv-dither');
+const sizeInfo = document.getElementById('size-info');
+const dimOrig = document.getElementById('dim-orig');
+const dimDither = document.getElementById('dim-dither');
+const processingEl = document.getElementById('processing');
+
+let srcImage = null;
+let clampedCanvas = null;
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0]; if (f) loadFile(f);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+algoSel.addEventListener('change', () => { if (srcImage) scheduleProcess(); });
+scaleSel.addEventListener('change', () => { if (srcImage) scheduleProcess(); });
+maxSizeSel.addEventListener('change', () => { if (srcImage) { clamp(); scheduleProcess(); } });
+const modeSel = document.getElementById('mode');
+const tagDither = document.getElementById('tag-dither');
+
+modeSel.addEventListener('change', () => { if (srcImage) scheduleProcess(); });
+
+function loadFile(file) {
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    srcImage = img;
+    URL.revokeObjectURL(url);
+    clamp();
+    controls.style.display = 'flex';
+    canvasesEl.style.display = 'grid';
+    dropZone.style.display = 'none';
+    scheduleProcess();
+  };
+  img.src = url;
+}
+
+// ページ全体へのドロップも受け付ける（画像読み込み後も有効）
+document.addEventListener('dragover', e => { e.preventDefault(); });
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0]; if (f) loadFile(f);
+});
+
+function clamp() {
+  const maxSize = parseInt(maxSizeSel.value);
+  const ow = srcImage.naturalWidth, oh = srcImage.naturalHeight;
+  const scale = Math.min(1, maxSize / Math.max(ow, oh));
+  const cw = Math.floor(ow * scale);
+  const ch = Math.floor(oh * scale);
+  clampedCanvas = document.createElement('canvas');
+  clampedCanvas.width = cw; clampedCanvas.height = ch;
+  clampedCanvas.getContext('2d').drawImage(srcImage, 0, 0, cw, ch);
+  const arrow = scale < 1 ? ` <span>→ ${cw}×${ch}</span>` : '';
+  sizeInfo.innerHTML = `${ow}×${oh}${arrow}`;
+}
+
+let pending = false;
+function scheduleProcess() {
+  if (pending) return;
+  pending = true;
+  processingEl.classList.add('show');
+  requestAnimationFrame(() => setTimeout(() => { process(); pending = false; processingEl.classList.remove('show'); }, 0));
+}
+
+function process() {
+  const factor = parseInt(scaleSel.value);
+  const bw = clampedCanvas.width, bh = clampedCanvas.height;
+  const sw = Math.floor(bw / factor), sh = Math.floor(bh / factor);
+  const dw = sw * factor, dh = sh * factor;
+
+  const tmp = document.createElement('canvas');
+  tmp.width = sw; tmp.height = sh;
+  const tCtx = tmp.getContext('2d');
+  tCtx.drawImage(clampedCanvas, 0, 0, sw, sh);
+  const srcData = tCtx.getImageData(0, 0, sw, sh);
+
+  cvOrig.width = dw; cvOrig.height = dh;
+  const oCtx = cvOrig.getContext('2d');
+  oCtx.imageSmoothingEnabled = false;
+  oCtx.drawImage(tmp, 0, 0, dw, dh);
+  dimOrig.textContent = `${dw}×${dh}`;
+
+  const pixels = Float32Array.from(srcData.data);
+  const isMono = modeSel.value === 'mono';
+
+  // モノクロモードは輝度に変換してから処理
+  if (isMono) {
+    for (let i = 0; i < pixels.length; i += 4) {
+      const luma = pixels[i]*0.299 + pixels[i+1]*0.587 + pixels[i+2]*0.114;
+      pixels[i] = pixels[i+1] = pixels[i+2] = luma;
+    }
+  }
+
+  if (algoSel.value === 'ordered') bayerDither(pixels, sw, sh, isMono);
+  else if (algoSel.value === 'threshold') thresholdOnly(pixels, sw, sh, isMono);
+  else errorDiffuse(pixels, sw, sh, algoSel.value, isMono);
+
+  tagDither.textContent = isMono ? 'Mono (2値)' : 'Color (8色)';
+
+  cvDither.width = dw; cvDither.height = dh;
+  const dCtx = cvDither.getContext('2d');
+  const outImg = dCtx.createImageData(dw, dh);
+
+  for (let y = 0; y < sh; y++) {
+    for (let x = 0; x < sw; x++) {
+      const si = (y * sw + x) * 4;
+      const r = pixels[si], g = pixels[si+1], b = pixels[si+2];
+      for (let dy = 0; dy < factor; dy++) {
+        for (let dx = 0; dx < factor; dx++) {
+          const di = ((y*factor+dy)*dw + x*factor+dx)*4;
+          outImg.data[di] = r; outImg.data[di+1] = g; outImg.data[di+2] = b; outImg.data[di+3] = 255;
+        }
+      }
+    }
+  }
+  dCtx.putImageData(outImg, 0, 0);
+  dimDither.textContent = `${sw}×${sh} → ×${factor}表示`;
+
+  if (gridChk.checked) {
+    dCtx.strokeStyle = 'rgba(200,240,80,0.2)';
+    dCtx.lineWidth = 0.5;
+    for (let x = 0; x <= dw; x += factor) { dCtx.beginPath(); dCtx.moveTo(x,0); dCtx.lineTo(x,dh); dCtx.stroke(); }
+    for (let y = 0; y <= dh; y += factor) { dCtx.beginPath(); dCtx.moveTo(0,y); dCtx.lineTo(dw,y); dCtx.stroke(); }
+  }
+}
+
+function q(v) { return v < 128 ? 0 : 255; }
+
+function errorDiffuse(px, w, h, algo, isMono) {
+  const K = {
+    floyd:   [[1,0,7/16],[1,-1,3/16],[1,0,5/16],[1,1,1/16]],
+    atkinson:[[1,0,1/8],[1,1,1/8],[2,-1,1/8],[2,0,1/8],[2,1,1/8],[1,-1,1/8]],
+    jarvis:  [[1,-2,3/48],[1,-1,5/48],[1,0,7/48],[1,1,5/48],[1,2,3/48],[2,-2,1/48],[2,-1,3/48],[2,0,5/48],[2,1,3/48],[2,2,1/48]],
+    stucki:  [[1,-2,2/42],[1,-1,4/42],[1,0,8/42],[1,1,4/42],[1,2,2/42],[2,-2,1/42],[2,-1,2/42],[2,0,4/42],[2,1,2/42],[2,2,1/42]],
+    sierra:  [[1,-2,3/32],[1,-1,5/32],[1,0,8/32],[1,1,5/32],[1,2,3/32],[2,-1,3/32],[2,0,4/32],[2,1,3/32]]
+  };
+  const kernel = K[algo] || K.floyd;
+  const channels = isMono ? [0] : [0, 1, 2];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y*w+x)*4;
+      for (const c of channels) {
+        const old = px[i+c], nw = q(old);
+        const err = old - nw;
+        if (isMono) { px[i] = px[i+1] = px[i+2] = nw; }
+        else { px[i+c] = nw; }
+        for (const [dy, dx, frac] of kernel) {
+          const nx = x+dx, ny = y+dy;
+          if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+            const ni = (ny*w+nx)*4;
+            if (isMono) {
+              const v = Math.max(0, Math.min(255, px[ni] + err*frac));
+              px[ni] = px[ni+1] = px[ni+2] = v;
+            } else {
+              px[ni+c] = Math.max(0, Math.min(255, px[ni+c] + err*frac));
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+function thresholdOnly(px, w, h, isMono) {
+  for (let i = 0; i < px.length; i += 4) {
+    if (isMono) {
+      const v = px[i] >= 128 ? 255 : 0;
+      px[i] = px[i+1] = px[i+2] = v;
+    } else {
+      for (let c = 0; c < 3; c++) px[i+c] = px[i+c] >= 128 ? 255 : 0;
+    }
+  }
+}
+
+const BAYER4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+function bayerDither(px, w, h, isMono) {
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const i = (y*w+x)*4, thresh = BAYER4[y%4][x%4]/16*255;
+      if (isMono) {
+        const v = px[i] > thresh ? 255 : 0;
+        px[i] = px[i+1] = px[i+2] = v;
+      } else {
+        for (let c = 0; c < 3; c++) px[i+c] = px[i+c] > thresh ? 255 : 0;
+      }
+    }
+}
+</script>
+</body>
+</html>
