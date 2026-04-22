@@ -1,6 +1,11 @@
 # webdemos
-Web Demos
+Web Demos  
 https://kishida.github.io/webdemos/
+
+## YOKOGAME
+[Yoko Game](yokogame/game.html)  
+![Yoko Game](assets/yokogame.png)  
+2026/4/23
 
 ## Local Translator
 [Local Translator](translator/offline-translator.html)  

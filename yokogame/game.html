@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>横スクロールシューティング</title>
+
+<meta property="og:title" content="横スクロールゲーム">
+<meta property="og:description" content="手書き画面からAIが作った横スクロールシューティングゲーム">
+<meta property="og:image" content="/ogp.png">
+<meta property="og:type" content="website">
+
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: monospace; }
+canvas { border: 2px solid #444; display: block; }
+#msg { color: #ff0; margin-top: 8px; font-size: 16px; min-height: 20px; text-align: center; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="msg">← → ↑ ↓ で移動　Zキーで発射</div>
+<script>
+const W = 640, H = 400;
+const BLOCK = 55;
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+canvas.width = W; canvas.height = H;
+
+const img = new Image();
+img.crossOrigin = 'anonymous';
+img.src = 'https://kishida.github.io/webdemos/yokogame/game.png';
+
+// スプライト定義 (グリッド座標, グリッドサイズ)
+const SPR = {
+  player:   {gx:0,  gy:0, gw:3, gh:2},
+  opt1:     {gx:3,  gy:0, gw:2, gh:1},
+  opt2:     {gx:5,  gy:0, gw:2, gh:1},
+  enemy1:   {gx:0,  gy:2, gw:3, gh:2},
+  enemy2:   {gx:3,  gy:2, gw:3, gh:2},
+  capsule:  {gx:0,  gy:4, gw:3, gh:2},
+  life1:    {gx:3,  gy:1, gw:1, gh:1},
+  life2:    {gx:4,  gy:1, gw:1, gh:1},
+  life3:    {gx:5,  gy:1, gw:1, gh:1},
+  cloud1:   {gx:7,  gy:2, gw:3, gh:2},
+  cloud2:   {gx:7,  gy:0, gw:3, gh:2},
+  cloud3:   {gx:10, gy:0, gw:3, gh:2},
+  tree1:    {gx:3,  gy:4, gw:3, gh:2},
+  tree2:    {gx:0,  gy:6, gw:3, gh:2},
+  tree3:    {gx:3,  gy:6, gw:3, gh:2},
+  mountain: {gx:6,  gy:5, gw:8, gh:3},
+  ground:   {gx:0,  gy:8, gw:24,gh:2},
+};
+
+// キャラ用スケール（小さめ）、背景用スケール
+const SCALE_CHAR = 0.50;
+const SCALE_BG   = 0.75;
+
+function sprW(s, bg){ return s.gw * BLOCK * (bg ? SCALE_BG : SCALE_CHAR); }
+function sprH(s, bg){ return s.gh * BLOCK * (bg ? SCALE_BG : SCALE_CHAR); }
+
+function drawSpr(key, x, y, flipX, bg){
+  const s = SPR[key];
+  const dw = sprW(s, bg);
+  const dh = sprH(s, bg);
+  ctx.save();
+  if(flipX){
+    ctx.translate(x+dw, y);
+    ctx.scale(-1,1);
+    ctx.drawImage(img, s.gx*BLOCK, s.gy*BLOCK, s.gw*BLOCK, s.gh*BLOCK, 0, 0, dw, dh);
+  } else {
+    ctx.drawImage(img, s.gx*BLOCK, s.gy*BLOCK, s.gw*BLOCK, s.gh*BLOCK, x, y, dw, dh);
+  }
+  ctx.restore();
+}
+
+// 地面Y座標（背景スケール）
+const GROUND_Y = H - sprH(SPR.ground, true);
+
+// 視差倍率（scrollX にかける係数）
+const SPD_ENEMY   = 1.00;
+const SPD_CAPSULE = 0.88;
+const SPD_TREE    = 0.70;
+const SPD_MTN     = 0.30;
+const SPD_CLOUD   = 0.22;
+
+// ゲーム状態
+let score = 0;
+let lives = 3;
+let gameOver = false;
+let win = false;
+let invTimer = 0;
+
+// 自機
+const player = {
+  x: 80, y: H/2-20,
+  get w(){ return sprW(SPR.player) * 0.60; },
+  get h(){ return sprH(SPR.player) * 0.70; },
+  speed: 4
+};
+
+const optHistory = [];
+const OPT_DELAY = 22;
+const bullets  = [];
+const eBullets = [];
+let scrollX = 0;
+const SCROLL_SPEED = 1.5;
+
+// 雲
+const clouds = [
+  {key:'cloud1', wx:200,  y:40},
+  {key:'cloud2', wx:600,  y:18},
+  {key:'cloud3', wx:1050, y:55},
+  {key:'cloud1', wx:1500, y:28},
+  {key:'cloud2', wx:2000, y:48},
+  {key:'cloud3', wx:2500, y:12},
+];
+const CLOUD_WRAP = 15000;
+
+// 背景（木・山）
+const bgObjects = [];
+(function(){
+  const treeKeys = ['tree1','tree2','tree3'];
+  for(let wx=280; wx<12500; wx+=260+Math.floor(wx/100)%120){
+    bgObjects.push({key: treeKeys[Math.floor(wx/300)%3], wx});
+  }
+  for(let wx=600; wx<12500; wx+=800){
+    bgObjects.push({key:'mountain', wx});
+  }
+})();
+
+const WORLD_LEN = 13500;
+
+// 敵定義（ワールド全体に分散）
+const enemyDefs = [
+  {key:'enemy1', wx:650,  wyBase:130, type:1, phase:0.0},
+  {key:'enemy2', wx:950,  wyBase:180, type:2, phase:1.0},
+  {key:'enemy1', wx:1150, wyBase:110, type:1, phase:2.0},
+  {key:'enemy1', wx:1400, wyBase:160, type:1, phase:0.5},
+  {key:'capsule',wx:1650, wyBase:200, type:3, phase:0.0},
+  {key:'enemy2', wx:1900, wyBase:130, type:2, phase:1.5},
+  {key:'enemy1', wx:2200, wyBase:155, type:1, phase:2.5},
+  {key:'enemy2', wx:2500, wyBase:120, type:2, phase:0.8},
+  {key:'enemy1', wx:2800, wyBase:160, type:1, phase:1.8},
+  {key:'enemy1', wx:3100, wyBase:100, type:1, phase:3.0},
+  {key:'enemy2', wx:3400, wyBase:175, type:2, phase:0.2},
+  {key:'enemy1', wx:3700, wyBase:130, type:1, phase:1.3},
+  {key:'capsule',wx:4000, wyBase:190, type:3, phase:0.0},
+  {key:'enemy2', wx:4300, wyBase:145, type:2, phase:2.1},
+  {key:'enemy1', wx:4600, wyBase:115, type:1, phase:0.9},
+  {key:'enemy1', wx:4900, wyBase:165, type:1, phase:1.7},
+  {key:'enemy2', wx:5200, wyBase:130, type:2, phase:2.8},
+  {key:'enemy1', wx:5500, wyBase:110, type:1, phase:0.4},
+  {key:'enemy2', wx:5800, wyBase:180, type:2, phase:1.1},
+  {key:'enemy1', wx:6100, wyBase:140, type:1, phase:2.3},
+  {key:'capsule',wx:6400, wyBase:200, type:3, phase:0.0},
+  {key:'enemy2', wx:6700, wyBase:125, type:2, phase:1.9},
+  {key:'enemy1', wx:7000, wyBase:155, type:1, phase:3.1},
+  {key:'enemy1', wx:7300, wyBase:105, type:1, phase:0.1},
+  {key:'enemy2', wx:7600, wyBase:170, type:2, phase:2.4},
+  {key:'enemy1', wx:7900, wyBase:135, type:1, phase:1.6},
+  {key:'enemy2', wx:8200, wyBase:150, type:2, phase:0.3},
+  {key:'capsule',wx:8500, wyBase:195, type:3, phase:0.0},
+  {key:'enemy1', wx:8800, wyBase:120, type:1, phase:2.7},
+  {key:'enemy2', wx:9100, wyBase:160, type:2, phase:0.8},
+  {key:'enemy1', wx:9400, wyBase:100, type:1, phase:1.2},
+  {key:'enemy1', wx:9700, wyBase:175, type:1, phase:2.0},
+  {key:'enemy2', wx:10000,wyBase:130, type:2, phase:3.2},
+  {key:'enemy1', wx:10300,wyBase:145, type:1, phase:0.5},
+  {key:'enemy2', wx:10600,wyBase:115, type:2, phase:1.8},
+  {key:'capsule',wx:10900,wyBase:190, type:3, phase:0.0},
+  {key:'enemy1', wx:11200,wyBase:155, type:1, phase:2.2},
+  {key:'enemy2', wx:11500,wyBase:130, type:2, phase:1.0},
+  {key:'enemy1', wx:11800,wyBase:110, type:1, phase:0.7},
+  {key:'enemy2', wx:12100,wyBase:170, type:2, phase:2.6},
+  {key:'enemy1', wx:12400,wyBase:140, type:1, phase:1.5},
+  {key:'enemy2', wx:12700,wyBase:125, type:2, phase:0.2},
+  {key:'enemy1', wx:13000,wyBase:150, type:1, phase:1.0},
+];
+
+let enemies = [];
+function initEnemies(){
+  enemies = enemyDefs.map(d => ({
+    ...d, alive:true, timer:0,
+    hp: d.type===1?2 : d.type===2?3 : 1
+  }));
+}
+initEnemies();
+
+const keys = {};
+document.addEventListener('keydown', e=>{ keys[e.key]=true; e.preventDefault(); });
+document.addEventListener('keyup',   e=>{ keys[e.key]=false; });
+
+let shootCooldown=0, frame=0, optCount=0;
+const particles=[];
+
+function spawnParticles(x,y,color,n){
+  for(let i=0;i<n;i++){
+    particles.push({x,y,
+      vx:(Math.random()-0.5)*5,
+      vy:(Math.random()-0.5)*5,
+      life:30+Math.random()*20, maxLife:50, color});
+  }
+}
+
+function rectHit(ax,ay,aw,ah,bx,by,bw,bh){
+  return ax<bx+bw && ax+aw>bx && ay<by+bh && ay+ah>by;
+}
+
+function getEnemyPos(e){
+  const spd = e.type===3 ? SPD_CAPSULE : SPD_ENEMY;
+  const ex = e.wx - scrollX * spd;
+  const amp  = e.type===3 ? 0 : 28;
+  const freq = e.type===2 ? 0.038 : 0.050;
+  const ey = e.wyBase + Math.sin(frame*freq + e.phase)*amp;
+  return {ex, ey};
+}
+
+function update(){
+  if(gameOver||win) return;
+  frame++;
+
+  if(keys['ArrowLeft'] ||keys['a']) player.x -= player.speed;
+  if(keys['ArrowRight']||keys['d']) player.x += player.speed;
+  if(keys['ArrowUp']   ||keys['w']) player.y -= player.speed;
+  if(keys['ArrowDown'] ||keys['s']) player.y += player.speed;
+  player.x = Math.max(10, Math.min(W/2, player.x));
+  player.y = Math.max(10, Math.min(GROUND_Y-player.h-5, player.y));
+
+  optHistory.push({x:player.x, y:player.y});
+  if(optHistory.length > OPT_DELAY*3) optHistory.shift();
+
+  scrollX += SCROLL_SPEED;
+  if(scrollX >= WORLD_LEN-W+100 && enemies.every(e=>!e.alive||e.type===3)){
+    win=true;
+  }
+
+  // 射撃
+  if(shootCooldown>0) shootCooldown--;
+  if((keys['z']||keys['Z']||keys[' '])&&shootCooldown===0){
+    const pw=sprW(SPR.player), ph=sprH(SPR.player);
+    bullets.push({x:player.x+pw*0.88, y:player.y+ph*0.38, w:18, h:5});
+    if(optCount>=1){
+      const o1=getOptPos(0);
+      if(o1) bullets.push({x:o1.x+sprW(SPR.opt1)*0.9, y:o1.y+sprH(SPR.opt1)*0.4, w:14,h:4});
+    }
+    if(optCount>=2){
+      const o2=getOptPos(1);
+      if(o2) bullets.push({x:o2.x+sprW(SPR.opt2)*0.9, y:o2.y+sprH(SPR.opt2)*0.4, w:14,h:4});
+    }
+    shootCooldown=12;
+  }
+
+  for(const b of bullets) b.x+=9;
+  for(let i=bullets.length-1;i>=0;i--) if(bullets[i].x>W) bullets.splice(i,1);
+
+  // 敵・カプセル更新
+  for(const e of enemies){
+    if(!e.alive) continue;
+    const {ex,ey} = getEnemyPos(e);
+    if(ex<-150||ex>W+120) continue;
+    e.timer++;
+
+    const sw = sprW(SPR[e.key]);
+    const sh = sprH(SPR[e.key]);
+    // 当たり判定矩形（中央寄り）
+    const hitInset = e.type===3 ? 0.15 : 0.20;
+    const hx = ex + sw*hitInset;
+    const hy = ey + sh*hitInset;
+    const hw = sw*(1-hitInset*2);
+    const hh = sh*(1-hitInset*2);
+
+    // カプセル：接触でオプション追加
+    if(e.type===3){
+      if(rectHit(player.x,player.y,player.w,player.h, hx,hy,hw,hh)){
+        e.alive=false;
+        optCount=Math.min(optCount+1,2);
+        spawnParticles(hx+hw/2,hy+hh/2,'#0ff',20);
+      }
+      continue;
+    }
+
+    // 敵弾発射
+    const fireRate = e.type===2 ? 85 : 115;
+    if(e.timer%fireRate===0){
+      const cx=ex+sw/2, cy=ey+sh/2;
+      const dx=player.x+player.w/2-cx;
+      const dy=player.y+player.h/2-cy;
+      const dist=Math.sqrt(dx*dx+dy*dy)||1;
+      eBullets.push({x:cx,y:cy,vx:dx/dist*3,vy:dy/dist*3,w:8,h:8});
+    }
+
+    // 自弾 vs 敵
+    for(let i=bullets.length-1;i>=0;i--){
+      const b=bullets[i];
+      if(rectHit(b.x,b.y,b.w,b.h, hx,hy,hw,hh)){
+        bullets.splice(i,1);
+        e.hp--;
+        spawnParticles(hx+hw/2,hy+hh/2,'#f80',6);
+        if(e.hp<=0){
+          e.alive=false;
+          score += e.type===1?500:800;
+          spawnParticles(hx+hw/2,hy+hh/2,'#ff0',20);
+        }
+      }
+    }
+  }
+
+  // 敵弾 vs 自機
+  for(let i=eBullets.length-1;i>=0;i--){
+    const b=eBullets[i];
+    b.x+=b.vx; b.y+=b.vy;
+    if(b.x<-20||b.x>W||b.y<0||b.y>H){ eBullets.splice(i,1); continue; }
+    if(invTimer<=0&&rectHit(b.x,b.y,b.w,b.h,player.x,player.y,player.w,player.h)){
+      eBullets.splice(i,1);
+      lives--;
+      invTimer=120;
+      spawnParticles(player.x+player.w/2,player.y+player.h/2,'#f00',20);
+      if(lives<=0) gameOver=true;
+    }
+  }
+
+  if(invTimer>0) invTimer--;
+
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx; p.y+=p.vy; p.life--;
+    if(p.life<=0) particles.splice(i,1);
+  }
+}
+
+function getOptPos(idx){
+  const hi=optHistory.length-(idx+1)*OPT_DELAY;
+  return hi<0?null:optHistory[Math.max(0,hi)];
+}
+
+function draw(){
+  // 空（地面の透過部分が黒くならないよう画面下端まで塗る）
+  const sky=ctx.createLinearGradient(0,0,0,GROUND_Y);
+  sky.addColorStop(0,'#4a90d9');
+  sky.addColorStop(1,'#87ceeb');
+  ctx.fillStyle=sky;
+  ctx.fillRect(0,0,W,H);
+
+  // 雲（最も遅い視差）
+  for(const c of clouds){
+    const sw=sprW(SPR[c.key],true);
+    // 視差スクロール位置。CLOUD_WRAP幅でループ
+    let cx = c.wx - scrollX*SPD_CLOUD;
+    const wrapW = CLOUD_WRAP*SPD_CLOUD + W + sw;
+    cx = ((cx + sw) % wrapW + wrapW) % wrapW - sw;
+    if(cx>W) continue;
+    drawSpr(c.key, cx, c.y, false, true);
+  }
+
+  // 山（中程度の視差）
+  for(const obj of bgObjects){
+    if(!obj.key.startsWith('mountain')) continue;
+    const ox=obj.wx - scrollX*SPD_MTN;
+    if(ox<-300||ox>W+300) continue;
+    const s=SPR[obj.key];
+    const oy=GROUND_Y - sprH(s,true) + 16;
+    drawSpr(obj.key, ox, oy, false, true);
+  }
+
+  // 木（やや遅い視差）
+  for(const obj of bgObjects){
+    if(!obj.key.startsWith('tree')) continue;
+    const ox=obj.wx - scrollX*SPD_TREE;
+    if(ox<-200||ox>W+200) continue;
+    const s=SPR[obj.key];
+    const oy=GROUND_Y - sprH(s,true) + 10;
+    drawSpr(obj.key, ox, oy, false, true);
+  }
+
+  // 地面（スクロールなし、タイル）
+  {
+    const gw=sprW(SPR.ground,true);
+    for(let x=0;x<=W+gw;x+=gw) drawSpr('ground',x,GROUND_Y,false,true);
+  }
+
+  // カプセル（反転なし）
+  for(const e of enemies){
+    if(!e.alive||e.type!==3) continue;
+    const {ex,ey}=getEnemyPos(e);
+    if(ex<-150||ex>W+120) continue;
+    drawSpr(e.key, ex, ey, false);
+  }
+
+  // 敵（反転なし＝左向き）
+  for(const e of enemies){
+    if(!e.alive||e.type===3) continue;
+    const {ex,ey}=getEnemyPos(e);
+    if(ex<-150||ex>W+120) continue;
+    drawSpr(e.key, ex, ey, false);
+  }
+
+  // オプション
+  if(optCount>=1){
+    const p1=getOptPos(0);
+    if(p1) drawSpr('opt1',p1.x-sprW(SPR.opt1)*0.35,p1.y+player.h/2-sprH(SPR.opt1)/2);
+  }
+  if(optCount>=2){
+    const p2=getOptPos(1);
+    if(p2) drawSpr('opt2',p2.x-sprW(SPR.opt2)*0.35,p2.y+player.h/2-sprH(SPR.opt2)/2);
+  }
+
+  // 自機
+  if(invTimer<=0||Math.floor(frame/4)%2===0) drawSpr('player',player.x,player.y);
+
+  // 弾
+  ctx.fillStyle='#ff0';
+  for(const b of bullets) ctx.fillRect(b.x,b.y,b.w,b.h);
+
+  // 敵弾
+  ctx.fillStyle='#f55';
+  for(const b of eBullets){
+    ctx.beginPath();
+    ctx.arc(b.x+b.w/2,b.y+b.h/2,b.w/2,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  // パーティクル
+  for(const p of particles){
+    ctx.globalAlpha=p.life/p.maxLife;
+    ctx.fillStyle=p.color;
+    ctx.fillRect(p.x-2,p.y-2,4,4);
+  }
+  ctx.globalAlpha=1;
+
+  // HUD
+  ctx.fillStyle='#fff';
+  ctx.font='bold 16px monospace';
+  ctx.fillText(`SCORE ${String(score).padStart(7,'0')}`,10,22);
+
+  const lifeKeys = ['life1','life2','life3'];
+  for(let i=0;i<lives;i++) drawSpr(lifeKeys[i],W-42-i*(sprW(SPR.life1)+4),6);
+
+  if(gameOver){
+    ctx.fillStyle='rgba(0,0,0,0.6)';
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#f44';
+    ctx.font='bold 48px monospace';
+    ctx.textAlign='center';
+    ctx.fillText('GAME OVER',W/2,H/2);
+    ctx.fillStyle='#fff'; ctx.font='18px monospace';
+    ctx.fillText('Rキーでリスタート',W/2,H/2+44);
+    ctx.textAlign='left';
+  }
+  if(win){
+    ctx.fillStyle='rgba(0,0,0,0.5)';
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#ff0';
+    ctx.font='bold 44px monospace';
+    ctx.textAlign='center';
+    ctx.fillText('STAGE CLEAR!',W/2,H/2);
+    ctx.fillStyle='#fff'; ctx.font='18px monospace';
+    ctx.fillText(`SCORE: ${score}`,W/2,H/2+40);
+    ctx.fillText('Rキーでリスタート',W/2,H/2+68);
+    ctx.textAlign='left';
+  }
+}
+
+function reset(){
+  score=0;lives=3;gameOver=false;win=false;
+  invTimer=0;frame=0;shootCooldown=0;scrollX=0;optCount=0;
+  player.x=80;player.y=H/2-20;
+  bullets.length=0;eBullets.length=0;particles.length=0;
+  optHistory.length=0;
+  initEnemies();
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='r'||e.key==='R') reset();});
+
+function loop(){ update(); draw(); requestAnimationFrame(loop); }
+img.onload=()=>loop();
+img.onerror=()=>{
+  ctx.fillStyle='#fff';ctx.font='16px monospace';
+  ctx.fillText('画像の読み込みに失敗しました',20,200);
+};
+</script>
+</body>
+</html>
