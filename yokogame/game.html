@@ -14,33 +14,48 @@
 
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: monospace; }
+body { background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: monospace; touch-action: none; user-select: none; }
 canvas { border: 2px solid #444; display: block; max-width: 100%; }
 #msg { color: #ff0; margin-top: 8px; font-size: 16px; min-height: 20px; text-align: center; }
 
-/* ===== スマホ用タッチパッド ===== */
-#pad { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 8px; width: 100%; max-width: 640px; padding: 0 8px; touch-action: none; user-select: none; }
-#pad-row { display: flex; justify-content: space-between; align-items: center; width: 100%; }
-#dpad { position: relative; width: 130px; height: 130px; }
-.dpad-btn {
-  position: absolute; width: 40px; height: 40px;
-  background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.35);
-  border-radius: 8px; display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 18px; cursor: pointer;
+/* ===== スマホ用コントローラー ===== */
+#pad { display: flex; justify-content: space-between; align-items: center; width: 100%; max-width: 640px; padding: 12px 24px; margin-top: 4px; }
+
+/* ジョイスティック */
+#stick-area {
+  width: 120px; height: 120px; border-radius: 50%;
+  background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.20);
+  position: relative; flex-shrink: 0;
 }
-.dpad-btn.active { background: rgba(255,255,255,0.40); }
-#btn-up    { top: 0;    left: 50%; transform: translateX(-50%); }
-#btn-down  { bottom: 0; left: 50%; transform: translateX(-50%); }
-#btn-left  { left: 0;   top: 50%; transform: translateY(-50%); }
-#btn-right { right: 0;  top: 50%; transform: translateY(-50%); }
-#dpad-center { position: absolute; width: 40px; height: 40px; top: 50%; left: 50%; transform: translate(-50%,-50%); background: rgba(255,255,255,0.07); border-radius: 50%; }
+#stick-knob {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: rgba(255,255,255,0.35); border: 2px solid rgba(255,255,255,0.60);
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  pointer-events: none;
+}
+/* 8方向のガイド線（薄く） */
+#stick-area::before {
+  content: '';
+  position: absolute; inset: 0; border-radius: 50%;
+  background:
+    linear-gradient(rgba(255,255,255,0.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.10) 1px, transparent 1px),
+    linear-gradient(45deg, rgba(255,255,255,0.06) 1px, transparent 1px),
+    linear-gradient(-45deg, rgba(255,255,255,0.06) 1px, transparent 1px);
+  background-size: 100% 50%, 50% 100%, 200% 200%, 200% 200%;
+  background-position: center center;
+}
+
+/* FIREボタン */
 #btn-fire {
   width: 90px; height: 90px; border-radius: 50%;
   background: rgba(255,80,80,0.20); border: 2px solid rgba(255,80,80,0.55);
   color: #ff6666; font-size: 14px; font-weight: bold; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 #btn-fire.active { background: rgba(255,80,80,0.50); }
+
+/* リスタートボタン */
 #btn-reset-touch {
   padding: 8px 20px; background: rgba(255,255,255,0.10);
   border: 1px solid rgba(255,255,255,0.25); border-radius: 6px;
@@ -50,21 +65,17 @@ canvas { border: 2px solid #444; display: block; max-width: 100%; }
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="msg">← → ↑ ↓ で移動　Zキー/ボタンで発射</div>
+<div id="msg">ジョイスティックで移動　FIREで発射</div>
 
-<!-- スマホ用タッチパッド -->
+<!-- スマホ用コントローラー -->
 <div id="pad">
-  <div id="pad-row">
-    <div id="dpad">
-      <div id="dpad-center"></div>
-      <div class="dpad-btn" id="btn-up">▲</div>
-      <div class="dpad-btn" id="btn-down">▼</div>
-      <div class="dpad-btn" id="btn-left">◀</div>
-      <div class="dpad-btn" id="btn-right">▶</div>
-    </div>
-    <div id="btn-fire">FIRE</div>
+  <div id="stick-area">
+    <div id="stick-knob"></div>
   </div>
-  <button id="btn-reset-touch">リスタート (R)</button>
+  <div style="display:flex; flex-direction:column; align-items:center; gap:10px;">
+    <div id="btn-fire">FIRE</div>
+    <button id="btn-reset-touch">リスタート</button>
+  </div>
 </div>
 
 <script>
@@ -220,7 +231,7 @@ const enemyDefs = [
   {key:'enemy2', wx:11500,wyBase:130, type:2, phase:1.0},
   {key:'enemy1', wx:11800,wyBase:110, type:1, phase:0.7},
   {key:'enemy2', wx:12100,wyBase:170, type:2, phase:2.6},
-  {key:'enemy1', wx:12400,wyBase:140, type:1, phase:1.5},
+  {key:'enemy1', wx:12400,wyBase:145, type:1, phase:1.5},
   {key:'enemy2', wx:12700,wyBase:125, type:2, phase:0.2},
   {key:'enemy1', wx:13000,wyBase:150, type:1, phase:1.0},
 ];
@@ -239,35 +250,111 @@ const keys = {};
 document.addEventListener('keydown', e=>{ keys[e.key]=true; e.preventDefault(); });
 document.addEventListener('keyup',   e=>{ keys[e.key]=false; });
 
-// ===== 入力：タッチ =====
-const touchKeys = {up:false, down:false, left:false, right:false, fire:false};
+// ===== 入力：ジョイスティック =====
+// stickDir: 8方向それぞれのフラグ {up, down, left, right}
+const stickDir = {up:false, down:false, left:false, right:false};
+let stickFire = false;
 
-function setupBtn(id, key){
-  const el = document.getElementById(id);
-  function on(e) { e.preventDefault(); touchKeys[key]=true;  el.classList.add('active'); }
-  function off(e){ e.preventDefault(); touchKeys[key]=false; el.classList.remove('active'); }
-  el.addEventListener('touchstart',  on,  {passive:false});
-  el.addEventListener('touchend',    off, {passive:false});
-  el.addEventListener('touchcancel', off, {passive:false});
-  el.addEventListener('mousedown',  on);
-  el.addEventListener('mouseup',    off);
-  el.addEventListener('mouseleave', off);
+const stickArea = document.getElementById('stick-area');
+const stickKnob = document.getElementById('stick-knob');
+
+// ジョイスティックの中心からの距離しきい値（px）
+const STICK_DEAD = 18;   // デッドゾーン（この距離以下は無入力）
+const STICK_MAX  = 48;   // ノブの最大移動距離
+
+let stickTouchId = null; // 追跡中のタッチID
+let stickOrigin  = {x:0, y:0}; // タッチ開始位置（エリア内座標）
+
+function getStickCenter(){
+  const r = stickArea.getBoundingClientRect();
+  return {x: r.left + r.width/2, y: r.top + r.height/2};
 }
-setupBtn('btn-up',    'up');
-setupBtn('btn-down',  'down');
-setupBtn('btn-left',  'left');
-setupBtn('btn-right', 'right');
-setupBtn('btn-fire',  'fire');
+
+function updateStick(cx, cy){
+  // タッチ座標からスティック中心への差分
+  const center = getStickCenter();
+  const dx = cx - center.x;
+  const dy = cy - center.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+
+  // ノブをクランプして追従
+  const clamp = Math.min(dist, STICK_MAX);
+  const nx = dist > 0 ? dx/dist * clamp : 0;
+  const ny = dist > 0 ? dy/dist * clamp : 0;
+  stickKnob.style.transform = `translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
+
+  // デッドゾーン内なら全方向オフ
+  if(dist < STICK_DEAD){
+    stickDir.up = stickDir.down = stickDir.left = stickDir.right = false;
+    return;
+  }
+
+  // 角度から8方向を判定
+  // atan2 の結果を 0〜360° に変換し、45°刻みで判定
+  const angle = (Math.atan2(dy, dx) * 180/Math.PI + 360) % 360;
+  // 右=0°、下=90°、左=180°、上=270° (canvas座標系)
+  stickDir.right = angle <  22.5 || angle >= 337.5;
+  stickDir.down  = angle >= 22.5  && angle < 157.5;  // 右下〜左下
+  stickDir.left  = angle >= 112.5 && angle < 247.5;  // 左上〜左下
+  stickDir.up    = angle >= 202.5 && angle < 337.5;  // 左上〜右上
+
+  // 真横・真縦に寄せる（45°境界をはさんで判定）
+  // → atan2 の 8 分割で自然に斜め入力もOK
+}
+
+function resetStick(){
+  stickDir.up = stickDir.down = stickDir.left = stickDir.right = false;
+  stickKnob.style.transform = 'translate(-50%, -50%)';
+  stickTouchId = null;
+}
+
+stickArea.addEventListener('touchstart', e=>{
+  e.preventDefault();
+  if(stickTouchId !== null) return; // 既に追跡中なら無視
+  const t = e.changedTouches[0];
+  stickTouchId = t.identifier;
+  updateStick(t.clientX, t.clientY);
+}, {passive:false});
+
+stickArea.addEventListener('touchmove', e=>{
+  e.preventDefault();
+  for(const t of e.changedTouches){
+    if(t.identifier === stickTouchId) updateStick(t.clientX, t.clientY);
+  }
+}, {passive:false});
+
+stickArea.addEventListener('touchend', e=>{
+  e.preventDefault();
+  for(const t of e.changedTouches){
+    if(t.identifier === stickTouchId) resetStick();
+  }
+}, {passive:false});
+
+stickArea.addEventListener('touchcancel', e=>{
+  e.preventDefault();
+  resetStick();
+}, {passive:false});
+
+// FIREボタン
+const btnFire = document.getElementById('btn-fire');
+function fireOn(e) { e.preventDefault(); stickFire=true;  btnFire.classList.add('active'); }
+function fireOff(e){ e.preventDefault(); stickFire=false; btnFire.classList.remove('active'); }
+btnFire.addEventListener('touchstart',  fireOn,  {passive:false});
+btnFire.addEventListener('touchend',    fireOff, {passive:false});
+btnFire.addEventListener('touchcancel', fireOff, {passive:false});
+btnFire.addEventListener('mousedown',  fireOn);
+btnFire.addEventListener('mouseup',    fireOff);
+btnFire.addEventListener('mouseleave', fireOff);
 
 document.getElementById('btn-reset-touch').addEventListener('click', reset);
 document.addEventListener('keydown', e=>{ if(e.key==='r'||e.key==='R') reset(); });
 
-// キーボード＋タッチをまとめて判定
-function isUp()   { return keys['ArrowUp']   || keys['w'] || touchKeys.up;    }
-function isDown() { return keys['ArrowDown']  || keys['s'] || touchKeys.down;  }
-function isLeft() { return keys['ArrowLeft']  || keys['a'] || touchKeys.left;  }
-function isRight(){ return keys['ArrowRight'] || keys['d'] || touchKeys.right; }
-function isFire() { return keys['z'] || keys['Z'] || keys[' '] || touchKeys.fire; }
+// キーボード＋ジョイスティックをまとめて判定
+function isUp()   { return keys['ArrowUp']   || keys['w'] || stickDir.up;    }
+function isDown() { return keys['ArrowDown']  || keys['s'] || stickDir.down;  }
+function isLeft() { return keys['ArrowLeft']  || keys['a'] || stickDir.left;  }
+function isRight(){ return keys['ArrowRight'] || keys['d'] || stickDir.right; }
+function isFire() { return keys['z'] || keys['Z'] || keys[' '] || stickFire; }
 
 let shootCooldown=0, frame=0, optCount=0;
 const particles=[];
