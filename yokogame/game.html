@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>横スクロールシューティング</title>
 
 <meta property="og:title" content="横スクロールゲーム">
@@ -14,13 +15,58 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: monospace; }
-canvas { border: 2px solid #444; display: block; }
+canvas { border: 2px solid #444; display: block; max-width: 100%; }
 #msg { color: #ff0; margin-top: 8px; font-size: 16px; min-height: 20px; text-align: center; }
+
+/* ===== スマホ用タッチパッド ===== */
+#pad { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 8px; width: 100%; max-width: 640px; padding: 0 8px; touch-action: none; user-select: none; }
+#pad-row { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+#dpad { position: relative; width: 130px; height: 130px; }
+.dpad-btn {
+  position: absolute; width: 40px; height: 40px;
+  background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.35);
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 18px; cursor: pointer;
+}
+.dpad-btn.active { background: rgba(255,255,255,0.40); }
+#btn-up    { top: 0;    left: 50%; transform: translateX(-50%); }
+#btn-down  { bottom: 0; left: 50%; transform: translateX(-50%); }
+#btn-left  { left: 0;   top: 50%; transform: translateY(-50%); }
+#btn-right { right: 0;  top: 50%; transform: translateY(-50%); }
+#dpad-center { position: absolute; width: 40px; height: 40px; top: 50%; left: 50%; transform: translate(-50%,-50%); background: rgba(255,255,255,0.07); border-radius: 50%; }
+#btn-fire {
+  width: 90px; height: 90px; border-radius: 50%;
+  background: rgba(255,80,80,0.20); border: 2px solid rgba(255,80,80,0.55);
+  color: #ff6666; font-size: 14px; font-weight: bold; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+#btn-fire.active { background: rgba(255,80,80,0.50); }
+#btn-reset-touch {
+  padding: 8px 20px; background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.25); border-radius: 6px;
+  color: #ccc; font-size: 12px; font-family: monospace; cursor: pointer;
+}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="msg">← → ↑ ↓ で移動　Zキーで発射</div>
+<div id="msg">← → ↑ ↓ で移動　Zキー/ボタンで発射</div>
+
+<!-- スマホ用タッチパッド -->
+<div id="pad">
+  <div id="pad-row">
+    <div id="dpad">
+      <div id="dpad-center"></div>
+      <div class="dpad-btn" id="btn-up">▲</div>
+      <div class="dpad-btn" id="btn-down">▼</div>
+      <div class="dpad-btn" id="btn-left">◀</div>
+      <div class="dpad-btn" id="btn-right">▶</div>
+    </div>
+    <div id="btn-fire">FIRE</div>
+  </div>
+  <button id="btn-reset-touch">リスタート (R)</button>
+</div>
+
 <script>
 const W = 640, H = 400;
 const BLOCK = 55;
@@ -188,9 +234,40 @@ function initEnemies(){
 }
 initEnemies();
 
+// ===== 入力：キーボード =====
 const keys = {};
 document.addEventListener('keydown', e=>{ keys[e.key]=true; e.preventDefault(); });
 document.addEventListener('keyup',   e=>{ keys[e.key]=false; });
+
+// ===== 入力：タッチ =====
+const touchKeys = {up:false, down:false, left:false, right:false, fire:false};
+
+function setupBtn(id, key){
+  const el = document.getElementById(id);
+  function on(e) { e.preventDefault(); touchKeys[key]=true;  el.classList.add('active'); }
+  function off(e){ e.preventDefault(); touchKeys[key]=false; el.classList.remove('active'); }
+  el.addEventListener('touchstart',  on,  {passive:false});
+  el.addEventListener('touchend',    off, {passive:false});
+  el.addEventListener('touchcancel', off, {passive:false});
+  el.addEventListener('mousedown',  on);
+  el.addEventListener('mouseup',    off);
+  el.addEventListener('mouseleave', off);
+}
+setupBtn('btn-up',    'up');
+setupBtn('btn-down',  'down');
+setupBtn('btn-left',  'left');
+setupBtn('btn-right', 'right');
+setupBtn('btn-fire',  'fire');
+
+document.getElementById('btn-reset-touch').addEventListener('click', reset);
+document.addEventListener('keydown', e=>{ if(e.key==='r'||e.key==='R') reset(); });
+
+// キーボード＋タッチをまとめて判定
+function isUp()   { return keys['ArrowUp']   || keys['w'] || touchKeys.up;    }
+function isDown() { return keys['ArrowDown']  || keys['s'] || touchKeys.down;  }
+function isLeft() { return keys['ArrowLeft']  || keys['a'] || touchKeys.left;  }
+function isRight(){ return keys['ArrowRight'] || keys['d'] || touchKeys.right; }
+function isFire() { return keys['z'] || keys['Z'] || keys[' '] || touchKeys.fire; }
 
 let shootCooldown=0, frame=0, optCount=0;
 const particles=[];
@@ -221,10 +298,10 @@ function update(){
   if(gameOver||win) return;
   frame++;
 
-  if(keys['ArrowLeft'] ||keys['a']) player.x -= player.speed;
-  if(keys['ArrowRight']||keys['d']) player.x += player.speed;
-  if(keys['ArrowUp']   ||keys['w']) player.y -= player.speed;
-  if(keys['ArrowDown'] ||keys['s']) player.y += player.speed;
+  if(isLeft())  player.x -= player.speed;
+  if(isRight()) player.x += player.speed;
+  if(isUp())    player.y -= player.speed;
+  if(isDown())  player.y += player.speed;
   player.x = Math.max(10, Math.min(W/2, player.x));
   player.y = Math.max(10, Math.min(GROUND_Y-player.h-5, player.y));
 
@@ -238,7 +315,7 @@ function update(){
 
   // 射撃
   if(shootCooldown>0) shootCooldown--;
-  if((keys['z']||keys['Z']||keys[' '])&&shootCooldown===0){
+  if(isFire() && shootCooldown===0){
     const pw=sprW(SPR.player), ph=sprH(SPR.player);
     bullets.push({x:player.x+pw*0.88, y:player.y+ph*0.38, w:18, h:5});
     if(optCount>=1){
@@ -445,7 +522,7 @@ function draw(){
     ctx.textAlign='center';
     ctx.fillText('GAME OVER',W/2,H/2);
     ctx.fillStyle='#fff'; ctx.font='18px monospace';
-    ctx.fillText('Rキーでリスタート',W/2,H/2+44);
+    ctx.fillText('R / リスタートボタンで再開',W/2,H/2+44);
     ctx.textAlign='left';
   }
   if(win){
@@ -457,7 +534,7 @@ function draw(){
     ctx.fillText('STAGE CLEAR!',W/2,H/2);
     ctx.fillStyle='#fff'; ctx.font='18px monospace';
     ctx.fillText(`SCORE: ${score}`,W/2,H/2+40);
-    ctx.fillText('Rキーでリスタート',W/2,H/2+68);
+    ctx.fillText('R / リスタートボタンで再開',W/2,H/2+68);
     ctx.textAlign='left';
   }
 }
@@ -470,8 +547,6 @@ function reset(){
   optHistory.length=0;
   initEnemies();
 }
-
-document.addEventListener('keydown',e=>{if(e.key==='r'||e.key==='R') reset();});
 
 function loop(){ update(); draw(); requestAnimationFrame(loop); }
 img.onload=()=>loop();
