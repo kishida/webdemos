@@ -2,6 +2,11 @@
 Web Demos  
 https://kishida.github.io/webdemos/
 
+## Parachute
+[Parachute](parachute/paragame.html)  
+![Parachute](assets/parachute.png)  
+2026/4/27
+
 ## YOKOGAME
 [Yoko Game](yokogame/game.html)  
 ![Yoko Game](assets/yokogame.png)  

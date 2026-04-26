@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>パラシュート防衛ゲーム</title>
+
+<meta property="og:title" content="パラシュート防衛ゲーム">
+<meta property="og:description" content="手書き画面からAIが作ったパラシュート防衛ゲーム">
+<meta property="og:image" content="https://kishida.github.io/webdemos/parachute/ogp.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/parachute/paragame.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Zen+Kurenaido&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Zen Kurenaido', 'Caveat', cursive;
+    background: #f4efe4;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(200,190,170,0.3) 0%, transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(180,170,150,0.2) 0%, transparent 50%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    color: #2a2a2a;
+  }
+
+  h1 {
+    font-family: 'Caveat', cursive;
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    letter-spacing: 2px;
+    transform: rotate(-1deg);
+  }
+
+  .hud {
+    display: flex;
+    gap: 30px;
+    margin-bottom: 10px;
+    font-size: 1.3rem;
+    font-weight: bold;
+  }
+
+  .hud span { display: inline-block; }
+
+  canvas {
+    background: linear-gradient(to bottom,
+      #b8dff5 0%,
+      #d6ecf7 60%,
+      #f0e8c8 88%,
+      #f0e8c8 100%);
+    border: 3px solid #2a2a2a;
+    border-radius: 6px;
+    box-shadow: 4px 4px 0 #2a2a2a, 8px 8px 20px rgba(0,0,0,0.15);
+    cursor: crosshair;
+    max-width: 100%;
+    touch-action: none;
+  }
+
+  .instructions {
+    margin-top: 15px;
+    font-size: 1.1rem;
+    text-align: center;
+    max-width: 600px;
+    line-height: 1.5;
+    opacity: 0.85;
+  }
+
+  .instructions strong { color: #c0392b; }
+
+  button {
+    font-family: 'Caveat', cursive;
+    font-size: 1.5rem;
+    padding: 8px 24px;
+    margin-top: 10px;
+    background: #fdfaf0;
+    border: 2.5px solid #2a2a2a;
+    border-radius: 4px;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 #2a2a2a;
+    transition: opacity 0.2s;
+  }
+
+  button:hover { background: #fff8dc; }
+  button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #2a2a2a; }
+
+  /* ゲームオーバー時のみ表示。スペースは常に確保 */
+  button.hidden {
+    visibility: hidden;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<h1>✈ パラシュート防衛 ✈</h1>
+<div class="hud">
+  <span>SCORE: <span id="score">0</span></span>
+  <span>MISS: <span id="miss">0</span>/5</span>
+  <span>WAVE: <span id="wave">1</span></span>
+</div>
+
+<canvas id="game" width="720" height="500"></canvas>
+
+<div class="instructions">
+  マウス/指で<strong>砲台の角度</strong>を操作、<strong>クリック/タップ</strong>で発射！<br>
+  敵が地面に着陸すると逃げ出す → 5体逃がすとGAME OVER
+</div>
+<button id="restart" class="hidden">もう一度あそぶ</button>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const GROUND_Y = H - 60;
+
+// --- スプライトシート ---
+// 1ブロック = 30x30px
+const BLOCK = 30;
+const sprite = new Image();
+sprite.crossOrigin = 'anonymous';
+sprite.src = 'https://kishida.github.io/webdemos/parachute/para.png';
+let spriteReady = false;
+sprite.onload = () => { spriteReady = true; };
+
+// スプライトの定義（ブロック単位）
+const SPR = {
+  plane:    { x: 0,  y: 0,  w: 7, h: 3 },
+  paraS:    { x: 7,  y: 0,  w: 3, h: 3 },  // パラシュート小（閉）
+  paraL:    { x: 10, y: 0,  w: 5, h: 6 },  // パラシュート大（開）
+  cloud1:   { x: 0,  y: 3,  w: 7, h: 4 },
+  cloud2:   { x: 0,  y: 7,  w: 6, h: 4 },
+  cloud3:   { x: 6,  y: 7,  w: 6, h: 4 },
+  runner1:  { x: 13, y: 6,  w: 3, h: 4 },
+  runner2:  { x: 16, y: 6,  w: 3, h: 4 },
+  turret:   { x: 15, y: 0,  w: 4, h: 2 },  // 左向き、回転軸は相対(3,1)
+  base:     { x: 15, y: 2,  w: 5, h: 2 },  // 砲塔設置点は相対(2.5,0.5)
+  grass:    { x: 0,  y: 11, w: 48, h: 6 }
+};
+
+// スプライト1ブロックを基準にゲーム内サイズへの倍率
+// 元仕様の見た目に合わせて、各キャラに描画スケールを設定
+const SCALE = {
+  plane:   0.55,
+  paraS:   0.55,
+  paraL:   0.55,
+  cloud:   0.5,
+  runner:  0.45,
+  turret:  0.45,
+  base:    0.45,
+  grassH:  60
+};
+
+// スプライトを指定座標に描画（中心基準）
+function drawSprite(def, cx, cy, scale, flipX) {
+  if (!spriteReady) return;
+  const sw = def.w * BLOCK;
+  const sh = def.h * BLOCK;
+  const dw = sw * scale;
+  const dh = sh * scale;
+  ctx.save();
+  ctx.translate(cx, cy);
+  if (flipX) ctx.scale(-1, 1);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(sprite, def.x * BLOCK, def.y * BLOCK, sw, sh,
+                -dw / 2, -dh / 2, dw, dh);
+  ctx.restore();
+}
+
+// スプライトを左上基準で描画
+function drawSpriteAt(def, dx, dy, dw, dh, flipX) {
+  if (!spriteReady) return;
+  const sw = def.w * BLOCK;
+  const sh = def.h * BLOCK;
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  if (flipX) {
+    ctx.translate(dx + dw, dy);
+    ctx.scale(-1, 1);
+    ctx.drawImage(sprite, def.x * BLOCK, def.y * BLOCK, sw, sh, 0, 0, dw, dh);
+  } else {
+    ctx.drawImage(sprite, def.x * BLOCK, def.y * BLOCK, sw, sh, dx, dy, dw, dh);
+  }
+  ctx.restore();
+}
+
+// --- ゲーム状態 ---
+let state = {
+  score: 0,
+  miss: 0,
+  wave: 1,
+  gameOver: false,
+  cannonAngle: -Math.PI / 4, // 砲身角度（ラジアン）上向きが負
+  bullets: [],
+  enemies: [], // パラシュート兵
+  plane: null,
+  planeCount: 0, // 出現した飛行機の累計数
+  escapers: [], // 地面を逃げる敵
+  particles: [],
+  grassBlades: [],
+  mouse: { x: W/2, y: H/2 },
+  lastSpawn: 0,
+  spawnInterval: 2200,
+  time: 0
+};
+
+// 砲台位置（右下、草原と少し重なる）
+const CANNON = { x: W - 90, y: GROUND_Y + 20 };
+
+// 草を生成
+for (let i = 0; i < 120; i++) {
+  state.grassBlades.push({
+    x: Math.random() * W,
+    h: 6 + Math.random() * 10,
+    sway: Math.random() * Math.PI * 2
+  });
+}
+
+// 雲を生成（ゆっくり左へ流れる、3種のスプライトをローテーション）
+const cloudTypes = [SPR.cloud1, SPR.cloud2, SPR.cloud3];
+state.clouds = [
+  { x: 80,  y: 80,  scale: 0.6, vx: -0.15, type: 0 },
+  { x: 540, y: 60,  scale: 0.55, vx: -0.1,  type: 1 },
+  { x: 300, y: 130, scale: 0.5, vx: -0.2,  type: 2 },
+  { x: 620, y: 180, scale: 0.55, vx: -0.12, type: 0 }
+];
+
+// --- 入力 ---
+function getPos(e) {
+  const r = canvas.getBoundingClientRect();
+  const sx = canvas.width / r.width;
+  const sy = canvas.height / r.height;
+  const t = e.touches ? e.touches[0] : e;
+  return { x: (t.clientX - r.left) * sx, y: (t.clientY - r.top) * sy };
+}
+
+function updateAngle(p) {
+  const dx = p.x - CANNON.x;
+  const dy = p.y - CANNON.y;
+  let a = Math.atan2(dy, dx);
+  // 上方向の半円のみ許可（-π ～ 0）
+  if (a > 0) a = dx < 0 ? -Math.PI : 0;
+  // 角度制限：砲口は左上~真上方向
+  a = Math.max(-Math.PI + 0.1, Math.min(-0.1, a));
+  state.cannonAngle = a;
+}
+
+canvas.addEventListener('mousemove', e => {
+  state.mouse = getPos(e);
+  updateAngle(state.mouse);
+});
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  state.mouse = getPos(e);
+  updateAngle(state.mouse);
+}, { passive: false });
+
+canvas.addEventListener('click', e => {
+  if (state.gameOver) return;
+  fire();
+});
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (state.gameOver) return;
+  state.mouse = getPos(e);
+  updateAngle(state.mouse);
+  fire();
+}, { passive: false });
+
+function fire() {
+  const speed = 11;
+  const a = state.cannonAngle;
+  // 砲塔は4×2ブロック、回転軸はスプライト相対(3,1)
+  // 回転軸から砲口先端までの距離（軸から左端まで3ブロック分）
+  const turretScale = SCALE.turret;
+  const muzzleLen = 3 * BLOCK * turretScale;
+  // 回転軸位置（砲台スプライト相対(2.5, 0.5)）
+  const baseScale = SCALE.base;
+  const baseW = SPR.base.w * BLOCK * baseScale;
+  const baseH = SPR.base.h * BLOCK * baseScale;
+  const baseX = CANNON.x - baseW / 2;
+  const baseY = CANNON.y - baseH;
+  const pivotX = baseX + 2.5 * BLOCK * baseScale;
+  const pivotY = baseY + 0.5 * BLOCK * baseScale;
+  // 砲口先端
+  const mx = pivotX + Math.cos(a) * muzzleLen;
+  const my = pivotY + Math.sin(a) * muzzleLen;
+  state.bullets.push({
+    x: mx, y: my,
+    vx: Math.cos(a) * speed,
+    vy: Math.sin(a) * speed,
+    life: 0
+  });
+  // 発射エフェクト
+  for (let i = 0; i < 6; i++) {
+    state.particles.push({
+      x: mx, y: my,
+      vx: Math.cos(a) * (2 + Math.random()*3) + (Math.random()-0.5)*2,
+      vy: Math.sin(a) * (2 + Math.random()*3) + (Math.random()-0.5)*2,
+      life: 15,
+      color: '#e67e22'
+    });
+  }
+}
+
+// --- 敵生成 ---
+function spawnPlane() {
+  const dir = Math.random() < 0.5 ? 1 : -1; // 1:右へ, -1:左へ
+  state.planeCount++;
+  // 投下数：最初3個、2機ごとに+1、上限6個
+  const dropNum = Math.min(6, 3 + Math.floor((state.planeCount - 1) / 2));
+  // 投下ポイントを画面中央付近に等間隔で分散（端に少しランダム性）
+  const baseDrops = [];
+  const startX = W * 0.2;
+  const endX = W * 0.75;
+  const step = (endX - startX) / (dropNum - 1 || 1);
+  for (let i = 0; i < dropNum; i++) {
+    baseDrops.push(startX + step * i + (Math.random() - 0.5) * 30);
+  }
+  // 進行方向に合わせて並べ替え（先に通過する地点から順に落とす）
+  baseDrops.sort((a, b) => dir === 1 ? a - b : b - a);
+  state.plane = {
+    x: dir === 1 ? -60 : W + 60,
+    y: 60 + Math.random() * 80,
+    vx: dir * (1.5 + state.wave * 0.2),
+    dropPoints: baseDrops,
+    dropIndex: 0
+  };
+}
+
+function dropEnemy(px, py) {
+  state.enemies.push({
+    x: px,
+    y: py,
+    vy: 0.6 + Math.random() * 0.4,
+    vx: (Math.random() - 0.5) * 0.3,
+    parachuteOpen: false,
+    openAt: py + 40 + Math.random() * 30,
+    sway: Math.random() * Math.PI * 2
+  });
+}
+
+// --- ループ ---
+function update(dt) {
+  if (state.gameOver) return;
+  state.time += dt;
+
+  // 雲（ゆっくり左へ、画面外に出たら右から再登場）
+  state.clouds.forEach(c => {
+    c.x += c.vx;
+    if (c.x < -120) {
+      c.x = W + 120;
+      c.y = 50 + Math.random() * 130;
+      c.scale = 0.45 + Math.random() * 0.25;
+      c.type = Math.floor(Math.random() * 3);
+    }
+  });
+
+  // 飛行機管理
+  if (!state.plane && performance.now() - state.lastSpawn > state.spawnInterval) {
+    spawnPlane();
+    state.lastSpawn = performance.now();
+  }
+  if (state.plane) {
+    state.plane.x += state.plane.vx;
+    // 次の投下ポイントを通過したら落とす
+    while (state.plane.dropIndex < state.plane.dropPoints.length) {
+      const target = state.plane.dropPoints[state.plane.dropIndex];
+      const passed = state.plane.vx > 0 ? state.plane.x >= target : state.plane.x <= target;
+      if (passed) {
+        dropEnemy(state.plane.x, state.plane.y + 10);
+        state.plane.dropIndex++;
+      } else {
+        break;
+      }
+    }
+    if (state.plane.x < -80 || state.plane.x > W + 80) {
+      state.plane = null;
+    }
+  }
+
+  // 弾
+  for (let i = state.bullets.length - 1; i >= 0; i--) {
+    const b = state.bullets[i];
+    b.x += b.vx;
+    b.y += b.vy;
+    b.vy += 0.15; // 重力
+    b.life++;
+    if (b.x < 0 || b.x > W || b.y > GROUND_Y + 20) {
+      state.bullets.splice(i, 1);
+      continue;
+    }
+    // 命中判定（飛行機）: スプライト判定 (1,0)-(4,2)
+    if (state.plane) {
+      // スプライトは7x3ブロック、中心を基準に描画
+      // 判定範囲はスプライト左上から(1,0)〜(4,2) = x方向1〜4(右端は5)、y方向0〜2(下端は3)
+      // スプライト全体サイズ
+      const sw = 7 * BLOCK * SCALE.plane;
+      const sh = 3 * BLOCK * SCALE.plane;
+      const bs = BLOCK * SCALE.plane;
+      // スプライト左上の絶対座標（中心基準なので）
+      // 飛行機の向きに応じて判定範囲を反転
+      let hx, hy, hw, hh;
+      if (state.plane.vx < 0) {
+        // 左向き(flipなし): 判定x = 1〜5ブロック（左から）
+        hx = state.plane.x - sw / 2 + 1 * bs;
+      } else {
+        // 右向き(flip): 反転、判定x = (7-5)〜(7-1) = 2〜6ブロック
+        hx = state.plane.x - sw / 2 + 2 * bs;
+      }
+      hy = state.plane.y - sh / 2 + 0 * bs;
+      hw = 4 * bs; // (4-1+1)=4列
+      hh = 3 * bs; // (2-0+1)=3行
+      if (b.x >= hx && b.x <= hx + hw && b.y >= hy && b.y <= hy + hh) {
+        state.score += 50;
+        explode(state.plane.x, state.plane.y, '#e74c3c', 25);
+        state.plane = null;
+        state.bullets.splice(i, 1);
+        continue;
+      }
+    }
+    // 命中判定（パラシュート兵）
+    for (let j = state.enemies.length - 1; j >= 0; j--) {
+      const en = state.enemies[j];
+      let hit = false;
+      if (en.parachuteOpen) {
+        // パラシュート大: 5x6ブロック、判定 (11,0)-(13,1) + (11,3)-(12,4)
+        const sw = 5 * BLOCK * SCALE.paraL;
+        const sh = 6 * BLOCK * SCALE.paraL;
+        const bs = BLOCK * SCALE.paraL;
+        // スプライト座標(11,0)はスプライト内相対(11-10, 0)=(1,0)
+        // キャノピー部: 内部(1,0)-(3,1) → 3列x2行
+        const cx = en.x - sw / 2 + 1 * bs;
+        const cy = en.y - sh / 2 + 0 * bs;
+        const cw = 3 * bs;
+        const ch = 2 * bs;
+        // 体部: 内部(1,3)-(2,4) → 2列x2行
+        const bx = en.x - sw / 2 + 1 * bs;
+        const by = en.y - sh / 2 + 3 * bs;
+        const bw = 2 * bs;
+        const bh = 2 * bs;
+        if ((b.x >= cx && b.x <= cx + cw && b.y >= cy && b.y <= cy + ch) ||
+            (b.x >= bx && b.x <= bx + bw && b.y >= by && b.y <= by + bh)) {
+          hit = true;
+        }
+      } else {
+        // パラシュート小: 3x3ブロック、判定 (8,0)-(8,2) → 内部(1,0)-(1,2) = 中央列1列x3行
+        const sw = 3 * BLOCK * SCALE.paraS;
+        const sh = 3 * BLOCK * SCALE.paraS;
+        const bs = BLOCK * SCALE.paraS;
+        const hx = en.x - sw / 2 + 1 * bs;
+        const hy = en.y - sh / 2 + 0 * bs;
+        const hw = 1 * bs;
+        const hh = 3 * bs;
+        if (b.x >= hx && b.x <= hx + hw && b.y >= hy && b.y <= hy + hh) {
+          hit = true;
+        }
+      }
+      if (hit) {
+        state.score += en.parachuteOpen ? 10 : 20;
+        explode(en.x, en.y, '#c0392b', 15);
+        state.enemies.splice(j, 1);
+        state.bullets.splice(i, 1);
+        break;
+      }
+    }
+  }
+
+  // 敵（降下中）
+  for (let i = state.enemies.length - 1; i >= 0; i--) {
+    const en = state.enemies[i];
+    if (!en.parachuteOpen && en.y > en.openAt) {
+      en.parachuteOpen = true;
+      en.vy = 0.8;
+    }
+    en.y += en.vy;
+    en.x += en.vx;
+    if (en.parachuteOpen) {
+      en.sway += 0.05;
+      en.x += Math.sin(en.sway) * 0.3;
+    }
+    // 地面着陸
+    if (en.y >= GROUND_Y + 5) {
+      state.enemies.splice(i, 1);
+      // 逃亡兵として地面を歩かせる
+      const dir = en.x < CANNON.x ? -1 : 1; // 砲台から離れる方向ではなく端へ
+      state.escapers.push({
+        x: en.x,
+        y: GROUND_Y + 18,
+        vx: (en.x < W/2 ? -1 : 1) * 1.2,
+        frame: 0
+      });
+    }
+  }
+
+  // 逃亡兵
+  for (let i = state.escapers.length - 1; i >= 0; i--) {
+    const es = state.escapers[i];
+    es.x += es.vx;
+    es.frame++;
+    // 弾との判定
+    for (let j = state.bullets.length - 1; j >= 0; j--) {
+      const b = state.bullets[j];
+      const dx = b.x - es.x, dy = b.y - es.y;
+      if (dx*dx + dy*dy < 14*14) {
+        state.score += 5;
+        explode(es.x, es.y, '#8e44ad', 12);
+        state.escapers.splice(i, 1);
+        state.bullets.splice(j, 1);
+        break;
+      }
+    }
+    if (es.x < -20 || es.x > W + 20) {
+      state.escapers.splice(i, 1);
+      state.miss++;
+      if (state.miss >= 5) gameOver();
+    }
+  }
+
+  // パーティクル
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const p = state.particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.1;
+    p.life--;
+    if (p.life <= 0) state.particles.splice(i, 1);
+  }
+
+  // ウェーブ進行
+  const newWave = Math.floor(state.score / 200) + 1;
+  if (newWave > state.wave) {
+    state.wave = newWave;
+    state.spawnInterval = Math.max(800, 2200 - state.wave * 200);
+  }
+
+  // HUD
+  document.getElementById('score').textContent = state.score;
+  document.getElementById('miss').textContent = state.miss;
+  document.getElementById('wave').textContent = state.wave;
+}
+
+function explode(x, y, color, n) {
+  for (let i = 0; i < n; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const spd = 1 + Math.random() * 4;
+    state.particles.push({
+      x, y,
+      vx: Math.cos(ang) * spd,
+      vy: Math.sin(ang) * spd,
+      life: 20 + Math.random() * 20,
+      color
+    });
+  }
+}
+
+function gameOver() {
+  state.gameOver = true;
+  document.getElementById('restart').classList.remove('hidden');
+}
+
+document.getElementById('restart').addEventListener('click', () => {
+  state = {
+    ...state,
+    score: 0, miss: 0, wave: 1, gameOver: false,
+    bullets: [], enemies: [], plane: null, planeCount: 0, escapers: [], particles: [],
+    lastSpawn: 0, spawnInterval: 2200, time: 0
+  };
+  document.getElementById('restart').classList.add('hidden');
+});
+
+// --- 描画 ---
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // 草原（最背面）
+  drawGround();
+
+  // 雲（スプライト）
+  state.clouds.forEach(c => {
+    drawSprite(cloudTypes[c.type], c.x, c.y, c.scale, false);
+  });
+
+  // 飛行機
+  if (state.plane) drawPlane(state.plane);
+
+  // パラシュート敵
+  state.enemies.forEach(drawParachutist);
+
+  // 逃亡兵
+  state.escapers.forEach(drawEscaper);
+
+  // 砲台
+  drawCannon();
+
+  // 弾
+  ctx.save();
+  ctx.fillStyle = '#2a2a2a';
+  state.bullets.forEach(b => {
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    // 軌跡
+    ctx.globalAlpha = 0.3;
+    ctx.beginPath();
+    ctx.arc(b.x - b.vx, b.y - b.vy, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+  ctx.restore();
+
+  // パーティクル
+  state.particles.forEach(p => {
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = Math.min(1, p.life / 20);
+    ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+    ctx.globalAlpha = 1;
+  });
+
+  // 狙い補助線
+  if (!state.gameOver) drawAim();
+
+  // ゲームオーバー表示
+  if (state.gameOver) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(20, 30, 50, 0.55)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#c0392b';
+    ctx.lineWidth = 4;
+    ctx.font = 'bold 72px Caveat, cursive';
+    ctx.textAlign = 'center';
+    ctx.strokeText('GAME OVER', W/2, H/2 - 20);
+    ctx.fillText('GAME OVER', W/2, H/2 - 20);
+    ctx.font = '36px Caveat, cursive';
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#2a2a2a';
+    ctx.strokeText(`SCORE: ${state.score}`, W/2, H/2 + 30);
+    ctx.fillText(`SCORE: ${state.score}`, W/2, H/2 + 30);
+    ctx.restore();
+  }
+}
+
+// 飛行機（スプライト）
+function drawPlane(p) {
+  // スプライトは左向きとして描画。vx>=0(右向き)ならflip
+  drawSprite(SPR.plane, p.x, p.y, SCALE.plane, p.vx >= 0);
+}
+
+// パラシュート兵（スプライト）
+function drawParachutist(e) {
+  if (e.parachuteOpen) {
+    // 開いたパラシュート（5x6ブロック）
+    drawSprite(SPR.paraL, e.x, e.y, SCALE.paraL, false);
+  } else {
+    // 閉じたパラシュート（3x3ブロック、落下中）
+    drawSprite(SPR.paraS, e.x, e.y, SCALE.paraS, false);
+  }
+}
+
+// 地面と草（草原スプライトを画面幅に伸ばして1回で描画）
+function drawGround() {
+  if (!spriteReady) {
+    // 画像未ロード時のフォールバック
+    ctx.fillStyle = '#d4c896';
+    ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+    return;
+  }
+  // 草原スプライト(48×6ブロック)を画面幅Wに合わせて描画
+  // アスペクト比は維持せず、画面幅に伸ばす
+  const grassDef = SPR.grass;
+  const grassH = 70;
+  drawSpriteAt(grassDef, 0, GROUND_Y - 10, W, grassH, false);
+}
+
+// 砲台（base + 回転する砲塔turret）
+function drawCannon() {
+  if (!spriteReady) return;
+
+  const baseScale = SCALE.base;
+  const turretScale = SCALE.turret;
+
+  // 砲台スプライト（5x2ブロック）
+  const baseW = SPR.base.w * BLOCK * baseScale;
+  const baseH = SPR.base.h * BLOCK * baseScale;
+  // 砲台の左上座標（CANNON.x, CANNON.yを台座下端中心とする）
+  const baseX = CANNON.x - baseW / 2;
+  const baseY = CANNON.y - baseH;
+  drawSpriteAt(SPR.base, baseX, baseY, baseW, baseH, false);
+
+  // 砲塔設置点（砲台スプライト相対 2.5, 0.5 ブロック）
+  const mountX = baseX + 2.5 * BLOCK * baseScale;
+  const mountY = baseY + 0.5 * BLOCK * baseScale;
+
+  // 砲塔（4x2ブロック、左向き、回転軸は相対(3,1)）
+  const turretW = SPR.turret.w * BLOCK * turretScale;
+  const turretH = SPR.turret.h * BLOCK * turretScale;
+  const pivotX = 3 * BLOCK * turretScale; // スプライト左上から見た回転軸位置
+  const pivotY = 1 * BLOCK * turretScale;
+
+  ctx.save();
+  ctx.translate(mountX, mountY);
+  // スプライトは左向き（角度=π相当）。state.cannonAngleは、砲口が向く方向のラジアン（左上方向は約-π+α、π+α相当）
+  // 左向きスプライトを上方向(-π/2)などに回転させる必要がある
+  // 左向き（π）をstate.cannonAngleに合わせる: 回転角 = cannonAngle - π
+  ctx.rotate(state.cannonAngle - Math.PI);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(sprite,
+    SPR.turret.x * BLOCK, SPR.turret.y * BLOCK,
+    SPR.turret.w * BLOCK, SPR.turret.h * BLOCK,
+    -pivotX, -pivotY, turretW, turretH);
+  ctx.restore();
+}
+
+// 逃亡兵（runner1, runner2の2フレームでアニメ）
+function drawEscaper(es) {
+  // 6フレームごとに切り替え
+  const frameDef = (Math.floor(es.frame / 6) % 2 === 0) ? SPR.runner1 : SPR.runner2;
+  const scale = SCALE.runner;
+  const h = frameDef.h * BLOCK * scale;
+  // 中心を足元から少し上に
+  const cy = es.y - h / 2 + 6;
+  // スプライトの向きが左向きと仮定。vx>=0(右向き)なら反転
+  drawSprite(frameDef, es.x, cy, scale, es.vx >= 0);
+}
+
+// 砲身の狙い補助線（軌道予測）
+function drawAim() {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(192, 57, 43, 0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 6]);
+  const a = state.cannonAngle;
+  // 砲口先端を計算（fire()と同じロジック）
+  const turretScale = SCALE.turret;
+  const muzzleLen = 3 * BLOCK * turretScale;
+  const baseScale = SCALE.base;
+  const baseW = SPR.base.w * BLOCK * baseScale;
+  const baseH = SPR.base.h * BLOCK * baseScale;
+  const baseX = CANNON.x - baseW / 2;
+  const baseY = CANNON.y - baseH;
+  const pivotX = baseX + 2.5 * BLOCK * baseScale;
+  const pivotY = baseY + 0.5 * BLOCK * baseScale;
+  let x = pivotX + Math.cos(a) * muzzleLen;
+  let y = pivotY + Math.sin(a) * muzzleLen;
+  let vx = Math.cos(a) * 11;
+  let vy = Math.sin(a) * 11;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  for (let i = 0; i < 40; i++) {
+    x += vx; y += vy; vy += 0.15;
+    if (y > GROUND_Y + 20 || x < 0 || x > W) break;
+    ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// メインループ
+let lastTime = performance.now();
+function loop(now) {
+  const dt = now - lastTime;
+  lastTime = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// roundRect polyfill（古いブラウザ対応）
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+    this.beginPath();
+    this.moveTo(x + r, y);
+    this.arcTo(x + w, y, x + w, y + h, r);
+    this.arcTo(x + w, y + h, x, y + h, r);
+    this.arcTo(x, y + h, x, y, r);
+    this.arcTo(x, y, x + w, y, r);
+    this.closePath();
+  };
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
