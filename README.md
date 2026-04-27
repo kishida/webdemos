@@ -2,6 +2,12 @@
 Web Demos  
 https://kishida.github.io/webdemos/
 
+## 3D RPG
+
+[3D RPG](rpg/rpg.html)  
+![RPG](assets/rpg.png)  
+2026/4/27
+
 ## Parachute
 [Parachute](parachute/paragame.html)  
 ![Parachute](assets/parachute.png)  

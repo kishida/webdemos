@@ -1,0 +1,1822 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>3DダンジョンRPG</title>
+
+<meta property="og:title" content="3DダンジョンRPG">
+<meta property="og:description" content="Qwen3.6-27Bが作ったRPG">
+<meta property="og:image" content="https://kishida.github.io/webdemos/rpg/ogp.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/rpg/rpg.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'MS Gothic', monospace; }
+#gameContainer { position: relative; width: 800px; height: 600px; }
+canvas { display: block; image-rendering: pixelated; }
+#ui { position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; }
+#stats { position: absolute; top: 5px; left: 5px; color: #fff; font-size: 14px; text-shadow: 2px 2px #000; background: rgba(0,0,0,0.6); padding: 8px 12px; border-radius: 8px; border: 1px solid #555; }
+#minimap { position: absolute; top: 5px; right: 5px; border: 2px solid #888; background: rgba(0,0,0,0.7); }
+#battleScreen { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 10; flex-direction: column; align-items: center; justify-content: center; }
+#battleScreen.active { display: flex; }
+#battleCanvas { border: 3px solid #c9a227; background: #1a1a2e; margin-bottom: 10px; }
+#battleText { color: #fff; font-size: 16px; text-align: center; min-height: 40px; padding: 5px; }
+#battleCommands { display: flex; gap: 8px; margin-top: 10px; pointer-events: all; }
+#battleCommands button { padding: 10px 20px; font-size: 16px; font-family: 'MS Gothic', monospace; cursor: pointer; border: 2px solid #555; background: rgba(30,30,60,0.8); color: rgba(255,255,255,0.4); border-radius: 5px; transition: all 0.15s; }
+#battleCommands button:hover { background: #4a4a8e; transform: scale(1.05); }
+.cmd-btn.active { background: linear-gradient(180deg, #c9a227, #a07818); color: #fff; border-color: #ffd700; box-shadow: 0 0 16px rgba(255,215,0,0.7), inset 0 1px 0 rgba(255,255,255,0.3); transform: scale(1.12); text-shadow: 0 1px 3px rgba(0,0,0,0.6); }
+#clearScreen { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(180deg, #1a0a2e, #0d1b3e); }
+#clearScreen.active { display: flex; }
+#clearCanvas { border-radius: 10px; }
+#clearText { color: #ffd700; font-size: 24px; margin-top: 15px; text-shadow: 0 0 20px #ff6b00, 0 0 40px #ff3300; animation: glow 2s ease-in-out infinite alternate; }
+@keyframes glow { from { text-shadow: 0 0 10px #ffd700; } to { text-shadow: 0 0 30px #ff6b00, 0 0 60px #ff3300; } }
+#controls { position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.4); font-size: 11px; text-align: center; }
+#msgBox { display: none; position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 10px 20px; border-radius: 8px; border: 1px solid #c9a227; font-size: 14px; z-index: 5; text-align: center; }
+#msgBox.active { display: block; }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+<canvas id="minimap" width="120" height="120"></canvas>
+<div id="ui">
+<div id="stats">HP: <span id="hpText">100/100</span> | Lv:<span id="lvText">1</span> | 階層: <span id="floorText">1F</span></div>
+</div>
+<div id="msgBox"></div>
+<div id="battleScreen">
+<canvas id="battleCanvas" width="500" height="280"></canvas>
+<div id="battleText"></div>
+<div id="battleCommands"></div>
+</div>
+<div id="clearScreen">
+<canvas id="clearCanvas" width="600" height="450"></canvas>
+<div id="clearText">🎉 クリアおめでとう！ 🎉</div>
+</div>
+<div id="controls">矢印キー:移動 | Z:左回転 | X:右回転 | Enter:交互作用</div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const miniCanvas = document.getElementById('minimap');
+const miniCtx = miniCanvas.getContext('2d');
+const battleCanvas = document.getElementById('battleCanvas');
+const bctx = battleCanvas.getContext('2d');
+
+// ===== TEXTURES =====
+function createTexture(w, h, drawFn) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const cx = c.getContext('2d');
+    drawFn(cx, w, h);
+    return c;
+}
+
+const textures = {};
+
+// Brick wall
+textures.brick = createTexture(64, 64, (cx, w, h) => {
+    cx.fillStyle = '#8B4513';
+    cx.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 16) {
+        const offset = (y / 16) % 2 === 0 ? 0 : 16;
+        for (let x = -16 + offset; x < w + 16; x += 32) {
+            cx.fillStyle = `rgb(${120+Math.random()*40}, ${50+Math.random()*30}, ${15+Math.random()*15})`;
+            cx.fillRect(x, y, 30, 14);
+        }
+    }
+    for (let y = 0; y < h; y += 16) {
+        cx.fillStyle = '#A0522D';
+        cx.fillRect(0, y, w, 2);
+    }
+});
+
+// Stone wall
+textures.stone = createTexture(64, 64, (cx, w, h) => {
+    cx.fillStyle = '#696969';
+    cx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 8; i++) {
+        const sx = Math.random() * w;
+        const sy = Math.random() * h;
+        const sw = 15 + Math.random() * 20;
+        const sh = 10 + Math.random() * 15;
+        cx.fillStyle = `rgb(${90+Math.random()*40}, ${90+Math.random()*40}, ${90+Math.random()*40})`;
+        cx.fillRect(sx, sy, sw, sh);
+        cx.strokeStyle = '#555';
+        cx.strokeRect(sx, sy, sw, sh);
+    }
+});
+
+// Dark stone (deep dungeon)
+textures.darkStone = createTexture(64, 64, (cx, w, h) => {
+    cx.fillStyle = '#3a2a3a';
+    cx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 10; i++) {
+        const sx = Math.random() * w;
+        const sy = Math.random() * h;
+        cx.fillStyle = `rgb(${50+Math.random()*30}, ${30+Math.random()*20}, ${50+Math.random()*30})`;
+        cx.fillRect(sx, sy, 12 + Math.random()*18, 8 + Math.random()*12);
+    }
+});
+
+// Boss room wall (golden)
+textures.goldWall = createTexture(64, 64, (cx, w, h) => {
+    cx.fillStyle = '#5a3a0a';
+    cx.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 16) {
+        const offset = (y / 16) % 2 === 0 ? 0 : 16;
+        for (let x = -16 + offset; x < w + 16; x += 32) {
+            cx.fillStyle = `rgb(${140+Math.random()*50}, ${100+Math.random()*40}, ${20+Math.random()*20})`;
+            cx.fillRect(x, y, 30, 14);
+        }
+    }
+    // Gold shimmer
+    for (let i = 0; i < 5; i++) {
+        cx.fillStyle = `rgba(255,215,0,${Math.random()*0.3})`;
+        cx.fillRect(Math.random()*w, Math.random()*h, 4, 4);
+    }
+});
+
+// Floor texture
+textures.floor = createTexture(64, 64, (cx, w, h) => {
+    cx.fillStyle = '#2a2a2a';
+    cx.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 32) {
+        for (let x = 0; x < w; x += 32) {
+            cx.fillStyle = `rgb(${40+Math.random()*15}, ${40+Math.random()*15}, ${40+Math.random()*15})`;
+            cx.fillRect(x, y, 31, 31);
+        }
+    }
+});
+
+// Ceiling texture
+textures.ceiling = createTexture(64, 64, (cx, w, h) => {
+    cx.fillStyle = '#1a1a2e';
+    cx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 8; i++) {
+        cx.fillStyle = `rgba(${30+Math.random()*20}, ${30+Math.random()*20}, ${50+Math.random()*20}, 0.5)`;
+        cx.fillRect(Math.random()*w, Math.random()*h, 10+Math.random()*15, 10+Math.random()*15);
+    }
+});
+
+// ===== DUNGEON MAP =====
+const MAP_W = 24, MAP_H = 24;
+const map = [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,1],
+    [1,1,2,0,2,2,2,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2,1,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,2,2,2,1,1,1,2,2,2,2,0,2,2,2,1,1,1,2,2,2,1,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,2,2,2,2,2,0,0,0,0,0,0,0,0,0,2,2,2,0,2,2,1,1],
+    [1,0,0,0,0,0,3,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,3,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,3,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,1],
+    [1,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+];
+
+// Enemy positions on map (will be removed after battle)
+const enemies = [
+    { x: 3.5, y: 2.5, type: 'slime', name: 'スライム', hp: 30, maxHp: 30, atk: 8, def: 2, exp: 15, gold: 10 },
+    { x: 10.5, y: 7.5, type: 'bat', name: 'コウモリ', hp: 25, maxHp: 25, atk: 10, def: 1, exp: 12, gold: 8 },
+    { x: 18.5, y: 3.5, type: 'skeleton', name: 'スケルトン', hp: 45, maxHp: 45, atk: 14, def: 5, exp: 25, gold: 20 },
+    { x: 7.5, y: 13.5, type: 'ghost', name: 'ゴースト', hp: 35, maxHp: 35, atk: 12, def: 3, exp: 20, gold: 15 },
+    { x: 16.5, y: 14.5, type: 'goblin', name: 'ゴブリン', hp: 50, maxHp: 50, atk: 16, def: 6, exp: 30, gold: 25 },
+    { x: 3.5, y: 19.5, type: 'darkKnight', name: 'ダークナイト', hp: 60, maxHp: 60, atk: 20, def: 8, exp: 40, gold: 35 },
+    { x: 20.5, y: 19.5, type: 'wraith', name: 'ワイト', hp: 55, maxHp: 55, atk: 18, def: 7, exp: 35, gold: 30 },
+    { x: 12.5, y: 20.5, type: 'dragon', name: 'ドラゴン', hp: 80, maxHp: 80, atk: 25, def: 10, exp: 60, gold: 50 },
+];
+
+// Boss position
+const boss = { x: 12.5, y: 21.5, type: 'boss', name: '👹 デスロード', hp: 200, maxHp: 200, atk: 35, def: 15, exp: 200, gold: 500, isBoss: true };
+
+// Player
+const player = {
+    gridX: 1, gridY: 1, renderX: 1.5, renderY: 1.5, angle: Math.PI / 2, snapAngle: Math.PI / 2, hp: 100, maxHp: 100, atk: 15, def: 5, lv: 1, exp: 0, gold: 0,
+    potions: 3, moving: false, moveProgress: 0, moveSpeed: 0.1, fromX: 1.5, fromY: 1.5, toX: 1.5, toY: 1.5,
+    rotating: false, rotProgress: 0, rotSpeed: 0.08, fromAngle: Math.PI / 2, toAngle: Math.PI / 2
+};
+
+function easeInOut(t) {
+    return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+}
+
+let gameState = 'explore'; // explore, battle, clear
+let currentEnemy = null;
+let battleLog = [];
+let battlePhase = 'command'; // command, playerAction, enemyAction, victory, defeat
+let selectedCommand = 0; // index of currently selected command in battle menu
+let animFrame = 0;
+let messageTimer = 0;
+let particles = [];
+
+// ===== RAYCASTING ENGINE =====
+const FOV = Math.PI / 3;
+const HALF_FOV = FOV / 2;
+const NUM_RAYS = 400;
+const MAX_DEPTH = 20;
+const TILE_SIZE = 1;
+
+function castRay(angle) {
+    const sinA = Math.sin(angle);
+    const cosA = Math.cos(angle);
+    
+    for (let d = 0.01; d < MAX_DEPTH; d += 0.02) {
+        const testX = player.renderX + cosA * d;
+        const testY = player.renderY + sinA * d;
+        const mapX = Math.floor(testX);
+        const mapY = Math.floor(testY);
+        
+        if (mapX < 0 || mapX >= MAP_W || mapY < 0 || mapY >= MAP_H) return { dist: MAX_DEPTH, texId: 1 };
+        
+        const tile = map[mapY][mapX];
+        if (tile > 0) {
+            // Calculate texture coordinate
+            let texCoord;
+            const blockX = testX - Math.floor(testX);
+            const blockY = testY - Math.floor(testY);
+            
+            if (blockX < 0.02 || blockX > 0.98) {
+                texCoord = blockY;
+            } else {
+                texCoord = blockX;
+            }
+            
+            return { dist: d, texId: tile, texCoord: texCoord };
+        }
+    }
+    return { dist: MAX_DEPTH, texId: 0 };
+}
+
+function renderDungeon() {
+    // Sky / Ceiling gradient
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, 300);
+    skyGrad.addColorStop(0, '#0a0a1a');
+    skyGrad.addColorStop(1, '#1a1a2e');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, 800, 300);
+    
+    // Floor gradient
+    const floorGrad = ctx.createLinearGradient(0, 300, 0, 600);
+    floorGrad.addColorStop(0, '#1a1a1a');
+    floorGrad.addColorStop(1, '#2a2a2a');
+    ctx.fillStyle = floorGrad;
+    ctx.fillRect(0, 300, 800, 300);
+    
+    // Cast rays and draw walls
+    const stripWidth = 800 / NUM_RAYS;
+    
+    for (let i = 0; i < NUM_RAYS; i++) {
+        const rayAngle = player.angle - HALF_FOV + (i / NUM_RAYS) * FOV;
+        const result = castRay(rayAngle);
+        
+        // Fix fisheye
+        const correctedDist = result.dist * Math.cos(rayAngle - player.angle);
+        const wallHeight = Math.min(600, 500 / correctedDist);
+        
+        if (result.texId > 0 && correctedDist < MAX_DEPTH) {
+            const texKey = ['brick', 'stone', 'darkStone', 'goldWall'][result.texId - 1] || 'brick';
+            const tex = textures[texKey];
+            
+            if (tex) {
+                const texX = Math.floor((result.texCoord || 0.5) * 64);
+                
+                // Draw wall strip with texture
+                ctx.save();
+                ctx.globalAlpha = Math.max(0.15, 1 - correctedDist / MAX_DEPTH);
+                
+                // Shadow overlay based on distance
+                const brightness = Math.max(0.2, 1 - correctedDist * 0.08);
+                
+                ctx.drawImage(tex, texX, 0, 1, 64, i * stripWidth, (300 - wallHeight / 2), stripWidth + 1, wallHeight);
+                
+                // Apply darkness
+                if (brightness < 1) {
+                    ctx.fillStyle = `rgba(0,0,0,${1 - brightness})`;
+                    ctx.fillRect(i * stripWidth, (300 - wallHeight / 2), stripWidth + 1, wallHeight);
+                }
+                
+                ctx.restore();
+            }
+        }
+    }
+    
+    // Draw sprites (enemies) on the map
+    drawSprites();
+}
+
+function drawSprites() {
+    const allEnemies = [...enemies.filter(e => e.hp > 0), boss];
+    
+    // Sort by distance
+    const sorted = allEnemies.map(e => {
+        const dx = e.x - player.renderX;
+        const dy = e.y - player.renderY;
+        return { ...e, dist: Math.sqrt(dx*dx + dy*dy) };
+    }).sort((a, b) => b.dist - a.dist);
+
+    for (const enemy of sorted) {
+        if (enemy.hp <= 0 && !enemy.isBoss) continue;
+        
+        const dx = enemy.x - player.renderX;
+        const dy = enemy.y - player.renderY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist > MAX_DEPTH || dist < 0.3) continue;
+        
+        let angle = Math.atan2(dy, dx) - player.angle;
+        while (angle > Math.PI) angle -= 2 * Math.PI;
+        while (angle < -Math.PI) angle += 2 * Math.PI;
+        
+        if (Math.abs(angle) > HALF_FOV + 0.3) continue;
+        
+        const screenX = 400 + (angle / HALF_FOV) * 400;
+        const spriteSize = Math.min(300, 250 / dist);
+        
+        // Check if behind wall
+        const rayResult = castRay(player.angle + angle);
+        if (rayResult.dist < dist - 0.2) continue;
+        
+        ctx.save();
+        ctx.globalAlpha = Math.max(0.3, 1 - dist / MAX_DEPTH);
+        
+        // Draw enemy sprite
+        drawEnemySprite(ctx, screenX, 300, spriteSize, enemy.type, enemy.isBoss);
+        
+        ctx.restore();
+    }
+}
+
+function drawEnemySprite(context, x, y, size, type, isBoss) {
+    const s = size;
+    
+    if (isBoss) {
+        // Boss - large demon
+        context.fillStyle = '#8B0000';
+        context.beginPath();
+        context.ellipse(x, y + s*0.1, s*0.4, s*0.5, 0, 0, Math.PI*2);
+        context.fill();
+        
+        // Horns
+        context.fillStyle = '#FFD700';
+        context.beginPath();
+        context.moveTo(x - s*0.3, y - s*0.3);
+        context.lineTo(x - s*0.5, y - s*0.6);
+        context.lineTo(x - s*0.15, y - s*0.25);
+        context.fill();
+        context.beginPath();
+        context.moveTo(x + s*0.3, y - s*0.3);
+        context.lineTo(x + s*0.5, y - s*0.6);
+        context.lineTo(x + s*0.15, y - s*0.25);
+        context.fill();
+        
+        // Eyes
+        context.fillStyle = '#FF4500';
+        context.beginPath();
+        context.arc(x - s*0.12, y - s*0.05, s*0.06, 0, Math.PI*2);
+        context.arc(x + s*0.12, y - s*0.05, s*0.06, 0, Math.PI*2);
+        context.fill();
+        
+        // Mouth
+        context.fillStyle = '#FFD700';
+        context.beginPath();
+        context.arc(x, y + s*0.1, s*0.12, 0, Math.PI);
+        context.fill();
+        
+        // Cape
+        context.fillStyle = '#4a0000';
+        context.fillRect(x - s*0.35, y + s*0.1, s*0.7, s*0.4);
+    } else {
+        switch(type) {
+            case 'slime':
+                // Green slime
+                const slimeBob = Math.sin(animFrame * 0.05) * s * 0.05;
+                context.fillStyle = '#32CD32';
+                context.beginPath();
+                context.ellipse(x, y + s*0.15 + slimeBob, s*0.3, s*0.25, 0, 0, Math.PI*2);
+                context.fill();
+                context.fillStyle = '#90EE90';
+                context.beginPath();
+                context.ellipse(x - s*0.05, y + s*0.1 + slimeBob, s*0.15, s*0.12, 0, 0, Math.PI*2);
+                context.fill();
+                // Eyes
+                context.fillStyle = '#fff';
+                context.beginPath();
+                context.arc(x - s*0.08, y + s*0.12 + slimeBob, s*0.05, 0, Math.PI*2);
+                context.arc(x + s*0.08, y + s*0.12 + slimeBob, s*0.05, 0, Math.PI*2);
+                context.fill();
+                context.fillStyle = '#000';
+                context.beginPath();
+                context.arc(x - s*0.07, y + s*0.13 + slimeBob, s*0.025, 0, Math.PI*2);
+                context.arc(x + s*0.09, y + s*0.13 + slimeBob, s*0.025, 0, Math.PI*2);
+                context.fill();
+                break;
+                
+            case 'bat':
+                // Bat with wings
+                const wingAngle = Math.sin(animFrame * 0.1) * 0.4;
+                context.fillStyle = '#4a3050';
+                // Body
+                context.beginPath();
+                context.ellipse(x, y + s*0.1, s*0.12, s*0.15, 0, 0, Math.PI*2);
+                context.fill();
+                // Wings
+                context.save();
+                context.translate(x - s*0.12, y + s*0.05);
+                context.rotate(-wingAngle);
+                context.fillStyle = '#3a2040';
+                context.beginPath();
+                context.moveTo(0, 0);
+                context.lineTo(-s*0.3, -s*0.15);
+                context.lineTo(-s*0.25, s*0.05);
+                context.fill();
+                context.restore();
+                context.save();
+                context.translate(x + s*0.12, y + s*0.05);
+                context.rotate(wingAngle);
+                context.fillStyle = '#3a2040';
+                context.beginPath();
+                context.moveTo(0, 0);
+                context.lineTo(s*0.3, -s*0.15);
+                context.lineTo(s*0.25, s*0.05);
+                context.fill();
+                context.restore();
+                // Eyes
+                context.fillStyle = '#ff0';
+                context.beginPath();
+                context.arc(x - s*0.04, y + s*0.08, s*0.03, 0, Math.PI*2);
+                context.arc(x + s*0.04, y + s*0.08, s*0.03, 0, Math.PI*2);
+                context.fill();
+                break;
+                
+            case 'skeleton':
+                // Skeleton
+                context.fillStyle = '#ddd';
+                // Skull
+                context.beginPath();
+                context.arc(x, y - s*0.15, s*0.15, 0, Math.PI*2);
+                context.fill();
+                // Eye sockets
+                context.fillStyle = '#000';
+                context.beginPath();
+                context.arc(x - s*0.06, y - s*0.17, s*0.04, 0, Math.PI*2);
+                context.arc(x + s*0.06, y - s*0.17, s*0.04, 0, Math.PI*2);
+                context.fill();
+                // Body bones
+                context.fillStyle = '#ccc';
+                context.fillRect(x - s*0.03, y - s*0.02, s*0.06, s*0.35);
+                // Ribs
+                for (let r = 0; r < 3; r++) {
+                    context.fillRect(x - s*0.12, y + s*0.02 + r * s*0.08, s*0.24, s*0.03);
+                }
+                // Arms
+                context.save();
+                context.translate(x - s*0.03, y + s*0.05);
+                context.rotate(Math.sin(animFrame * 0.03) * 0.1);
+                context.fillRect(-s*0.2, -s*0.02, s*0.2, s*0.04);
+                context.restore();
+                context.save();
+                context.translate(x + s*0.03, y + s*0.05);
+                context.rotate(-Math.sin(animFrame * 0.03) * 0.1);
+                context.fillRect(0, -s*0.02, s*0.2, s*0.04);
+                context.restore();
+                // Sword
+                context.fillStyle = '#aaa';
+                context.save();
+                context.translate(x + s*0.2, y + s*0.05);
+                context.rotate(-Math.sin(animFrame * 0.03) * 0.1 - 0.3);
+                context.fillRect(-s*0.02, -s*0.3, s*0.04, s*0.3);
+                context.fillStyle = '#8B4513';
+                context.fillRect(-s*0.06, 0, s*0.12, s*0.06);
+                context.restore();
+                break;
+                
+            case 'ghost':
+                // Ghost - translucent
+                const ghostBob = Math.sin(animFrame * 0.04) * s * 0.08;
+                context.globalAlpha *= 0.7;
+                context.fillStyle = '#e8e8ff';
+                context.beginPath();
+                // Rounded top (semicircle left to right)
+                context.arc(x, y + ghostBob, s*0.25, Math.PI, 0);
+                // Wavy bottom edge (right to left, matching arc endpoints)
+                for (let w = 4; w >= 0; w--) {
+                    const wx = x - s*0.25 + w * s*0.125;
+                    const wy = y + s*0.22 + ghostBob + Math.sin(animFrame * 0.08 + w * 1.2) * s*0.04;
+                    context.lineTo(wx, wy);
+                }
+                context.closePath();
+                context.fill();
+                // Eyes
+                context.fillStyle = '#4a0080';
+                context.beginPath();
+                context.arc(x - s*0.08, y - s*0.02 + ghostBob, s*0.06, 0, Math.PI*2);
+                context.arc(x + s*0.08, y - s*0.02 + ghostBob, s*0.06, 0, Math.PI*2);
+                context.fill();
+                break;
+                
+            case 'goblin':
+                // Goblin
+                context.fillStyle = '#5a8a3a';
+                // Body
+                context.beginPath();
+                context.ellipse(x, y + s*0.1, s*0.2, s*0.25, 0, 0, Math.PI*2);
+                context.fill();
+                // Head
+                context.fillStyle = '#6aaa4a';
+                context.beginPath();
+                context.arc(x, y - s*0.15, s*0.18, 0, Math.PI*2);
+                context.fill();
+                // Ears (pointy)
+                context.fillStyle = '#5a8a3a';
+                context.beginPath();
+                context.moveTo(x - s*0.18, y - s*0.15);
+                context.lineTo(x - s*0.35, y - s*0.25);
+                context.lineTo(x - s*0.15, y - s*0.08);
+                context.fill();
+                context.beginPath();
+                context.moveTo(x + s*0.18, y - s*0.15);
+                context.lineTo(x + s*0.35, y - s*0.25);
+                context.lineTo(x + s*0.15, y - s*0.08);
+                context.fill();
+                // Eyes (yellow)
+                context.fillStyle = '#ff0';
+                context.beginPath();
+                context.arc(x - s*0.07, y - s*0.16, s*0.04, 0, Math.PI*2);
+                context.arc(x + s*0.07, y - s*0.16, s*0.04, 0, Math.PI*2);
+                context.fill();
+                // Mouth (grin)
+                context.fillStyle = '#3a5a2a';
+                context.beginPath();
+                context.arc(x, y - s*0.08, s*0.1, 0, Math.PI);
+                context.fill();
+                // Teeth
+                context.fillStyle = '#fff';
+                for (let t = 0; t < 4; t++) {
+                    context.fillRect(x - s*0.08 + t * s*0.05, y - s*0.08, s*0.03, s*0.04);
+                }
+                break;
+                
+            case 'darkKnight':
+                // Dark knight in armor
+                context.fillStyle = '#2a2a3a';
+                // Body armor
+                context.fillRect(x - s*0.2, y - s*0.1, s*0.4, s*0.4);
+                // Helmet
+                context.fillStyle = '#3a3a4a';
+                context.beginPath();
+                context.arc(x, y - s*0.2, s*0.18, 0, Math.PI*2);
+                context.fill();
+                // Visor (red glow)
+                context.fillStyle = '#ff3300';
+                context.fillRect(x - s*0.12, y - s*0.22, s*0.24, s*0.06);
+                // Shoulder pads
+                context.fillStyle = '#4a4a5a';
+                context.beginPath();
+                context.arc(x - s*0.25, y - s*0.08, s*0.12, 0, Math.PI*2);
+                context.fill();
+                context.beginPath();
+                context.arc(x + s*0.25, y - s*0.08, s*0.12, 0, Math.PI*2);
+                context.fill();
+                // Sword (large)
+                context.fillStyle = '#ccc';
+                context.save();
+                context.translate(x + s*0.3, y);
+                context.rotate(-0.5);
+                context.fillRect(-s*0.03, -s*0.4, s*0.06, s*0.4);
+                context.fillStyle = '#8B4513';
+                context.fillRect(-s*0.08, 0, s*0.16, s*0.08);
+                context.restore();
+                // Shield
+                context.fillStyle = '#5a2a2a';
+                context.beginPath();
+                context.moveTo(x - s*0.3, y - s*0.15);
+                context.lineTo(x - s*0.45, y + s*0.05);
+                context.lineTo(x - s*0.3, y + s*0.2);
+                context.fill();
+                break;
+                
+            case 'wraith':
+                // Wraith - dark floating entity
+                const wBob = Math.sin(animFrame * 0.06) * s * 0.1;
+                ctx.globalAlpha *= 0.8;
+                context.fillStyle = '#2a0a3a';
+                context.beginPath();
+                context.moveTo(x, y - s*0.4 + wBob);
+                for (let a = 0; a < Math.PI * 2; a += 0.1) {
+                    const r = s * 0.25 + Math.sin(a * 3 + animFrame * 0.1) * s * 0.08;
+                    context.lineTo(x + Math.cos(a) * r, y - s*0.1 + wBob + Math.sin(a) * r);
+                }
+                context.fill();
+                // Eyes (purple glow)
+                context.fillStyle = '#ff00ff';
+                context.beginPath();
+                context.arc(x - s*0.08, y - s*0.15 + wBob, s*0.05, 0, Math.PI*2);
+                context.arc(x + s*0.08, y - s*0.15 + wBob, s*0.05, 0, Math.PI*2);
+                context.fill();
+                break;
+                
+            case 'dragon':
+                // Dragon
+                const dBob = Math.sin(animFrame * 0.04) * s * 0.06;
+                // Body
+                context.fillStyle = '#cc3300';
+                context.beginPath();
+                context.ellipse(x, y + s*0.15 + dBob, s*0.35, s*0.25, 0, 0, Math.PI*2);
+                context.fill();
+                // Head
+                context.fillStyle = '#dd4400';
+                context.beginPath();
+                context.arc(x, y - s*0.1 + dBob, s*0.2, 0, Math.PI*2);
+                context.fill();
+                // Horns
+                context.fillStyle = '#8B4513';
+                context.beginPath();
+                context.moveTo(x - s*0.15, y - s*0.25 + dBob);
+                context.lineTo(x - s*0.25, y - s*0.45 + dBob);
+                context.lineTo(x - s*0.08, y - s*0.2 + dBob);
+                context.fill();
+                context.beginPath();
+                context.moveTo(x + s*0.15, y - s*0.25 + dBob);
+                context.lineTo(x + s*0.25, y - s*0.45 + dBob);
+                context.lineTo(x + s*0.08, y - s*0.2 + dBob);
+                context.fill();
+                // Wings
+                const wingFlap = Math.sin(animFrame * 0.06) * 0.3;
+                context.fillStyle = '#aa2200';
+                context.save();
+                context.translate(x - s*0.3, y + dBob);
+                context.rotate(-wingFlap);
+                context.beginPath();
+                context.moveTo(0, 0);
+                context.lineTo(-s*0.4, -s*0.3);
+                context.lineTo(-s*0.35, s*0.1);
+                context.fill();
+                context.restore();
+                context.save();
+                context.translate(x + s*0.3, y + dBob);
+                context.rotate(wingFlap);
+                context.beginPath();
+                context.moveTo(0, 0);
+                context.lineTo(s*0.4, -s*0.3);
+                context.lineTo(s*0.35, s*0.1);
+                context.fill();
+                context.restore();
+                // Eyes (yellow)
+                context.fillStyle = '#ffdd00';
+                context.beginPath();
+                context.arc(x - s*0.08, y - s*0.12 + dBob, s*0.05, 0, Math.PI*2);
+                context.arc(x + s*0.08, y - s*0.12 + dBob, s*0.05, 0, Math.PI*2);
+                context.fill();
+                // Fire breath hint
+                if (animFrame % 60 < 30) {
+                    context.fillStyle = `rgba(255, ${100+Math.random()*100}, 0, ${0.3 + Math.random()*0.3})`;
+                    context.beginPath();
+                    context.arc(x + s*0.25, y - s*0.08 + dBob, s*0.08 + Math.random()*s*0.05, 0, Math.PI*2);
+                    context.fill();
+                }
+                break;
+        }
+    }
+}
+
+// ===== MINIMAP =====
+function renderMinimap() {
+    miniCtx.fillStyle = '#111';
+    miniCtx.fillRect(0, 0, 120, 120);
+    
+    const scale = 5;
+    const offsetX = 60 - (player.gridX + 0.5) * scale;
+    const offsetY = 60 - (player.gridY + 0.5) * scale;
+    
+    for (let y = 0; y < MAP_H; y++) {
+        for (let x = 0; x < MAP_W; x++) {
+            if (map[y][x] > 0) {
+                const colors = ['', '#8B4513', '#696969', '#3a2a3a', '#8B6914'];
+                miniCtx.fillStyle = colors[map[y][x]] || '#888';
+            } else {
+                miniCtx.fillStyle = '#222';
+            }
+            miniCtx.fillRect(x * scale + offsetX, y * scale + offsetY, scale, scale);
+        }
+    }
+    
+    // Draw enemies on minimap
+    for (const e of enemies) {
+        if (e.hp > 0) {
+            miniCtx.fillStyle = '#ff4444';
+            miniCtx.fillRect(e.x * scale + offsetX - 1, e.y * scale + offsetY - 1, 3, 3);
+        }
+    }
+    
+    // Draw boss on minimap
+    if (boss.hp > 0) {
+        miniCtx.fillStyle = '#ff0000';
+        miniCtx.fillRect(boss.x * scale + offsetX - 2, boss.y * scale + offsetY - 2, 5, 5);
+    }
+    
+    // Draw player on minimap
+    miniCtx.fillStyle = '#00ff00';
+    miniCtx.beginPath();
+    miniCtx.arc((player.gridX + 0.5) * scale + offsetX, (player.gridY + 0.5) * scale + offsetY, 3, 0, Math.PI * 2);
+    miniCtx.fill();
+    
+    // Direction indicator
+    miniCtx.strokeStyle = '#00ff00';
+    miniCtx.lineWidth = 2;
+    miniCtx.beginPath();
+    miniCtx.moveTo((player.gridX + 0.5) * scale + offsetX, (player.gridY + 0.5) * scale + offsetY);
+    miniCtx.lineTo(
+        ((player.gridX + 0.5) + Math.cos(player.angle) * 1.5) * scale + offsetX,
+        ((player.gridY + 0.5) + Math.sin(player.angle) * 1.5) * scale + offsetY
+    );
+    miniCtx.stroke();
+}
+
+// ===== MOVEMENT =====
+function isWalkable(gx, gy) {
+    if (gx < 0 || gx >= MAP_W || gy < 0 || gy >= MAP_H) return false;
+    return map[gy][gx] === 0;
+}
+
+function movePlayer(dirX, dirY) {
+    if (player.moving || player.rotating) return;
+    
+    const newGX = player.gridX + dirX;
+    const newGY = player.gridY + dirY;
+    
+    if (!isWalkable(newGX, newGY)) return;
+    
+    player.fromX = player.renderX;
+    player.fromY = player.renderY;
+    player.toX = newGX + 0.5;
+    player.toY = newGY + 0.5;
+    player.gridX = newGX;
+    player.gridY = newGY;
+    player.moving = true;
+    player.moveProgress = 0;
+}
+
+function rotatePlayer(dir) {
+    if (player.rotating || player.moving) return;
+    
+    let targetAngle = player.snapAngle + dir * Math.PI / 2;
+    while (targetAngle > Math.PI) targetAngle -= 2 * Math.PI;
+    while (targetAngle < -Math.PI) targetAngle += 2 * Math.PI;
+    
+    player.fromAngle = player.angle;
+    let diff = targetAngle - player.snapAngle;
+    if (diff > Math.PI) diff -= 2 * Math.PI;
+    if (diff < -Math.PI) diff += 2 * Math.PI;
+    player.toAngle = player.snapAngle + diff;
+    
+    player.snapAngle = targetAngle;
+    player.rotating = true;
+    player.rotProgress = 0;
+}
+
+function updateMovement() {
+    if (player.moving) {
+        player.moveProgress += player.moveSpeed;
+        if (player.moveProgress >= 1) {
+            player.renderX = player.toX;
+            player.renderY = player.toY;
+            player.moving = false;
+            player.moveProgress = 0;
+            checkEncounter();
+        } else {
+            const t = easeInOut(player.moveProgress);
+            player.renderX = player.fromX + (player.toX - player.fromX) * t;
+            player.renderY = player.fromY + (player.toY - player.fromY) * t;
+        }
+    }
+    
+    if (player.rotating) {
+        player.rotProgress += player.rotSpeed;
+        if (player.rotProgress >= 1) {
+            player.angle = player.snapAngle;
+            player.rotating = false;
+            player.rotProgress = 0;
+        } else {
+            const t = easeInOut(player.rotProgress);
+            let diff = player.toAngle - player.fromAngle;
+            while (diff > Math.PI) diff -= 2 * Math.PI;
+            while (diff < -Math.PI) diff += 2 * Math.PI;
+            player.angle = player.fromAngle + diff * t;
+        }
+    }
+}
+
+function checkEncounter() {
+    // Check if player is adjacent to an enemy
+    for (const e of enemies) {
+        if (e.hp <= 0) continue;
+        const dx = e.x - (player.gridX + 0.5);
+        const dy = e.y - (player.gridY + 0.5);
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist < 1.2) {
+            startBattle(e);
+            return;
+        }
+    }
+    
+    // Check boss
+    const bdx = boss.x - (player.gridX + 0.5);
+    const bdy = boss.y - (player.gridY + 0.5);
+    const bDist = Math.sqrt(bdx*bdx + bdy*bdy);
+    
+    if (bDist < 1.2 && boss.hp > 0) {
+        startBattle(boss);
+    }
+}
+
+// ===== BATTLE SYSTEM =====
+function startBattle(enemy) {
+    gameState = 'battle';
+    currentEnemy = enemy;
+    battlePhase = 'command';
+    selectedCommand = 0;
+    
+    const bs = document.getElementById('battleScreen');
+    bs.classList.add('active');
+    
+    updateBattleUI();
+}
+
+function getCommandCount() {
+    if (battlePhase === 'command') return 3;
+    return 1;
+}
+
+function executeSelectedCommand() {
+    if (battlePhase === 'command') {
+        if (selectedCommand === 0) playerAttack();
+        else if (selectedCommand === 1) playerDefend();
+        else if (selectedCommand === 2) usePotion();
+    } else if (battlePhase === 'victory') {
+        endBattle();
+    } else if (battlePhase === 'defeat') {
+        revive();
+    }
+}
+
+function refreshCommandHighlight() {
+    const btns = document.querySelectorAll('.cmd-btn');
+    btns.forEach((btn, i) => {
+        if (i === selectedCommand) btn.classList.add('active');
+        else btn.classList.remove('active');
+    });
+}
+
+function updateBattleUI() {
+    const bt = document.getElementById('battleText');
+    const bc = document.getElementById('battleCommands');
+    
+    if (battlePhase === 'command') {
+        selectedCommand = Math.min(selectedCommand, 2);
+        bt.textContent = `${currentEnemy.name} が現れた！`;
+        bc.innerHTML = `
+            <button onclick="playerAttack()" class="cmd-btn" data-cmd="0">⚔️ 攻撃</button>
+            <button onclick="playerDefend()" class="cmd-btn" data-cmd="1">🛡️ 防御</button>
+            <button onclick="usePotion()" class="cmd-btn" data-cmd="2">🧪 ポーション(${player.potions})</button>
+        `;
+    } else if (battlePhase === 'victory') {
+        selectedCommand = 0;
+        bt.textContent = `${currentEnemy.name} を倒した！ EXP+${currentEnemy.exp} GOLD+${currentEnemy.gold}`;
+        bc.innerHTML = `<button onclick="endBattle()" class="cmd-btn" data-cmd="0">続ける ▶</button>`;
+    } else if (battlePhase === 'defeat') {
+        selectedCommand = 0;
+        bt.textContent = `やられた... 体力が尽きた...`;
+        bc.innerHTML = `<button onclick="revive()" class="cmd-btn" data-cmd="0">復活する 💀</button>`;
+    }
+    
+    refreshCommandHighlight();
+    drawBattleScene();
+}
+
+function drawBattleScene() {
+    bctx.clearRect(0, 0, 500, 280);
+    
+    // Background - dungeon interior
+    const bgGrad = bctx.createLinearGradient(0, 0, 0, 280);
+    bgGrad.addColorStop(0, '#1a0a2e');
+    bgGrad.addColorStop(0.5, '#2a1a3e');
+    bgGrad.addColorStop(1, '#1a1a2e');
+    bctx.fillStyle = bgGrad;
+    bctx.fillRect(0, 0, 500, 280);
+    
+    // Floor
+    bctx.fillStyle = '#2a2a3a';
+    bctx.fillRect(0, 200, 500, 80);
+    
+    // Stone pattern on floor
+    for (let x = 0; x < 500; x += 40) {
+        bctx.strokeStyle = '#333';
+        bctx.strokeRect(x, 200, 40, 40);
+        bctx.strokeRect(x + 20, 240, 40, 40);
+    }
+    
+    // Draw enemy
+    if (currentEnemy) {
+        const ex = 350;
+        const ey = 120;
+        const es = currentEnemy.isBoss ? 120 : 80;
+
+        let shakeX = 0, shakeY = 0;
+        if (enemyHitShake > 0) {
+            shakeX = (Math.random() - 0.5) * 8;
+            shakeY = (Math.random() - 0.5) * 8;
+            enemyHitShake--;
+        }
+
+        // Enemy shadow
+        bctx.fillStyle = 'rgba(0,0,0,0.3)';
+        bctx.beginPath();
+        bctx.ellipse(ex + shakeX, 200, es * 0.4, es * 0.1, 0, 0, Math.PI * 2);
+        bctx.fill();
+
+        // Flash white on hit
+        if (enemyHitShake > 6) {
+            bctx.globalAlpha = 0.5;
+        }
+
+        drawEnemySprite(bctx, ex + shakeX, ey + shakeY, es, currentEnemy.type, currentEnemy.isBoss);
+
+        if (enemyHitShake > 6) {
+            bctx.globalAlpha = 1;
+        }
+        
+        // Enemy HP bar
+        const hpBarW = 150;
+        const hpRatio = currentEnemy.hp / currentEnemy.maxHp;
+        bctx.fillStyle = '#333';
+        bctx.fillRect(ex - hpBarW/2, ey - es * 0.6 - 15, hpBarW, 12);
+        bctx.fillStyle = hpRatio > 0.5 ? '#4a4' : hpRatio > 0.25 ? '#aa4' : '#a44';
+        bctx.fillRect(ex - hpBarW/2 + 1, ey - es * 0.6 - 14, (hpBarW - 2) * hpRatio, 10);
+        bctx.strokeStyle = '#fff';
+        bctx.lineWidth = 1;
+        bctx.strokeRect(ex - hpBarW/2, ey - es * 0.6 - 15, hpBarW, 12);
+        
+        // Enemy name
+        bctx.fillStyle = currentEnemy.isBoss ? '#ff4444' : '#fff';
+        bctx.font = 'bold 14px MS Gothic';
+        bctx.textAlign = 'center';
+        bctx.fillText(currentEnemy.name, ex, ey - es * 0.6 - 20);
+    }
+    
+    // Draw player (small figure on left)
+    const px = 80;
+    const py = 150;
+
+    // Attack animation: lunge forward and swing sword
+    let bodyOffsetX = 0, bodyOffsetY = 0;
+    let swordAngle = -0.5;
+    let armExtend = 0;
+
+    if (attackAnim > 0) {
+        const t = attackAnim / 20;
+        // Wind-up (first half), strike (second half)
+        if (t > 0.5) {
+            const strikeT = (1 - t) * 2;
+            bodyOffsetX = 30 * (1 - strikeT);
+            bodyOffsetY = -5 * Math.sin(strikeT * Math.PI);
+            swordAngle = -0.5 + Math.PI * 0.8 * (1 - strikeT);
+            armExtend = 10 * (1 - strikeT);
+        } else {
+            const windupT = t * 2;
+            bodyOffsetX = -5 * windupT;
+            swordAngle = -0.5 - 0.6 * windupT;
+        }
+    }
+
+    // Defend animation: shield raises up
+    let shieldRaise = 0;
+    if (defendAnim > 0) {
+        const t = defendAnim / 30;
+        shieldRaise = Math.sin(t * Math.PI) * 15;
+        defendAnim--;
+    }
+
+    // Player shadow
+    bctx.fillStyle = 'rgba(0,0,0,0.3)';
+    bctx.beginPath();
+    bctx.ellipse(px + bodyOffsetX, 200, 20, 6, 0, 0, Math.PI * 2);
+    bctx.fill();
+
+    // Player body (shifts during attack lunge)
+    const bx = px + bodyOffsetX;
+    const by = py + bodyOffsetY;
+
+    bctx.fillStyle = '#4488ff';
+    bctx.fillRect(bx - 15, by - 30, 30, 50);
+    // Head
+    bctx.fillStyle = '#ffcc99';
+    bctx.beginPath();
+    bctx.arc(bx, by - 40, 15, 0, Math.PI * 2);
+    bctx.fill();
+    // Hair
+    bctx.fillStyle = '#3a2a1a';
+    bctx.beginPath();
+    bctx.arc(bx, by - 48, 14, Math.PI, 0);
+    bctx.fill();
+    // Eyes
+    bctx.fillStyle = '#000';
+    if (attackAnim > 0) {
+        // Determined eyes during attack
+        bctx.fillRect(bx - 6, by - 43, 4, 2);
+        bctx.fillRect(bx + 3, by - 43, 4, 2);
+    } else {
+        bctx.fillRect(bx - 6, by - 42, 3, 3);
+        bctx.fillRect(bx + 3, by - 42, 3, 3);
+    }
+
+    // Sword with swing animation
+    const swordPivotX = bx + 18 + armExtend;
+    const swordPivotY = by - 10;
+    bctx.save();
+    bctx.translate(swordPivotX, swordPivotY);
+    bctx.rotate(swordAngle);
+
+    // Sword trail during swing
+    if (attackAnim > 5) {
+        const trailAlpha = attackAnim / 20 * 0.4;
+        bctx.fillStyle = `rgba(200,200,255,${trailAlpha})`;
+        bctx.beginPath();
+        bctx.arc(0, -15, 35, -0.8, 0.5);
+        bctx.lineTo(0, 0);
+        bctx.fill();
+    }
+
+    // Blade
+    bctx.fillStyle = '#ddd';
+    bctx.fillRect(-2, -32, 4, 32);
+    // Blade shine
+    bctx.fillStyle = 'rgba(255,255,255,0.6)';
+    bctx.fillRect(-1, -30, 1, 28);
+    // Guard
+    bctx.fillStyle = '#DAA520';
+    bctx.fillRect(-7, -2, 14, 4);
+    // Handle
+    bctx.fillStyle = '#8B4513';
+    bctx.fillRect(-3, 2, 6, 10);
+    // Pommel
+    bctx.fillStyle = '#DAA520';
+    bctx.beginPath();
+    bctx.arc(0, 14, 4, 0, Math.PI * 2);
+    bctx.fill();
+
+    bctx.restore();
+
+    // Shield with defend animation
+    const shieldY = by - shieldRaise;
+    bctx.fillStyle = '#4466aa';
+    bctx.beginPath();
+    bctx.moveTo(bx - 20, shieldY - 15);
+    bctx.lineTo(bx - 32, shieldY + 5);
+    bctx.lineTo(bx - 20, shieldY + 22);
+    bctx.fill();
+    // Shield emblem
+    bctx.fillStyle = '#DAA520';
+    bctx.beginPath();
+    bctx.arc(bx - 24, shieldY + 2, 4, 0, Math.PI * 2);
+    bctx.fill();
+
+    // Defend sparks when enemy attacks during defense
+    if (defendAnim > 20 && defendAnim < 28) {
+        for (let i = 0; i < 3; i++) {
+            const sparkAngle = Math.random() * Math.PI * 2;
+            const sparkDist = 15 + Math.random() * 10;
+            bctx.fillStyle = `rgba(255,255,100,${Math.random() * 0.8})`;
+            bctx.beginPath();
+            bctx.arc(bx - 26 + Math.cos(sparkAngle) * sparkDist, shieldY + Math.sin(sparkAngle) * sparkDist, 2, 0, Math.PI * 2);
+            bctx.fill();
+        }
+    }
+
+    // Decrease attack anim counter
+    if (attackAnim > 0) attackAnim--;
+    
+    // Player HP bar
+    const phpBarW = 120;
+    const phpRatio = player.hp / player.maxHp;
+    bctx.fillStyle = '#333';
+    bctx.fillRect(px - phpBarW/2, py + 35, phpBarW, 10);
+    bctx.fillStyle = phpRatio > 0.5 ? '#4a4' : phpRatio > 0.25 ? '#aa4' : '#a44';
+    bctx.fillRect(px - phpBarW/2 + 1, py + 36, (phpBarW - 2) * phpRatio, 8);
+    bctx.strokeStyle = '#fff';
+    bctx.strokeRect(px - phpBarW/2, py + 35, phpBarW, 10);
+    
+    // Player name & stats
+    bctx.fillStyle = '#4af';
+    bctx.font = 'bold 12px MS Gothic';
+    bctx.textAlign = 'center';
+    bctx.fillText(`Lv.${player.lv} プレイヤー`, px, py + 55);
+    
+    // Battle particles
+    drawBattleParticles();
+}
+
+let battleParticles = [];
+let attackAnim = 0; // frames remaining for player sword swing
+let enemyHitShake = 0; // frames remaining for enemy hit shake
+let defendAnim = 0; // frames remaining for shield raise animation
+
+function addBattleParticle(x, y, color, type) {
+    for (let i = 0; i < (type === 'hit' ? 8 : 3); i++) {
+        battleParticles.push({
+            x: x + (Math.random() - 0.5) * 40,
+            y: y + (Math.random() - 0.5) * 40,
+            vx: (Math.random() - 0.5) * 6,
+            vy: (Math.random() - 0.5) * 6 - 2,
+            life: 30 + Math.random() * 20,
+            maxLife: 50,
+            color: color,
+            size: type === 'hit' ? 3 + Math.random() * 4 : 2 + Math.random() * 3
+        });
+    }
+}
+
+function drawBattleParticles() {
+    for (let i = battleParticles.length - 1; i >= 0; i--) {
+        const p = battleParticles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.15;
+        p.life--;
+        
+        if (p.life <= 0) {
+            battleParticles.splice(i, 1);
+            continue;
+        }
+        
+        const alpha = p.life / p.maxLife;
+        bctx.globalAlpha = alpha;
+        bctx.fillStyle = p.color;
+        bctx.beginPath();
+        bctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+        bctx.fill();
+    }
+    bctx.globalAlpha = 1;
+}
+
+function playerAttack() {
+    if (battlePhase !== 'command') return;
+    
+    const dmg = Math.max(1, player.atk - currentEnemy.def + Math.floor(Math.random() * 5) - 2);
+    const crit = Math.random() < 0.15;
+    const finalDmg = crit ? dmg * 2 : dmg;
+    
+    currentEnemy.hp -= finalDmg;
+    addBattleParticle(350, 120, crit ? '#ff0' : '#f84', 'hit');
+    attackAnim = 20;
+    enemyHitShake = 10;
+
+    
+    document.getElementById('battleText').textContent = 
+        `${crit ? '💥 クリティカル！' : ''} ${finalDmg} のダメージを与えた！`;
+    
+    if (currentEnemy.hp <= 0) {
+        currentEnemy.hp = 0;
+        battlePhase = 'victory';
+        
+        // Level up check
+        player.exp += currentEnemy.exp;
+        player.gold += currentEnemy.gold;
+        
+        const expNeeded = player.lv * 50;
+        if (player.exp >= expNeeded) {
+            player.exp -= expNeeded;
+            player.lv++;
+            player.maxHp += 15;
+            player.hp = Math.min(player.hp + 30, player.maxHp);
+            player.atk += 3;
+            player.def += 2;
+        }
+        
+        updateStats();
+    } else {
+        battlePhase = 'enemyAction';
+        setTimeout(enemyAttack, 800);
+    }
+    
+    updateBattleUI();
+}
+
+function playerDefend() {
+    if (battlePhase !== 'command') return;
+    defending = true;
+    defendAnim = 30;
+    document.getElementById('battleText').textContent = `防御態勢に入った！`;
+    battlePhase = 'enemyAction';
+    setTimeout(enemyAttack, 800);
+    updateBattleUI();
+}
+
+let defending = false;
+
+function usePotion() {
+    if (battlePhase !== 'command') return;
+    
+    if (player.potions <= 0) {
+        document.getElementById('battleText').textContent = `ポーションがない！`;
+        return;
+    }
+    
+    player.potions--;
+    const heal = 40 + Math.floor(Math.random() * 20);
+    player.hp = Math.min(player.maxHp, player.hp + heal);
+    addBattleParticle(80, 150, '#4f4', 'heal');
+    
+    document.getElementById('battleText').textContent = `ポーションを使った！ ${heal} の回復！`;
+    
+    battlePhase = 'enemyAction';
+    setTimeout(enemyAttack, 800);
+    updateBattleUI();
+}
+
+function enemyAttack() {
+    if (gameState !== 'battle') return;
+    
+    defending = false;
+    
+    let dmg;
+    if (defending) {
+        dmg = Math.max(1, currentEnemy.atk - player.def * 2 + Math.floor(Math.random() * 5) - 3);
+    } else {
+        dmg = Math.max(1, currentEnemy.atk - player.def + Math.floor(Math.random() * 5) - 2);
+    }
+    
+    // Boss special attacks
+    if (currentEnemy.isBoss && Math.random() < 0.3) {
+        dmg = Math.floor(dmg * 1.5);
+        document.getElementById('battleText').textContent = `🔥 ${currentEnemy.name} の特殊攻撃！ ${dmg} のダメージ！`;
+    } else {
+        document.getElementById('battleText').textContent = `${currentEnemy.name} の攻撃！ ${dmg} のダメージ！`;
+    }
+    
+    player.hp -= dmg;
+    addBattleParticle(80, 150, '#f44', 'hit');
+    
+    if (player.hp <= 0) {
+        player.hp = 0;
+        battlePhase = 'defeat';
+    } else {
+        battlePhase = 'command';
+    }
+    
+    updateStats();
+    updateBattleUI();
+}
+
+function endBattle() {
+    document.getElementById('battleScreen').classList.remove('active');
+    gameState = 'explore';
+    currentEnemy = null;
+    battleParticles = [];
+    
+    // Check if boss was defeated
+    if (boss.hp <= 0) {
+        setTimeout(() => showClearScreen(), 500);
+    }
+}
+
+function revive() {
+    player.hp = Math.floor(player.maxHp * 0.5);
+    updateStats();
+    
+    document.getElementById('battleScreen').classList.remove('active');
+    gameState = 'explore';
+    currentEnemy = null;
+    battleParticles = [];
+    
+    // Reset to start
+    player.gridX = 1;
+    player.gridY = 1;
+    player.renderX = 1.5;
+    player.renderY = 1.5;
+    player.angle = Math.PI / 2;
+    player.snapAngle = Math.PI / 2;
+}
+
+// ===== CLEAR SCREEN =====
+function showClearScreen() {
+    gameState = 'clear';
+    const cs = document.getElementById('clearScreen');
+    cs.classList.add('active');
+    
+    drawClearScene();
+}
+
+function drawClearScene() {
+    const cc = document.getElementById('clearCanvas');
+    const cctx = cc.getContext('2d');
+    
+    // Background - magical clearing scene
+    const bgGrad = cctx.createLinearGradient(0, 0, 0, 450);
+    bgGrad.addColorStop(0, '#1a0a3e');
+    bgGrad.addColorStop(0.3, '#2a1a5e');
+    bgGrad.addColorStop(0.6, '#1a3a5e');
+    bgGrad.addColorStop(1, '#0a2a4e');
+    cctx.fillStyle = bgGrad;
+    cctx.fillRect(0, 0, 600, 450);
+    
+    // Stars
+    for (let i = 0; i < 50; i++) {
+        const sx = Math.random() * 600;
+        const sy = Math.random() * 200;
+        const ss = Math.random() * 2 + 0.5;
+        cctx.fillStyle = `rgba(255,255,255,${Math.random()*0.8+0.2})`;
+        cctx.beginPath();
+        cctx.arc(sx, sy, ss, 0, Math.PI * 2);
+        cctx.fill();
+    }
+    
+    // Ground / grass
+    const groundGrad = cctx.createLinearGradient(0, 300, 0, 450);
+    groundGrad.addColorStop(0, '#2a5a2a');
+    groundGrad.addColorStop(1, '#1a3a1a');
+    cctx.fillStyle = groundGrad;
+    cctx.beginPath();
+    cctx.moveTo(0, 320);
+    for (let x = 0; x <= 600; x += 20) {
+        cctx.lineTo(x, 310 + Math.sin(x * 0.05) * 10);
+    }
+    cctx.lineTo(600, 450);
+    cctx.lineTo(0, 450);
+    cctx.fill();
+    
+    // Treasure chest
+    const cx = 380;
+    const cy = 320;
+    
+    // Chest shadow
+    cctx.fillStyle = 'rgba(0,0,0,0.3)';
+    cctx.beginPath();
+    cctx.ellipse(cx + 15, cy + 40, 45, 10, 0, 0, Math.PI * 2);
+    cctx.fill();
+    
+    // Chest body
+    cctx.fillStyle = '#8B4513';
+    cctx.fillRect(cx - 25, cy, 60, 35);
+    // Chest lid
+    cctx.fillStyle = '#A0522D';
+    cctx.beginPath();
+    cctx.moveTo(cx - 27, cy);
+    cctx.quadraticCurveTo(cx + 15, cy - 25, cx + 57, cy);
+    cctx.fill();
+    // Gold trim
+    cctx.fillStyle = '#FFD700';
+    cctx.fillRect(cx - 25, cy + 15, 60, 4);
+    cctx.fillRect(cx + 10, cy - 3, 8, 38);
+    // Lock
+    cctx.fillStyle = '#FFD700';
+    cctx.beginPath();
+    cctx.arc(cx + 14, cy + 20, 5, 0, Math.PI * 2);
+    cctx.fill();
+    
+    // Gold coins spilling out
+    for (let i = 0; i < 8; i++) {
+        const coinX = cx - 30 + Math.random() * 70;
+        const coinY = cy + 5 + Math.random() * 25;
+        cctx.fillStyle = '#FFD700';
+        cctx.beginPath();
+        cctx.ellipse(coinX, coinY, 4, 3, Math.random(), 0, Math.PI * 2);
+        cctx.fill();
+        cctx.strokeStyle = '#DAA520';
+        cctx.lineWidth = 1;
+        cctx.stroke();
+    }
+    
+    // Sparkles around treasure
+    for (let i = 0; i < 12; i++) {
+        const sx = cx - 40 + Math.random() * 80;
+        const sy = cy - 30 + Math.random() * 60;
+        cctx.fillStyle = `rgba(255,215,0,${Math.random()*0.8+0.2})`;
+        drawStar(cctx, sx, sy, 3 + Math.random() * 4);
+    }
+    
+    // ===== GIRL CHARACTER =====
+    const gx = 200;
+    const gy = 260;
+    
+    // Girl shadow
+    cctx.fillStyle = 'rgba(0,0,0,0.3)';
+    cctx.beginPath();
+    cctx.ellipse(gx, gy + 85, 30, 8, 0, 0, Math.PI * 2);
+    cctx.fill();
+    
+    // Dress / skirt (pink)
+    cctx.fillStyle = '#FF69B4';
+    cctx.beginPath();
+    cctx.moveTo(gx - 25, gy + 30);
+    cctx.quadraticCurveTo(gx - 30, gy + 70, gx - 20, gy + 80);
+    cctx.lineTo(gx + 20, gy + 80);
+    cctx.quadraticCurveTo(gx + 30, gy + 70, gx + 25, gy + 30);
+    cctx.fill();
+    
+    // Dress details - white collar
+    cctx.fillStyle = '#fff';
+    cctx.beginPath();
+    cctx.moveTo(gx - 15, gy + 28);
+    cctx.lineTo(gx, gy + 40);
+    cctx.lineTo(gx + 15, gy + 28);
+    cctx.fill();
+    
+    // Ribbon on dress
+    cctx.fillStyle = '#FF1493';
+    cctx.beginPath();
+    cctx.moveTo(gx - 8, gy + 30);
+    cctx.lineTo(gx, gy + 35);
+    cctx.lineTo(gx + 8, gy + 30);
+    cctx.fill();
+    
+    // Body / torso
+    cctx.fillStyle = '#FFB6C1';
+    cctx.fillRect(gx - 12, gy + 5, 24, 28);
+    
+    // Arms (raised in joy!)
+    cctx.strokeStyle = '#FFB6C1';
+    cctx.lineWidth = 6;
+    cctx.lineCap = 'round';
+    
+    // Left arm raised up
+    cctx.beginPath();
+    cctx.moveTo(gx - 12, gy + 15);
+    cctx.quadraticCurveTo(gx - 35, gy - 10, gx - 40, gy - 25);
+    cctx.stroke();
+    
+    // Right arm raised up (holding something)
+    cctx.beginPath();
+    cctx.moveTo(gx + 12, gy + 15);
+    cctx.quadraticCurveTo(gx + 35, gy - 10, gx + 40, gy - 25);
+    cctx.stroke();
+    
+    // Hands
+    cctx.fillStyle = '#FFB6C1';
+    cctx.beginPath();
+    cctx.arc(gx - 40, gy - 27, 5, 0, Math.PI * 2);
+    cctx.fill();
+    cctx.beginPath();
+    cctx.arc(gx + 40, gy - 27, 5, 0, Math.PI * 2);
+    cctx.fill();
+    
+    // Sparkle in right hand
+    cctx.fillStyle = '#FFD700';
+    drawStar(cctx, gx + 42, gy - 35, 8);
+    
+    // Head
+    cctx.fillStyle = '#FFE4C4';
+    cctx.beginPath();
+    cctx.arc(gx, gy - 10, 22, 0, Math.PI * 2);
+    cctx.fill();
+    
+    // Hair (long, flowing)
+    cctx.fillStyle = '#8B4513';
+    // Back hair
+    cctx.beginPath();
+    cctx.arc(gx, gy - 15, 24, Math.PI * 0.8, Math.PI * 2.2);
+    cctx.fill();
+    
+    // Side hair flowing down
+    cctx.fillStyle = '#A0522D';
+    cctx.beginPath();
+    cctx.moveTo(gx - 22, gy - 10);
+    cctx.quadraticCurveTo(gx - 30, gy + 20, gx - 25, gy + 45);
+    cctx.lineTo(gx - 18, gy + 40);
+    cctx.quadraticCurveTo(gx - 22, gy + 15, gx - 18, gy - 5);
+    cctx.fill();
+    
+    cctx.beginPath();
+    cctx.moveTo(gx + 22, gy - 10);
+    cctx.quadraticCurveTo(gx + 30, gy + 20, gx + 25, gy + 45);
+    cctx.lineTo(gx + 18, gy + 40);
+    cctx.quadraticCurveTo(gx + 22, gy + 15, gx + 18, gy - 5);
+    cctx.fill();
+    
+    // Front bangs
+    cctx.fillStyle = '#8B4513';
+    cctx.beginPath();
+    cctx.moveTo(gx - 20, gy - 18);
+    cctx.quadraticCurveTo(gx - 10, gy - 35, gx + 5, gy - 25);
+    cctx.quadraticCurveTo(gx + 15, gy - 35, gx + 20, gy - 18);
+    cctx.lineTo(gx + 18, gy - 12);
+    cctx.quadraticCurveTo(gx + 10, gy - 22, gx, gy - 15);
+    cctx.quadraticCurveTo(gx - 10, gy - 22, gx - 18, gy - 12);
+    cctx.fill();
+    
+    // Hair ribbon (pink bow)
+    cctx.fillStyle = '#FF69B4';
+    cctx.beginPath();
+    cctx.moveTo(gx + 15, gy - 20);
+    cctx.quadraticCurveTo(gx + 30, gy - 30, gx + 25, gy - 18);
+    cctx.fill();
+    cctx.beginPath();
+    cctx.moveTo(gx + 15, gy - 20);
+    cctx.quadraticCurveTo(gx + 30, gy - 10, gx + 25, gy - 22);
+    cctx.fill();
+    cctx.fillStyle = '#FF1493';
+    cctx.beginPath();
+    cctx.arc(gx + 18, gy - 20, 3, 0, Math.PI * 2);
+    cctx.fill();
+    
+    // Eyes (happy, closed in joy)
+    cctx.strokeStyle = '#4a2a1a';
+    cctx.lineWidth = 2;
+    // Left eye (closed happy)
+    cctx.beginPath();
+    cctx.arc(gx - 8, gy - 10, 5, Math.PI * 0.1, Math.PI * 0.9);
+    cctx.stroke();
+    // Right eye (closed happy)
+    cctx.beginPath();
+    cctx.arc(gx + 8, gy - 10, 5, Math.PI * 0.1, Math.PI * 0.9);
+    cctx.stroke();
+    
+    // Blush
+    cctx.fillStyle = 'rgba(255,100,100,0.4)';
+    cctx.beginPath();
+    cctx.ellipse(gx - 14, gy - 3, 6, 4, 0, 0, Math.PI * 2);
+    cctx.fill();
+    cctx.beginPath();
+    cctx.ellipse(gx + 14, gy - 3, 6, 4, 0, 0, Math.PI * 2);
+    cctx.fill();
+    
+    // Mouth (big happy smile)
+    cctx.fillStyle = '#FF6B6B';
+    cctx.beginPath();
+    cctx.arc(gx, gy + 2, 8, 0, Math.PI);
+    cctx.fill();
+    // Tongue hint
+    cctx.fillStyle = '#FF8888';
+    cctx.beginPath();
+    cctx.arc(gx, gy + 5, 4, 0, Math.PI);
+    cctx.fill();
+    
+    // Legs (white socks)
+    cctx.fillStyle = '#fff';
+    cctx.fillRect(gx - 12, gy + 78, 8, 12);
+    cctx.fillRect(gx + 4, gy + 78, 8, 12);
+    
+    // Shoes (brown)
+    cctx.fillStyle = '#5a3a1a';
+    cctx.beginPath();
+    cctx.ellipse(gx - 8, gy + 90, 6, 4, 0, 0, Math.PI * 2);
+    cctx.fill();
+    cctx.beginPath();
+    cctx.ellipse(gx + 8, gy + 90, 6, 4, 0, 0, Math.PI * 2);
+    cctx.fill();
+    
+    // Floating hearts around girl
+    const heartPositions = [
+        { x: gx - 50, y: gy - 30 },
+        { x: gx + 55, y: gy - 40 },
+        { x: gx - 45, y: gy + 10 },
+        { x: gx + 50, y: gy + 20 },
+    ];
+    
+    for (const h of heartPositions) {
+        cctx.fillStyle = '#FF69B4';
+        drawHeart(cctx, h.x, h.y, 8);
+    }
+    
+    // Floating sparkles everywhere
+    for (let i = 0; i < 20; i++) {
+        const sx = Math.random() * 600;
+        const sy = Math.random() * 350;
+        cctx.fillStyle = `rgba(255,215,0,${Math.random()*0.6+0.1})`;
+        drawStar(cctx, sx, sy, 2 + Math.random() * 3);
+    }
+    
+    // Title text on canvas
+    cctx.fillStyle = '#FFD700';
+    cctx.font = 'bold 28px MS Gothic';
+    cctx.textAlign = 'center';
+    cctx.shadowColor = '#ff6b00';
+    cctx.shadowBlur = 15;
+    cctx.fillText('🏆 ダンジョンクリア！ 🏆', 300, 40);
+    cctx.shadowBlur = 0;
+    
+    // Stats summary
+    cctx.fillStyle = '#fff';
+    cctx.font = '16px MS Gothic';
+    cctx.fillText(`最終レベル: ${player.lv} | 獲得ゴールド: ${player.gold}`, 300, 75);
+    
+    // Message
+    cctx.fillStyle = '#FFB6C1';
+    cctx.font = '14px MS Gothic';
+    cctx.fillText('「やったー！宝をゲットしたよ！」', 200, 180);
+}
+
+function drawStar(ctx, x, y, size) {
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+        const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+        const px = x + Math.cos(angle) * size;
+        const py = y + Math.sin(angle) * size;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+    }
+    ctx.fill();
+}
+
+function drawHeart(ctx, x, y, size) {
+    ctx.beginPath();
+    const topY = y - size * 0.4;
+    ctx.moveTo(x, y + size * 0.4);
+    ctx.bezierCurveTo(x - size, y - size * 0.2, x - size * 0.5, topY - size * 0.5, x, topY);
+    ctx.bezierCurveTo(x + size * 0.5, topY - size * 0.5, x + size, y - size * 0.2, x, y + size * 0.4);
+    ctx.fill();
+}
+
+// ===== UI UPDATES =====
+function updateStats() {
+    document.getElementById('hpText').textContent = `${player.hp}/${player.maxHp}`;
+    document.getElementById('lvText').textContent = player.lv;
+}
+
+function showMessage(text, duration) {
+    const mb = document.getElementById('msgBox');
+    mb.textContent = text;
+    mb.classList.add('active');
+    messageTimer = duration || 2000;
+}
+
+// ===== INPUT HANDLING =====
+const keys = {};
+
+function getDirectionFromAngle(angle) {
+    let a = angle % (2 * Math.PI);
+    if (a < 0) a += 2 * Math.PI;
+    // 0 = +X (right), PI/2 = +Y (down), PI = -X (left), 3PI/2 = -Y (up)
+    if (a >= 7 * Math.PI / 4 || a < Math.PI / 4) return { dx: 1, dy: 0 };
+    if (a >= Math.PI / 4 && a < 3 * Math.PI / 4) return { dx: 0, dy: 1 };
+    if (a >= 3 * Math.PI / 4 && a < 5 * Math.PI / 4) return { dx: -1, dy: 0 };
+    return { dx: 0, dy: -1 };
+}
+
+document.addEventListener('keydown', (e) => {
+    if (gameState === 'battle') {
+        // Battle command input
+        const cmdCount = getCommandCount();
+        
+        switch(e.key) {
+            case 'ArrowLeft':
+                e.preventDefault();
+                selectedCommand = (selectedCommand - 1 + cmdCount) % cmdCount;
+                updateBattleUI();
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                selectedCommand = (selectedCommand + 1) % cmdCount;
+                updateBattleUI();
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                // No vertical navigation in single-row menu, but allow Enter-like behavior
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                break;
+            case 'Enter':
+            case 'z':
+            case 'Z':
+            case 'x':
+            case 'X':
+                e.preventDefault();
+                executeSelectedCommand();
+                break;
+        }
+        return;
+    }
+    
+    if (gameState !== 'explore') return;
+    
+    switch(e.key) {
+        case 'ArrowUp':
+            e.preventDefault();
+            const fwd = getDirectionFromAngle(player.snapAngle);
+            movePlayer(fwd.dx, fwd.dy);
+            break;
+        case 'ArrowDown':
+            e.preventDefault();
+            const bwd = getDirectionFromAngle(player.snapAngle);
+            movePlayer(-bwd.dx, -bwd.dy);
+            break;
+        case 'ArrowLeft':
+            e.preventDefault();
+            rotatePlayer(-1);
+            break;
+        case 'ArrowRight':
+            e.preventDefault();
+            rotatePlayer(1);
+            break;
+        case 'z':
+        case 'Z':
+            rotatePlayer(-1);
+            break;
+        case 'x':
+        case 'X':
+            rotatePlayer(1);
+            break;
+    }
+});
+
+// ===== MAIN GAME LOOP =====
+function gameLoop() {
+    animFrame++;
+    
+    if (gameState === 'explore') {
+        updateMovement();
+        
+        // Render 3D dungeon
+        ctx.clearRect(0, 0, 800, 600);
+        renderDungeon();
+        renderMinimap();
+        
+        // Draw crosshair
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(395, 300);
+        ctx.lineTo(405, 300);
+        ctx.moveTo(400, 295);
+        ctx.lineTo(400, 305);
+        ctx.stroke();
+        
+        // Draw nearby enemy indicator
+        for (const e of enemies) {
+            if (e.hp <= 0) continue;
+            const dx = e.x - (player.gridX + 0.5);
+            const dy = e.y - (player.gridY + 0.5);
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            
+            if (dist < 2.5 && dist >= 1.2) {
+                ctx.fillStyle = 'rgba(255,0,0,0.7)';
+                ctx.font = 'bold 14px MS Gothic';
+                ctx.textAlign = 'center';
+                ctx.fillText('⚔️', 400, 350);
+                
+                // Show enemy name
+                let angle = Math.atan2(dy, dx) - player.angle;
+                while (angle > Math.PI) angle -= 2 * Math.PI;
+                while (angle < -Math.PI) angle += 2 * Math.PI;
+                
+                if (Math.abs(angle) < HALF_FOV) {
+                    ctx.fillStyle = '#ff6666';
+                    ctx.font = '12px MS Gothic';
+                    ctx.fillText(e.name, 400 + (angle / HALF_FOV) * 300, 370);
+                }
+            }
+        }
+        
+        // Boss indicator
+        if (boss.hp > 0) {
+            const bdx = boss.x - (player.gridX + 0.5);
+            const bdy = boss.y - (player.gridY + 0.5);
+            const bDist = Math.sqrt(bdx*bdx + bdy*bdy);
+            
+            if (bDist < 2.5 && bDist >= 1.2) {
+                ctx.fillStyle = 'rgba(255,0,0,0.9)';
+                ctx.font = 'bold 16px MS Gothic';
+                ctx.textAlign = 'center';
+                ctx.fillText('👹 BOSS', 400, 350);
+            }
+        }
+        
+        // Message timer
+        if (messageTimer > 0) {
+            messageTimer -= 16;
+            if (messageTimer <= 0) {
+                document.getElementById('msgBox').classList.remove('active');
+            }
+        }
+    } else if (gameState === 'battle') {
+        drawBattleScene();
+    }
+    
+    requestAnimationFrame(gameLoop);
+}
+
+// ===== START GAME =====
+showMessage('ダンジョンにようこそ！ボスを倒して宝をゲットしよう！', 4000);
+updateStats();
+gameLoop();
+</script>
+</body>
+</html>
