@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ECサイト デモ</title>
+
+<meta property="og:title" content="EC Demo">
+<meta property="og:description" content="AIが作ったECデザインのデモサイト">
+<meta property="og:image" content="https://kishida.github.io/webdemos/ecdemo/demo-ogp.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/ecdemo/ec-demo.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<style>
+:root {
+  --primary: #4f46e5;
+  --primary-light: #818cf8;
+  --bg: #f8fafc;
+  --card-bg: #ffffff;
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --border: #e2e8f0;
+  --accent-green: #10b981;
+  --accent-orange: #f59e0b;
+  --accent-red: #ef4444;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', 'Hiragino Sans', 'Meiryo', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; display: flex; flex-direction: column; min-height: 100vh; }
+
+/* Header */
+.header { background: #fff; border-bottom: 1px solid var(--border); padding: 0 2rem; height: 64px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.header-logo { font-size: 1.3rem; font-weight: bold; color: var(--primary); cursor: pointer; }
+.header-nav { display: flex; gap: 1.5rem; align-items: center; }
+.header-nav a { color: var(--text-muted); text-decoration: none; font-size: 0.9rem; cursor: pointer; padding: 0.25rem 0.5rem; border-radius: 6px; transition: background 0.15s; }
+.header-nav a:hover, .header-nav a.active { color: var(--primary); background: #eef2ff; }
+.search-bar { display: flex; align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 0.35rem 1rem; width: 280px; }
+.search-bar input { border: none; background: transparent; outline: none; flex: 1; font-size: 0.85rem; color: var(--text); }
+.cart-badge { position: relative; cursor: pointer; }
+.cart-badge .badge { position: absolute; top: -6px; right: -8px; background: var(--accent-red); color: #fff; font-size: 0.65rem; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+
+/* Main */
+.main { flex: 1; max-width: 1100px; margin: 0 auto; width: 100%; padding: 2rem; }
+
+/* Console */
+.console-panel { position: fixed; bottom: 0; left: 0; right: 0; background: #1e293b; color: #a5f3fc; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.78rem; padding: 0.6rem 1.25rem; min-height: 44px; max-height: 150px; overflow-y: auto; border-top: 2px solid #334155; z-index: 999; }
+.main { flex: 1; max-width: 1100px; margin: 0 auto; width: 100%; padding: 2rem; padding-bottom: 170px; }
+.console-panel .log-entry { padding: 2px 0; border-bottom: 1px solid #33415588; display: flex; gap: 0.75rem; }
+.console-panel .log-time { color: #64748b; white-space: nowrap; }
+.console-panel .log-state { color: #fbbf24; }
+.console-panel .log-action { color: #a5f3fc; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.6rem 1.5rem; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; transition: all 0.15s; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #4338ca; }
+.btn-outline { background: transparent; color: var(--primary); border: 2px solid var(--primary); }
+.btn-outline:hover { background: #eef2ff; }
+.btn-success { background: var(--accent-green); color: #fff; }
+.btn-warning { background: var(--accent-orange); color: #fff; }
+.btn-danger { background: var(--accent-red); color: #fff; }
+.btn-sm { padding: 0.35rem 0.8rem; font-size: 0.8rem; }
+
+/* Cards */
+.card { background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; transition: transform 0.15s, box-shadow 0.15s; }
+.card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+
+/* Product Grid */
+.product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.5rem; margin-top: 1.5rem; }
+.product-card .card-img { height: 160px; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 4rem; cursor: pointer; }
+.product-card .card-body { padding: 1rem; }
+.product-card .card-title { font-weight: 600; margin-bottom: 0.25rem; cursor: pointer; }
+.product-card .card-price { color: var(--accent-red); font-weight: bold; font-size: 1.05rem; }
+.product-card .card-oldprice { color: var(--text-muted); text-decoration: line-through; font-size: 0.8rem; margin-left: 0.5rem; }
+
+/* Hero Banner */
+.hero { background: linear-gradient(135deg, #4f46e5, #7c3aed); border-radius: 16px; padding: 3rem; color: #fff; margin-bottom: 2rem; position: relative; overflow: hidden; }
+.hero h2 { font-size: 2rem; margin-bottom: 0.5rem; }
+.hero p { opacity: 0.9; margin-bottom: 1rem; }
+
+/* Section */
+.section-title { font-size: 1.3rem; font-weight: bold; margin-bottom: 0.25rem; }
+.section-subtitle { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem; }
+
+/* Breadcrumb */
+.breadcrumb { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.5rem; }
+.breadcrumb span { cursor: pointer; }
+.breadcrumb span:hover { color: var(--primary); text-decoration: underline; }
+
+/* Detail Page */
+.detail-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+.detail-img { background: var(--bg); border-radius: 12px; height: 360px; display: flex; align-items: center; justify-content: center; font-size: 8rem; border: 1px solid var(--border); }
+.detail-info h2 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+.detail-price-box { background: #fef2f2; padding: 1rem; border-radius: 8px; margin: 1rem 0; display: flex; align-items: baseline; gap: 0.75rem; }
+.detail-price { font-size: 2rem; font-weight: bold; color: var(--accent-red); }
+.detail-oldprice { text-decoration: line-through; color: var(--text-muted); }
+.option-group { margin: 1rem 0; }
+.option-label { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.5rem; }
+.option-pills { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.pill { padding: 0.4rem 1rem; border-radius: 20px; border: 1px solid var(--border); cursor: pointer; font-size: 0.85rem; transition: all 0.15s; background: #fff; }
+.pill:hover, .pill.selected { border-color: var(--primary); background: #eef2ff; color: var(--primary); }
+.qty-control { display: flex; align-items: center; gap: 0; margin: 1rem 0; }
+.qty-btn { width: 36px; height: 36px; border: 1px solid var(--border); background: var(--bg); cursor: pointer; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; }
+.qty-val { width: 50px; height: 36px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: center; line-height: 36px; font-weight: 600; }
+
+/* Cart */
+.cart-table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+.cart-table th, .cart-table td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+.cart-table th { background: var(--bg); font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.cart-summary { background: #fff; border-radius: 12px; border: 1px solid var(--border); padding: 1.5rem; margin-top: 1.5rem; max-width: 400px; margin-left: auto; }
+.cart-summary-row { display: flex; justify-content: space-between; padding: 0.4rem 0; font-size: 0.95rem; }
+.cart-summary-row.total { border-top: 2px solid var(--text); margin-top: 0.5rem; padding-top: 0.75rem; font-weight: bold; font-size: 1.1rem; }
+
+/* Forms */
+.form-group { margin-bottom: 1.25rem; }
+.form-label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.35rem; color: var(--text); }
+.form-input, .form-select, .form-textarea { width: 100%; padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; outline: none; transition: border-color 0.15s; }
+.form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
+.form-textarea { min-height: 80px; resize: vertical; }
+
+/* Checkout Steps */
+.steps { display: flex; gap: 0; margin-bottom: 2rem; background: #fff; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+.step { flex: 1; padding: 0.75rem; text-align: center; font-size: 0.85rem; position: relative; color: var(--text-muted); background: var(--bg); }
+.step.active { color: var(--primary); font-weight: 600; background: #eef2ff; }
+.step.done { color: var(--accent-green); }
+.step-num { display: inline-flex; width: 24px; height: 24px; border-radius: 50%; align-items: center; justify-content: center; font-size: 0.75rem; margin-right: 0.35rem; background: var(--border); color: #fff; }
+.step.active .step-num { background: var(--primary); }
+.step.done .step-num { background: var(--accent-green); }
+
+/* Payment Methods */
+.payment-options { display: grid; gap: 0.75rem; margin: 1rem 0; }
+.payment-option { display: flex; align-items: center; gap: 1rem; padding: 1rem; border: 2px solid var(--border); border-radius: 10px; cursor: pointer; transition: all 0.15s; }
+.payment-option:hover, .payment-option.selected { border-color: var(--primary); background: #eef2ff; }
+.payment-icon { font-size: 1.8rem; }
+
+/* Order Confirm */
+.confirm-box { background: #fff; border-radius: 12px; border: 1px solid var(--border); padding: 2rem; margin-bottom: 1.5rem; }
+.confirm-box h3 { font-size: 1rem; margin-bottom: 0.75rem; color: var(--primary); }
+.confirm-row { display: flex; justify-content: space-between; padding: 0.35rem 0; font-size: 0.9rem; border-bottom: 1px solid #f1f5f9; }
+
+/* Thank You */
+.thankyou-box { text-align: center; padding: 4rem 2rem; }
+.thankyou-icon { font-size: 5rem; margin-bottom: 1rem; }
+.thankyou-box h2 { font-size: 1.8rem; color: var(--accent-green); margin-bottom: 0.5rem; }
+
+/* MyPage */
+.mypage-layout { display: grid; grid-template-columns: 240px 1fr; gap: 2rem; }
+.mypage-sidebar { background: #fff; border-radius: 12px; border: 1px solid var(--border); padding: 1.5rem; height: fit-content; }
+.mypage-user { text-align: center; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+.mypage-avatar { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; margin: 0 auto 0.75rem; }
+.mypage-name { font-weight: bold; }
+.mypage-email { font-size: 0.8rem; color: var(--text-muted); }
+.mypage-menu a { display: block; padding: 0.6rem 0.75rem; border-radius: 8px; cursor: pointer; font-size: 0.9rem; color: var(--text-muted); transition: all 0.15s; margin-bottom: 0.25rem; }
+.mypage-menu a:hover, .mypage-menu a.active { background: #eef2ff; color: var(--primary); font-weight: 600; }
+
+/* Order Status */
+.status-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+.status-pending { background: #fef3c7; color: #b45309; }
+.status-paid { background: #dbeafe; color: #1d4ed8; }
+.status-shipped { background: #dcfce7; color: #15803d; }
+
+/* Empty State */
+.empty-state { text-align: center; padding: 3rem; color: var(--text-muted); }
+.empty-icon { font-size: 3rem; margin-bottom: 0.75rem; }
+
+/* Toast */
+.toast { position: fixed; top: 80px; right: 20px; background: #1e293b; color: #fff; padding: 0.75rem 1.25rem; border-radius: 8px; font-size: 0.85rem; z-index: 200; animation: slideIn 0.3s ease, fadeOut 0.3s ease 1.7s forwards; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes fadeOut { to { opacity: 0; transform: translateY(-10px); } }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .detail-layout, .mypage-layout { grid-template-columns: 1fr; }
+  .product-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .header { padding: 0 1rem; }
+  .search-bar { width: 160px; }
+}
+
+/* Review Stars */
+.stars { color: #f59e0b; letter-spacing: 2px; }
+
+/* Loading overlay */
+.loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.8); display: flex; align-items: center; justify-content: center; z-index: 300; font-size: 1.2rem; color: var(--primary); }
+.spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 1rem; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Category pills */
+.cat-pills { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+.cat-pill { padding: 0.4rem 1rem; border-radius: 20px; background: var(--bg); border: 1px solid var(--border); cursor: pointer; font-size: 0.85rem; transition: all 0.15s; }
+.cat-pill:hover, .cat-pill.active { background: #eef2ff; color: var(--primary); border-color: var(--primary); }
+
+/* Address card */
+.address-card { background: #fff; border-radius: 12px; border: 2px solid var(--border); padding: 1.25rem; margin-bottom: 0.75rem; cursor: pointer; transition: all 0.15s; }
+.address-card:hover, .address-card.selected { border-color: var(--primary); background: #eef2ff; }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+<div class="console-panel" id="console"></div>
+
+<script>
+// ===== DATA =====
+const USER = { name: 'EC太郎', email: 'ec.taro@example.com', phone: '090-1234-5678' };
+const ADDRESSES = [
+  { id: 1, name: 'EC太郎', postal: '100-0001', address: '東京都千代田区千代田1-1', note: '自宅' },
+  { id: 2, name: 'EC太郎（会社）', postal: '150-0001', address: '東京都渋谷区神宮前3-21-5', note: 'オフィス' }
+];
+
+const CATEGORIES = ['すべて', 'ファッション', '家電・ガジェット', '本・文房具', 'スポーツ'];
+
+const PRODUCTS = [
+  { id: 1, name: 'プレミアムスポーツシューズ', emoji: '👟', price: 8980, oldPrice: 12800, category: 'ファッション', desc: '軽量・クッション性抜群。ランニングから日常使いまで幅広く対応する一足。', stock: 45, rating: 4.8, reviews: 128, colors: ['ブラック', 'ブルー', 'レッド', 'グリーン'], sizes: ['25cm','26cm','27cm','28cm'] },
+  { id: 2, name: 'ワイヤレスイヤホン Pro', emoji: '🎧', price: 5480, oldPrice: 7980, category: '家電・ガジェット', desc: 'ノイズキャンセリング対応。最大30時間のバッテリー持続時間。', stock: 120, rating: 4.6, reviews: 256, colors: ['ホワイト','ブラック'], sizes: [] },
+  { id: 3, name: 'スマートウォッチ Series X', emoji: '⌚', price: 12800, oldPrice: 18000, category: '家電・ガジェット', desc: '心拍数・血中酸素・睡眠トラッキング。防水5ATM対応。', stock: 30, rating: 4.7, reviews: 89, colors: ['シルバー','スペースブラック'], sizes: ['40mm','44mm'] },
+  { id: 4, name: 'ミラーレスカメラ Body', emoji: '📷', price: 89800, oldPrice: null, category: '家電・ガジェット', desc: '2400万画素フルサイズセンサー。4K60fps動画撮影対応。', stock: 3, rating: 4.9, reviews: 42, colors: ['ブラック'], sizes: [] },
+  { id: 5, name: 'レザーバックパック', emoji: '🎒', price: 15800, oldPrice: 21000, category: 'ファッション', desc: '本革使用。15インチノートPC収納可能。防水加工済み。', stock: 18, rating: 4.5, reviews: 67, colors: ['ブラウン','ブラック'], sizes: [] },
+  { id: 6, name: 'デザインノート A5', emoji: '📓', price: 1200, oldPrice: null, category: '本・文房具', desc: '上質紙使用。リング式でページがめくりやすい。', stock: 200, rating: 4.3, reviews: 312, colors: ['ネイビー','レッド','グリーン'], sizes: [] },
+  { id: 7, name: 'ヨガマット Premium', emoji: '🧘', price: 4980, oldPrice: 6500, category: 'スポーツ', desc: '厚さ10mmの高級感あるクッション性。滑り止め加工付き。', stock: 55, rating: 4.4, reviews: 78, colors: ['パープル','ミント','グレー'], sizes: [] },
+  { id: 8, name: 'Bluetoothスピーカー', emoji: '🔊', price: 6980, oldPrice: 9800, category: '家電・ガジェット', desc: '360度サラウンドサウンド。IPX7防水で屋外でも安心。', stock: 40, rating: 4.5, reviews: 156, colors: ['ブラック','ブルー','レッド'], sizes: [] },
+  { id: 9, name: 'サングラス UVカット', emoji: '🕶️', price: 3200, oldPrice: 4800, category: 'ファッション', desc: '100%UVカット。軽量フレームで長時間でも快適。', stock: 80, rating: 4.2, reviews: 95, colors: ['ブラック','ターコイズ','ローズ'], sizes: [] },
+  { id: 10, name: 'ランニングシューズ Lite', emoji: '👟', price: 6480, oldPrice: null, category: 'スポーツ', desc: '通気性に優れたメッシュ素材。軽量設計で長距離も快適。', stock: 65, rating: 4.3, reviews: 134, colors: ['ホワイト','オレンジ','ネイビー'], sizes: ['24cm','25cm','26cm','27cm','28cm'] },
+  { id: 11, name: '電子書籍リーダー', emoji: '📖', price: 19800, oldPrice: 24800, category: '家電・ガジェット', desc: '6.8インチE Inkディスプレイ。紙のような読み心地。', stock: 22, rating: 4.7, reviews: 53, colors: ['ブラック','ホワイト'], sizes: [] },
+  { id: 12, name: '保温ボトル 500ml', emoji: '🍶', price: 2800, oldPrice: null, category: 'スポーツ', desc: '真空断熱で12時間保温・24時間保冷。軽量コンパクト。', stock: 150, rating: 4.6, reviews: 278, colors: ['シルバー','ブルー','ピンク'], sizes: [] },
+];
+
+const REVIEWS = [
+  { user: '田中さん', rating: 5, text: 'とても満足しています！品質も価格も最高です。' },
+  { user: '鈴木さん', rating: 4, text: '良い商品ですが、配送が少し遅かったです。' },
+  { user: '山田さん', rating: 5, text: 'リピート購入しました。おすすめです！' },
+];
+
+// ===== STATE =====
+let state = {
+  page: 'home',
+  cart: [],
+  orders: [
+    { id: 'ORD-20240101', date: '2025-12-20', status: 'shipped', total: 14460, items: [{ product: PRODUCTS[0], qty: 1 }, { product: PRODUCTS[5], qty: 2 }] }
+  ],
+  selectedProduct: null,
+  selectedCategory: 'すべて',
+  searchQuery: '',
+  checkoutStep: 1,
+  checkoutData: { addressId: 1, paymentMethod: 'credit' },
+  detailQty: 1,
+  detailColor: null,
+  detailSize: null,
+  mypageTab: 'orders',
+};
+
+// ===== HELPERS =====
+function fmt(n) { return '¥' + n.toLocaleString(); }
+function stars(r) { let s = ''; for (let i = 0; i < 5; i++) s += i < Math.floor(r) ? '★' : '☆'; return s; }
+
+// Console logging
+const consoleEl = document.getElementById('console');
+function log(stateName, action) {
+  const now = new Date();
+  const ts = now.toTimeString().slice(0, 8);
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">${ts}</span><span class="log-state">[${stateName}]</span><span class="log-action">${action}</span>`;
+  consoleEl.appendChild(entry);
+  consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2000);
+}
+
+// Cart helpers
+function getShippingFee() {
+  if (state.checkoutData.deliveryMethod === 'express') return 800;
+  return cartTotal() >= 2000 ? 0 : 500;
+}
+function getOrderTotal() { return cartTotal() + getShippingFee(); }
+function cartTotal() { return state.cart.reduce((s, c) => s + c.product.price * c.qty, 0); }
+function cartCount() { return state.cart.reduce((s, c) => s + c.qty, 0); }
+
+// ===== NAVIGATION =====
+function navigate(page, data) {
+  const prev = state.page;
+  state.page = page;
+  if (data) Object.assign(state, data);
+  log(prev.toUpperCase(), `→ ${page.toUpperCase()}`);
+  render();
+}
+
+// ===== RENDER =====
+function render() {
+  const app = document.getElementById('app');
+  let html = renderHeader();
+  html += '<div class="main">';
+  switch (state.page) {
+    case 'home': html += renderHome(); break;
+    case 'products': html += renderProducts(); break;
+    case 'detail': html += renderDetail(); break;
+    case 'cart': html += renderCart(); break;
+    case 'checkout': html += renderCheckout(); break;
+    case 'payment': html += renderPayment(); break;
+    case 'confirm': html += renderConfirm(); break;
+    case 'thankyou': html += renderThankYou(); break;
+    case 'mypage': html += renderMyPage(); break;
+    default: html += renderHome();
+  }
+  html += '</div>';
+  app.innerHTML = html;
+  bindEvents();
+}
+
+function renderHeader() {
+  const cc = cartCount();
+  return `
+  <header class="header">
+    <div class="header-logo" onclick="navigate('home')">🛒 ShopDemo</div>
+    <div class="search-bar">
+      <span style="margin-right:0.5rem;opacity:0.5;">🔍</span>
+      <input id="searchInput" placeholder="商品を検索..." value="${state.searchQuery}" onkeydown="if(event.key==='Enter')doSearch()">
+    </div>
+    <nav class="header-nav">
+      <a onclick="navigate('home')" class="${state.page==='home'?'active':''}">ホーム</a>
+      <a onclick="navigate('products')" class="${state.page==='products'||state.page==='detail'?'active':''}">商品一覧</a>
+      <div class="cart-badge ${cc?'':'no-badge'}" onclick="navigate('cart')">🛒${cc?`<span class="badge">${cc}</span>`:''}</div>
+      <a onclick="navigate('mypage',{mypageTab:'orders'})" class="${state.page==='mypage'?'active':''}">👤 マイページ</a>
+    </nav>
+  </header>`;
+}
+
+// ===== HOME =====
+function renderHome() {
+  const featured = PRODUCTS.slice(0, 4);
+  return `
+  <div class="hero">
+    <h2>🔥 夏の特別セール</h2>
+    <p>最大50% OFF！期間限定キャンペーン実施中</p>
+    <button class="btn" style="background:#fff;color:var(--primary);font-weight:bold;" onclick="navigate('products')">詳しく見る →</button>
+  </div>
+  <h2 class="section-title">📦 新着商品</h2>
+  <p class="section-subtitle">注目の商品をチェック</p>
+  <div class="product-grid">
+    ${featured.map(p => productCard(p)).join('')}
+  </div>
+  <h2 class="section-title" style="margin-top:2.5rem;">⭐ おすすめカテゴリー</h2>
+  <div class="cat-pills" style="margin-top:1rem;">
+    ${CATEGORIES.slice(1).map(c => `<span class="cat-pill" onclick="state.selectedCategory='${c}';navigate('products')">${c}</span>`).join('')}
+  </div>
+  <h2 class="section-title" style="margin-top:2.5rem;">🔥 人気商品</h2>
+  <p class="section-subtitle">売れ筋ランキング TOP4</p>
+  <div class="product-grid">
+    ${PRODUCTS.slice(4, 8).map(p => productCard(p)).join('')}
+  </div>`;
+}
+
+function productCard(p) {
+  return `
+  <div class="card product-card">
+    <div class="card-img" onclick="openDetail(${p.id})">${p.emoji}</div>
+    <div class="card-body">
+      <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">${p.category}</div>
+      <div class="card-title" onclick="openDetail(${p.id})">${p.name}</div>
+      <div><span class="card-price">${fmt(p.price)}</span>${p.oldPrice ? `<span class="card-oldprice">${fmt(p.oldPrice)}</span>` : ''}</div>
+      <div style="font-size:0.8rem;margin-top:0.35rem;"><span class="stars">${stars(p.rating)}</span> ${p.rating} (${p.reviews})</div>
+    </div>
+  </div>`;
+}
+
+function openDetail(id) {
+  const p = PRODUCTS.find(x => x.id === id);
+  state.selectedProduct = p;
+  state.detailQty = 1;
+  state.detailColor = p.colors[0] || null;
+  state.detailSize = p.sizes[0] || null;
+  log('PRODUCT_LIST', `商品詳細を開く: ${p.name}`);
+  navigate('detail');
+}
+
+// ===== PRODUCTS =====
+function renderProducts() {
+  let list = [...PRODUCTS];
+  if (state.selectedCategory !== 'すべて') list = list.filter(p => p.category === state.selectedCategory);
+  if (state.searchQuery) { const q = state.searchQuery.toLowerCase(); list = list.filter(p => p.name.toLowerCase().includes(q) || p.desc.toLowerCase().includes(q)); }
+  return `
+  <div class="breadcrumb"><span onclick="navigate('home')">ホーム</span> &gt; 商品一覧</div>
+  <h2 class="section-title">📦 商品一覧</h2>
+  <p class="section-subtitle">${list.length}件の商品が見つかりました</p>
+  <div class="cat-pills">
+    ${CATEGORIES.map(c => `<span class="cat-pill ${state.selectedCategory===c?'active':''}" onclick="state.selectedCategory='${c}';render()">${c}</span>`).join('')}
+  </div>
+  ${list.length ? `<div class="product-grid">${list.map(p => productCard(p)).join('')}</div>` : '<div class="empty-state"><div class="empty-icon">🔍</div><p>該当する商品が見つかりません</p></div>'}`;
+}
+
+function doSearch() {
+  const inp = document.getElementById('searchInput');
+  state.searchQuery = inp.value.trim();
+  log('SEARCH', `検索: "${state.searchQuery}"`);
+  navigate('products');
+}
+
+// ===== DETAIL =====
+function renderDetail() {
+  const p = state.selectedProduct;
+  if (!p) return '<p>商品が見つかりません</p>';
+  return `
+  <div class="breadcrumb"><span onclick="navigate('home')">ホーム</span> &gt; <span onclick="navigate('products')">${p.category}</span> &gt; ${p.name}</div>
+  <div class="detail-layout">
+    <div>
+      <div class="detail-img">${p.emoji}</div>
+      <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+        ${[p.emoji, p.emoji, p.emoji].map((e,i) => `<div style="width:64px;height:64px;background:var(--bg);border-radius:8px;border:${i===0?'2px solid var(--primary)':'1px solid var(--border)'};display:flex;align-items:center;justify-content:center;font-size:1.5rem;cursor:pointer;">${e}</div>`).join('')}
+      </div>
+    </div>
+    <div class="detail-info">
+      <span style="background:#dcfce7;color:#15803d;padding:0.2rem 0.6rem;border-radius:999px;font-size:0.75rem;font-weight:600;">${p.stock > 0 ? '在庫あり' : '在庫切れ'} (${p.stock}個)</span>
+      <span style="margin-left:0.5rem;font-size:0.85rem;"><span class="stars">${stars(p.rating)}</span> ${p.rating} (${p.reviews}件)</span>
+      <h2>${p.name}</h2>
+      <p style="color:var(--text-muted);margin-top:0.5rem;">${p.desc}</p>
+      <div class="detail-price-box">
+        <span class="detail-price">${fmt(p.price)}</span>
+        ${p.oldPrice ? `<span class="detail-oldprice">${fmt(p.oldPrice)}</span>` : ''}
+        ${p.oldPrice ? `<span style="background:#fee2e2;color:var(--accent-red);padding:0.15rem 0.5rem;border-radius:999px;font-size:0.75rem;font-weight:bold;">-${Math.round((1-p.price/p.oldPrice)*100)}%OFF</span>` : ''}
+      </div>
+      ${p.colors.length ? `
+      <div class="option-group">
+        <div class="option-label">カラーを選択</div>
+        <div class="option-pills">
+          ${p.colors.map(c => `<span class="pill ${state.detailColor===c?'selected':''}" onclick="selectOption('color','${c}')">${c}</span>`).join('')}
+        </div>
+      </div>` : ''}
+      ${p.sizes.length ? `
+      <div class="option-group">
+        <div class="option-label">サイズを選択</div>
+        <div class="option-pills">
+          ${p.sizes.map(s => `<span class="pill ${state.detailSize===s?'selected':''}" onclick="selectOption('size','${s}')">${s}</span>`).join('')}
+        </div>
+      </div>` : ''}
+      <div class="option-label">数量</div>
+      <div class="qty-control">
+        <button class="qty-btn" onclick="changeQty(-1)">−</button>
+        <div class="qty-val">${state.detailQty}</div>
+        <button class="qty-btn" onclick="changeQty(1)">+</button>
+      </div>
+      <div style="display:flex;gap:0.75rem;margin-top:1.5rem;">
+        <button class="btn btn-primary" style="flex:1;" onclick="addToCart()">🛒 カートに追加</button>
+        <button class="btn btn-warning" style="flex:1;" onclick="buyNow()">⚡ 今すぐ購入</button>
+      </div>
+      <div style="margin-top:1.5rem;padding:1rem;background:var(--bg);border-radius:8px;font-size:0.8rem;color:var(--text-muted);">
+        <div>📦 配送料: ${fmt(p.price) >= 2000 ? '無料' : fmt(500)}</div>
+        <div style="margin-top:0.35rem;">🔄 30日間返品可能</div>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:2.5rem;">
+    <h3 class="section-title">💬 レビュー (${p.reviews}件)</h3>
+    ${REVIEWS.map(r => `
+      <div style="background:#fff;border-radius:10px;padding:1rem;margin-top:0.75rem;border:1px solid var(--border);">
+        <div style="display:flex;justify-content:space-between;"><strong>${r.user}</strong><span class="stars" style="font-size:0.85rem;">${stars(r.rating)}</span></div>
+        <p style="margin-top:0.35rem;font-size:0.9rem;color:var(--text-muted);">${r.text}</p>
+      </div>`).join('')}
+  </div>`;
+}
+
+function selectOption(type, val) {
+  if (type === 'color') state.detailColor = val;
+  if (type === 'size') state.detailSize = val;
+  log('PRODUCT_DETAIL', `${type}: ${val}`);
+  render();
+}
+
+function changeQty(d) {
+  state.detailQty = Math.max(1, Math.min(99, state.detailQty + d));
+  render();
+}
+
+function addToCart() {
+  const p = state.selectedProduct;
+  const existing = state.cart.find(c => c.product.id === p.id && c.color === state.detailColor && c.size === state.detailSize);
+  if (existing) {
+    existing.qty += state.detailQty;
+  } else {
+    state.cart.push({ product: p, qty: state.detailQty, color: state.detailColor, size: state.detailSize });
+  }
+  log('CART', `${p.name} x${state.detailQty} をカートに追加`);
+  showToast(`${p.name} をカートに追加しました`);
+  render();
+}
+
+function buyNow() {
+  addToCartSilent();
+  navigate('checkout', { checkoutStep: 1 });
+}
+
+function addToCartSilent() {
+  const p = state.selectedProduct;
+  const existing = state.cart.find(c => c.product.id === p.id && c.color === state.detailColor && c.size === state.detailSize);
+  if (existing) { existing.qty += state.detailQty; }
+  else { state.cart.push({ product: p, qty: state.detailQty, color: state.detailColor, size: state.detailSize }); }
+}
+
+// ===== CART =====
+function renderCart() {
+  if (!state.cart.length) return `
+    <div class="breadcrumb"><span onclick="navigate('home')">ホーム</span> &gt; カート</div>
+    <h2 class="section-title">🛒 ショッピングカート</h2>
+    <div class="empty-state" style="margin-top:2rem;"><div class="empty-icon">🛒</div><p>カートは空です</p><button class="btn btn-primary" style="margin-top:1rem;" onclick="navigate('products')">商品を探す</button></div>`;
+
+  return `
+  <div class="breadcrumb"><span onclick="navigate('home')">ホーム</span> &gt; カート</div>
+  <h2 class="section-title">🛒 ショッピングカート (${cartCount()}点)</h2>
+  <table class="cart-table">
+    <thead><tr><th>商品</th><th>単価</th><th>数量</th><th>小計</th><th></th></tr></thead>
+    <tbody>
+      ${state.cart.map((c, i) => `
+        <tr>
+          <td style="display:flex;align-items:center;gap:0.75rem;">
+            <span style="font-size:2rem;">${c.product.emoji}</span>
+            <div><strong>${c.product.name}</strong><br><span style="font-size:0.8rem;color:var(--text-muted);">${[c.color, c.size].filter(Boolean).join(' / ') || ''}</span></div>
+          </td>
+          <td>${fmt(c.product.price)}</td>
+          <td>
+            <div class="qty-control" style="margin:0;">
+              <button class="qty-btn btn-sm" onclick="updateCartQty(${i},-1)">−</button>
+              <div class="qty-val">${c.qty}</div>
+              <button class="qty-btn btn-sm" onclick="updateCartQty(${i},1)">+</button>
+            </div>
+          </td>
+          <td><strong>${fmt(c.product.price * c.qty)}</strong></td>
+          <td><button class="btn btn-danger btn-sm" onclick="removeCartItem(${i})">✕</button></td>
+        </tr>`).join('')}
+    </tbody>
+  </table>
+  <div class="cart-summary">
+    <div class="cart-summary-row"><span>商品合計 (${cartCount()}点)</span><span>${fmt(cartTotal())}</span></div>
+    <div class="cart-summary-row"><span>配送料</span><span style="color:var(--accent-green);">${cartTotal() >= 2000 ? '無料' : fmt(500)}</span></div>
+    <div class="cart-summary-row total"><span>合計</span><span>${fmt(cartTotal() + (cartTotal() >= 2000 ? 0 : 500))}</span></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:1rem;" onclick="navigate('checkout',{checkoutStep:1})">チェックアウトに進む</button>
+    <button class="btn btn-outline" style="width:100%;margin-top:0.5rem;" onclick="navigate('products')">買い物を続ける</button>
+  </div>`;
+}
+
+function updateCartQty(i, d) {
+  state.cart[i].qty = Math.max(1, state.cart[i].qty + d);
+  log('CART', `数量更新: ${state.cart[i].product.name} → x${state.cart[i].qty}`);
+  render();
+}
+
+function removeCartItem(i) {
+  const name = state.cart[i].product.name;
+  state.cart.splice(i, 1);
+  log('CART', `${name} をカートから削除`);
+  showToast(`${name} を削除しました`);
+  render();
+}
+
+// ===== CHECKOUT =====
+function renderCheckout() {
+  const step = state.checkoutStep;
+  return `
+  <div class="breadcrumb"><span onclick="navigate('home')">ホーム</span> &gt; <span onclick="navigate('cart')">カート</span> &gt; チェックアウト</div>
+  <h2 class="section-title">💳 チェックアウト</h2>
+  <div class="steps">
+    <div class="step ${step>=1?(step===1?'active':'done'):''}"><span class="step-num">${step>1?'✓':'1'}</span>配送先情報</div>
+    <div class="step ${step>=2?(step===2?'active':'done'):''}"><span class="step-num">${step>2?'✓':'2'}</span>配送方法</div>
+    <div class="step ${step>=3?(step===3?'active':'done'):''}"><span class="step-num">3</span>決済方法</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 340px;gap:2rem;">
+    <div>${renderCheckoutStep(step)}</div>
+    <div>
+      <div class="confirm-box">
+        <h3>🛒 カート (${cartCount()}点)</h3>
+        ${state.cart.map(c => `<div class="confirm-row"><span>${c.product.emoji} ${c.product.name} x${c.qty}</span><span>${fmt(c.product.price * c.qty)}</span></div>`).join('')}
+        <div class="confirm-row" style="margin-top:0.5rem;border-bottom:none;"><span>配送料</span><span style="color:var(--accent-green);">${getShippingFee()===0?'無料':fmt(getShippingFee())}</span></div>
+        <div class="confirm-row" style="font-weight:bold;font-size:1.05rem;border-bottom:none;margin-top:0.35rem;"><span>合計</span><span>${fmt(getOrderTotal())}</span></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderCheckoutStep(step) {
+  switch (step) {
+    case 1: return `
+      <h3 style="margin-bottom:1rem;">配送先を選択</h3>
+      ${ADDRESSES.map(a => `
+        <div class="address-card ${state.checkoutData.addressId===a.id?'selected':''}" onclick="selectAddress(${a.id})">
+          <div style="display:flex;justify-content:space-between;"><strong>${a.name}</strong><span style="font-size:0.8rem;color:var(--text-muted);">${a.note}</span></div>
+          <p style="margin-top:0.35rem;font-size:0.9rem;">${a.postal} ${a.address}</p>
+          <p style="font-size:0.85rem;color:var(--text-muted);">TEL: ${USER.phone}</p>
+        </div>`).join('')}
+      <button class="btn btn-outline" style="margin-top:1rem;" onclick="showNewAddressForm()">＋ 新規配送先を追加</button>
+      <div id="newAddrForm"></div>
+      <div style="text-align:right;margin-top:1.5rem;"><button class="btn btn-primary" onclick="nextCheckoutStep()">次へ：配送方法 →</button></div>`;
+
+    case 2: return `
+      <h3 style="margin-bottom:1rem;">配送方法を選択</h3>
+      <div class="payment-options">
+        <div class="payment-option ${(!state.checkoutData.deliveryMethod||state.checkoutData.deliveryMethod==='standard')?'selected':''}" onclick="selectDelivery('standard')">
+          <span class="payment-icon">📦</span>
+          <div><strong>標準配送（無料）</strong><br><span style="font-size:0.85rem;color:var(--text-muted);">3〜5営業日でお届け</span></div>
+        </div>
+        <div class="payment-option ${state.checkoutData.deliveryMethod==='express'?'selected':''}" onclick="selectDelivery('express')">
+          <span class="payment-icon">🚀</span>
+          <div><strong>速達配送（¥800）</strong><br><span style="font-size:0.85rem;color:var(--text-muted);">翌日〜2営業日でお届け</span></div>
+        </div>
+      </div>
+      <div style="margin-top:1.5rem;padding:1rem;background:#eef2ff;border-radius:8px;font-size:0.9rem;">
+        <strong>配送先:</strong><br>${getAddressText()}<br>TEL: ${USER.phone}
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:1.5rem;">
+        <button class="btn btn-outline" onclick="prevCheckoutStep()">← 戻る</button>
+        <button class="btn btn-primary" onclick="nextCheckoutStep()">次へ：決済方法 →</button>
+      </div>`;
+
+    case 3: return `
+      <h3 style="margin-bottom:1rem;">決済方法を選択</h3>
+      <div class="payment-options">
+        <div class="payment-option ${state.checkoutData.paymentMethod==='credit'?'selected':''}" onclick="selectPayment('credit')">
+          <span class="payment-icon">💳</span>
+          <div><strong>クレジットカード決済</strong><br><span style="font-size:0.85rem;color:var(--text-muted);">Visa / Mastercard / JCB 対応</span></div>
+        </div>
+        <div class="payment-option ${state.checkoutData.paymentMethod==='konbini'?'selected':''}" onclick="selectPayment('konbini')">
+          <span class="payment-icon">🏪</span>
+          <div><strong>コンビニ決済</strong><br><span style="font-size:0.85rem;color:var(--text-muted);">セブン-イレブン / ファミリーマート 他</span></div>
+        </div>
+        <div class="payment-option ${state.checkoutData.paymentMethod==='bank'?'selected':''}" onclick="selectPayment('bank')">
+          <span class="payment-icon">🏦</span>
+          <div><strong>銀行振込</strong><br><span style="font-size:0.85rem;color:var(--text-muted);">指定口座へお振込みください</span></div>
+        </div>
+      </div>
+      ${state.checkoutData.paymentMethod === 'credit' ? renderCreditForm() : ''}
+      <div style="display:flex;justify-content:space-between;margin-top:1.5rem;">
+        <button class="btn btn-outline" onclick="prevCheckoutStep()">← 戻る</button>
+        <button class="btn btn-primary" onclick="goToConfirm()">注文確認へ →</button>
+      </div>`;
+
+    default: return '';
+  }
+}
+
+function renderCreditForm() {
+  return `
+  <div style="margin-top:1.5rem;padding:1.25rem;background:#fff;border-radius:10px;border:1px solid var(--border);">
+    <h4 style="margin-bottom:1rem;">カード情報</h4>
+    <div class="form-group"><label class="form-label">カード番号</label><input class="form-input" value="4532 1234 5678 9012" readonly></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+      <div class="form-group"><label class="form-label">有効期限</label><input class="form-input" value="12/28" readonly></div>
+      <div class="form-group"><label class="form-label">セキュリティコード</label><input class="form-input" value="***" readonly></div>
+    </div>
+    <div class="form-group"><label class="form-label">カード名義人</label><input class="form-input" value="EC タロウ" readonly></div>
+  </div>`;
+}
+
+function showNewAddressForm() {
+  document.getElementById('newAddrForm').innerHTML = `
+    <div style="margin-top:1rem;padding:1.25rem;background:#fff;border-radius:10px;border:1px solid var(--border);">
+      <h4 style="margin-bottom:0.75rem;">新規配送先</h4>
+      <div class="form-group"><label class="form-label">お名前</label><input class="form-input" value="${USER.name}"></div>
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:1rem;">
+        <div class="form-group"><label class="form-label">郵便番号</label><input class="form-input" placeholder="000-0000"></div>
+        <div class="form-group"><label class="form-label">電話番号</label><input class="form-input" value="${USER.phone}"></div>
+      </div>
+      <div class="form-group"><label class="form-label">住所</label><input class="form-input" placeholder="都道府県から入力"></div>
+      <button class="btn btn-primary btn-sm" onclick="document.getElementById('newAddrForm').innerHTML=''">追加</button>
+    </div>`;
+  log('CHECKOUT', '新規配送先フォームを表示');
+}
+
+function selectAddress(id) { state.checkoutData.addressId = id; log('CHECKOUT', `配送先選択: ${ADDRESSES.find(a=>a.id===id).note}`); render(); }
+function selectDelivery(type) { state.checkoutData.deliveryMethod = type; log('CHECKOUT', `配送方法: ${type==='standard'?'標準':'速達'}`); render(); }
+function selectPayment(method) { state.checkoutData.paymentMethod = method; log('CHECKOUT', `決済方法: ${method==='credit'?'クレジットカード':method==='konbini'?'コンビニ':'銀行振込'}`); render(); }
+
+function nextCheckoutStep() {
+  if (state.checkoutStep < 3) {
+    state.checkoutStep++;
+    log('CHECKOUT', `ステップ${state.checkoutStep}へ`);
+    render();
+  }
+}
+function prevCheckoutStep() {
+  if (state.checkoutStep > 1) {
+    state.checkoutStep--;
+    log('CHECKOUT', `ステップ${state.checkoutStep}へ戻る`);
+    render();
+  }
+}
+
+function getAddressText() {
+  const a = ADDRESSES.find(x => x.id === state.checkoutData.addressId);
+  return a ? a.name + '<br>' + a.postal + ' ' + a.address : '';
+}
+
+// ===== CONFIRM =====
+function goToConfirm() {
+  log('CHECKOUT', '注文確認画面へ');
+  navigate('confirm');
+}
+
+function renderConfirm() {
+  const addr = ADDRESSES.find(x => x.id === state.checkoutData.addressId);
+  const total = getOrderTotal();
+  return `
+  <div class="breadcrumb"><span onclick="navigate('home')">ホーム</span> &gt; <span onclick="navigate('cart')">カート</span> &gt; チェックアウト &gt; 注文確認</div>
+  <h2 class="section-title">✅ 注文内容の確認</h2>
+  <p style="color:var(--text-muted);margin-bottom:1.5rem;">以下の内容でご注文ください。間違いがないかご確認ください。</p>
+
+  <div class="confirm-box">
+    <h3>📦 配送先情報</h3>
+    <div class="confirm-row"><span>お名前</span><span>${addr.name}</span></div>
+    <div class="confirm-row"><span>住所</span><span>${addr.postal} ${addr.address}</span></div>
+    <div class="confirm-row"><span>電話番号</span><span>${USER.phone}</span></div>
+  </div>
+
+  <div class="confirm-box">
+    <h3>🛒 ご注文商品 (${cartCount()}点)</h3>
+    ${state.cart.map(c => `<div class="confirm-row"><span>${c.product.emoji} ${c.product.name} ${[c.color,c.size].filter(Boolean).join(' / ')} x${c.qty}</span><span>${fmt(c.product.price * c.qty)}</span></div>`).join('')}
+  </div>
+
+  <div class="confirm-box">
+    <h3>🚚 配送方法</h3>
+    <div class="confirm-row"><span>配送タイプ</span><span>${(state.checkoutData.deliveryMethod||'standard')==='express'?'速達配送（¥800）':'標準配送（無料）'}</span></div>
+  </div>
+
+  <div class="confirm-box">
+    <h3>💳 決済方法</h3>
+    <div class="confirm-row"><span>決済手段</span><span>${state.checkoutData.paymentMethod==='credit'?'クレジットカード (****9012)':state.checkoutData.paymentMethod==='konbini'?'コンビニ決済':'銀行振込'}</span></div>
+  </div>
+
+  <div class="confirm-box" style="background:#fef2f2;border-color:#fecaca;">
+    <h3 style="color:var(--accent-red);">💰 お支払い金額</h3>
+    ${state.cart.map(c => `<div class="confirm-row"><span>${c.product.name} x${c.qty}</span><span>${fmt(c.product.price * c.qty)}</span></div>`).join('')}
+    <div class="confirm-row"><span>配送料</span><span style="color:var(--accent-green);">${getShippingFee()===0?'無料':fmt(getShippingFee())}</span></div>
+    <div class="confirm-row" style="font-size:1.2rem;font-weight:bold;border-bottom:none;margin-top:0.5rem;"><span>合計（税込）</span><span>${fmt(total)}</span></div>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;">
+    <button class="btn btn-outline" onclick="navigate('checkout',{checkoutStep:3})">← 修正する</button>
+    <button class="btn btn-success" style="font-size:1.05rem;padding:0.75rem 2.5rem;" onclick="executePayment()">✅ 注文を確定する</button>
+  </div>`;
+}
+
+// ===== PAYMENT =====
+function executePayment() {
+  log('PAYMENT', '決済処理を開始');
+  navigate('payment');
+  setTimeout(() => {
+    log('PAYMENT', '決済APIにリクエスト送信...');
+    setTimeout(() => {
+      log('PAYMENT', '決済成功 ✅');
+      const orderId = 'ORD-' + Date.now().toString().slice(-8);
+      state.orders.unshift({ id: orderId, date: new Date().toISOString().slice(0,10), status: 'paid', total: getOrderTotal(), items: [...state.cart] });
+      state.cart = [];
+      log('ORDER', `注文登録完了: ${orderId}`);
+      state._lastOrderId = orderId;
+      navigate('thankyou');
+    }, 1200);
+  }, 800);
+}
+
+function renderPayment() {
+  const method = state.checkoutData.paymentMethod;
+  let detail = '';
+  if (method === 'credit') {
+    detail = `<div style="margin-top:1rem;padding:1.25rem;background:#fff;border-radius:10px;border:1px solid var(--border);">
+      <p>💳 カード: **** 9012</p>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-top:0.35rem;">Demoripe 決済ゲートウェイ（デモ）経由で処理中...</p>
+    </div>`;
+  } else if (method === 'konbini') {
+    detail = `<div style="margin-top:1rem;padding:1.25rem;background:#fff;border-radius:10px;border:1px solid var(--border);">
+      <p>🏪 コーポレートID: <strong>KP-2024-${Math.floor(Math.random()*9000+1000)}</strong></p>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-top:0.35rem;">コンビニで上記IDと金額をお支払いください（期限: 24時間）</p>
+    </div>`;
+  } else {
+    detail = `<div style="margin-top:1rem;padding:1.25rem;background:#fff;border-radius:10px;border:1px solid var(--border);">
+      <p>🏦 振込先口座情報</p>
+      <p style="font-size:0.85rem;margin-top:0.35rem;">銀行名: みずほ銀行<br>支店名: 東京支店<br>種別: 普通預金<br>番号: 1234567<br>名義人: 株式会社ShopDemo</p>
+    </div>`;
+  }
+
+  return `
+  <div class="breadcrumb"><span onclick="navigate('home')">ホーム</span> &gt; チェックアウト &gt; 決済処理中</div>
+  <h2 class="section-title">💳 決済処理中...</h2>
+  <p style="color:var(--text-muted);margin-bottom:1.5rem;">安全に決済処理を行っています。お待ちください。</p>
+  ${detail}
+  <div style="display:flex;align-items:center;gap:0.75rem;margin-top:1.5rem;color:var(--primary);">
+    <div class="spinner"></div>
+    <span>決済処理中...</span>
+  </div>`;
+}
+
+// ===== THANK YOU =====
+function renderThankYou() {
+  const orderId = state._lastOrderId || 'ORD-XXXX';
+  return `
+  <div class="thankyou-box">
+    <div class="thankyou-icon">🎉</div>
+    <h2>ご注文ありがとうございます！</h2>
+    <p style="color:var(--text-muted);margin-bottom:0.5rem;">注文番号: <strong>${orderId}</strong></p>
+    <p style="color:var(--text-muted);">注文確認メールを ${USER.email} へ送信しました。</p>
+
+    <div class="confirm-box" style="max-width:500px;margin:2rem auto;text-align:left;">
+      <h3>📧 メール送信内容（デモ）</h3>
+      <div style="background:var(--bg);padding:1rem;border-radius:8px;font-size:0.85rem;line-height:1.8;">
+        <strong>To:</strong> ${USER.email}<br>
+        <strong>Subject:</strong> 【ShopDemo】ご注文ありがとうございます<br><br>
+        EC太郎 様<br><br>
+        この度は ShopDemo をご利用いただき、誠にありがとうございます。<br>
+        注文番号: ${orderId}<br>
+        ご注文内容を確認いたしましたので、お知らせいたします。<br><br>
+        今後ともよろしくお願いいたします。<br>
+        ──<br>ShopDemo お客様サポート
+      </div>
+    </div>
+
+    <div style="display:flex;gap:0.75rem;justify-content:center;margin-top:1.5rem;">
+      <button class="btn btn-primary" onclick="navigate('mypage',{mypageTab:'orders'})">📋 注文履歴を見る</button>
+      <button class="btn btn-outline" onclick="navigate('home')">🏠 ホームに戻る</button>
+    </div>
+  </div>`;
+}
+
+// ===== MY PAGE =====
+function renderMyPage() {
+  const tab = state.mypageTab;
+  return `
+  <div class="breadcrumb"><span onclick="navigate('home')">ホーム</span> &gt; マイページ</div>
+  <h2 class="section-title">👤 マイページ</h2>
+  <div class="mypage-layout" style="margin-top:1.5rem;">
+    <div class="mypage-sidebar">
+      <div class="mypage-user">
+        <div class="mypage-avatar">🧑</div>
+        <div class="mypage-name">${USER.name}</div>
+        <div class="mypage-email">${USER.email}</div>
+      </div>
+      <nav class="mypage-menu">
+        <a onclick="state.mypageTab='orders';render()" class="${tab==='orders'?'active':''}">📋 注文履歴</a>
+        <a onclick="state.mypageTab='profile';render()" class="${tab==='profile'?'active':''}">👤 プロフィール</a>
+        <a onclick="state.mypageTab='addresses';render()" class="${tab==='addresses'?'active':''}">📍 配送先管理</a>
+      </nav>
+    </div>
+    <div>${renderMyPageContent(tab)}</div>
+  </div>`;
+}
+
+function renderMyPageContent(tab) {
+  switch (tab) {
+    case 'orders': return `
+      <h3 style="margin-bottom:1rem;">📋 注文履歴</h3>
+      ${state.orders.map(o => `
+        <div class="confirm-box" style="cursor:pointer;" onclick="showOrderDetail('${o.id}')">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <strong>${o.id}</strong>
+              <span style="color:var(--text-muted);font-size:0.85rem;margin-left:0.75rem;">${o.date}</span>
+            </div>
+            <span class="status-badge ${o.status==='shipped'?'status-shipped':'status-paid'}">${o.status==='shipped'?'配送済み':'決済完了'}</span>
+          </div>
+          <div style="margin-top:0.5rem;font-size:0.9rem;color:var(--text-muted);">
+            ${o.items.map(i => `${i.product ? i.product.emoji : '📦'} ${i.product ? i.product.name : i.product?.name} x${i.qty}`).join(' / ')}
+          </div>
+          <div style="margin-top:0.5rem;font-weight:bold;">合計: ${fmt(o.total)}</div>
+        </div>`).join('')}`;
+
+    case 'profile': return `
+      <h3 style="margin-bottom:1rem;">👤 プロフィール編集</h3>
+      <div class="confirm-box">
+        <div class="form-group"><label class="form-label">お名前</label><input class="form-input" value="${USER.name}"></div>
+        <div class="form-group"><label class="form-label">メールアドレス</label><input class="form-input" value="${USER.email}"></div>
+        <div class="form-group"><label class="form-label">電話番号</label><input class="form-input" value="${USER.phone}"></div>
+        <div class="form-group"><label class="form-label">パスワード変更</label><input class="form-input" type="password" placeholder="新しいパスワードを入力"></div>
+        <button class="btn btn-primary" onclick="showToast('プロフィールを更新しました')">保存する</button>
+      </div>`;
+
+    case 'addresses': return `
+      <h3 style="margin-bottom:1rem;">📍 配送先管理</h3>
+      ${ADDRESSES.map(a => `
+        <div class="confirm-box" style="position:relative;">
+          <span style="position:absolute;top:1.25rem;right:1.25rem;font-size:0.75rem;color:var(--text-muted);cursor:pointer;" onclick="showToast('配送先を削除しました')">✕ 削除</span>
+          <strong>${a.name}</strong> <span style="font-size:0.8rem;color:var(--text-muted);">(${a.note})</span>
+          <p style="margin-top:0.35rem;font-size:0.9rem;">${a.postal} ${a.address}</p>
+          <p style="font-size:0.85rem;color:var(--text-muted);">TEL: ${USER.phone}</p>
+          <button class="btn btn-outline btn-sm" style="margin-top:0.5rem;" onclick="showToast('配送先を編集しました')">編集</button>
+        </div>`).join('')}
+      <button class="btn btn-primary" style="margin-top:1rem;" onclick="showToast('新規配送先の追加フォームを表示します')">＋ 新規配送先を追加</button>`;
+
+    default: return '';
+  }
+}
+
+function showOrderDetail(orderId) {
+  const o = state.orders.find(x => x.id === orderId);
+  if (!o) return;
+  log('MY_PAGE', `注文詳細を表示: ${orderId}`);
+  alert(`注文番号: ${o.id}\n日付: ${o.date}\nステータス: ${o.status==='shipped'?'配送済み':'決済完了'}\n\n${o.items.map(i => `${i.product ? i.product.emoji : '📦'} ${i.product?.name || '?'} x${i.qty} = ${fmt((i.product?.price||0)*i.qty)}`).join('\n')}\n\n合計: ${fmt(o.total)}`);
+}
+
+// ===== EVENT BINDING =====
+function bindEvents() {}
+
+// ===== INIT =====
+log('INIT', 'ECサイトデモを起動');
+log('AUTH', `ユーザーログイン済み: ${USER.name}`);
+render();
+</script>
+</body>
+</html>

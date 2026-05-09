@@ -2,6 +2,14 @@
 Web Demos  
 https://kishida.github.io/webdemos/
 
+## EC Demo
+[EC Demo](ecdemo/ec-demo.html)  
+![EC Demo](assets/ecdemo.png)  
+
+[Design](ecdemo/ec-design.html)
+
+2026/05/09
+
 ## 3D RPG
 
 [3D RPG](rpg/rpg.html)  

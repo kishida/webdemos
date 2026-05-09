@@ -1,0 +1,1009 @@
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECサイト 設計図</title>
+
+<meta property="og:title" content="EC Demo Design">
+<meta property="og:description" content="AIが作ったECデザイン">
+<meta property="og:image" content="https://kishida.github.io/webdemos/ecdemo/design-ogp.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/ecdemo/ec-design.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-light: #818cf8;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --accent-green: #10b981;
+            --accent-orange: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-blue: #3b82f6;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', 'Hiragino Sans', 'Meiryo', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+        }
+
+        header {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #a855f7 100%);
+            color: white;
+            padding: 3rem 2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+            animation: pulse 8s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 1; }
+        }
+
+        header h1 { font-size: 2.5rem; position: relative; z-index: 1; margin-bottom: 0.5rem; }
+        header p { font-size: 1.1rem; opacity: 0.9; position: relative; z-index: 1; }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+
+        .section {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+            border: 1px solid var(--border);
+        }
+
+        .section h2 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .section h2 .icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .section h3 {
+            font-size: 1.15rem;
+            margin: 1.5rem 0 0.75rem;
+            color: var(--primary);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-right: 0.3rem;
+        }
+
+        .badge-blue { background: #dbeafe; color: #1d4ed8; }
+        .badge-green { background: #dcfce7; color: #15803d; }
+        .badge-orange { background: #fef3c7; color: #b45309; }
+        .badge-red { background: #fee2e2; color: #dc2626; }
+        .badge-purple { background: #f3e8ff; color: #7c3aed; }
+
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .tech-card {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.25rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .tech-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        }
+
+        .tech-card h4 { font-size: 1rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
+        .tech-card p { font-size: 0.9rem; color: var(--text-muted); }
+
+        .mermaid-container {
+            overflow-x: auto;
+            padding: 1rem 0;
+        }
+
+        /* SVG Styles */
+        .svg-wrapper {
+            display: flex;
+            justify-content: center;
+            margin: 1.5rem 0;
+        }
+
+        table.spec-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+
+        table.spec-table th,
+        table.spec-table td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        table.spec-table th {
+            background: #f1f5f9;
+            font-weight: 600;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        table.spec-table tr:hover td { background: #f8fafc; }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .two-col { grid-template-columns: 1fr; }
+            header h1 { font-size: 1.8rem; }
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>🛒 ECサイト 設計図</h1>
+    <p>システムアーキテクチャ・データベース・ユーザーフローの全体設計</p>
+</header>
+
+<div class="container">
+
+    <!-- ===== 1. 技術スタック ===== -->
+    <div class="section">
+        <h2><span class="icon" style="background:#dbeafe;color:#3b82f6;">⚙️</span> 推奨技術スタック</h2>
+        <p style="color:var(--text-muted);margin-bottom:1rem;">モダンなECサイト構築に必要な技術選定と各レイヤーの役割</p>
+
+        <div class="tech-grid">
+            <div class="tech-card">
+                <h4><span class="badge badge-blue">Frontend</span></h4>
+                <p><strong>Next.js 14</strong> / React<br>SSR/ISR対応、SEO最適化<br>Tailwind CSS + shadcn/ui</p>
+            </div>
+            <div class="tech-card">
+                <h4><span class="badge badge-green">Backend</span></h4>
+                <p><strong>Node.js (NestJS)</strong> / Python<br>REST API & GraphQL<br>マイクロサービス対応</p>
+            </div>
+            <div class="tech-card">
+                <h4><span class="badge badge-orange">Database</span></h4>
+                <p><strong>PostgreSQL</strong> + Redis<br>RDB: 構造化データ<br>Redis: キャッシュ/セッション</p>
+            </div>
+            <div class="tech-card">
+                <h4><span class="badge badge-purple">Storage</span></h4>
+                <p><strong>AWS S3</strong> / CloudFront<br>商品画像・動画の配信<br>CDNによる高速化</p>
+            </div>
+            <div class="tech-card">
+                <h4><span class="badge badge-red">Payment</span></h4>
+                <p><strong>Stripe</strong> / PayPal<br>クレジットカード決済<br>コンビニ・銀行振込対応</p>
+            </div>
+            <div class="tech-card">
+                <h4><span class="badge badge-blue">Infra</span></h4>
+                <p><strong>AWS / GCP</strong><br>Docker + Kubernetes<br>Terraform (IaC)</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 2. システムアーキテクチャ図 ===== -->
+    <div class="section">
+        <h2><span class="icon" style="background:#dcfce7;color:#10b981;">🏗️</span> システムアーキテクチャ図</h2>
+        <p style="color:var(--text-muted);margin-bottom:1rem;">クライアントからインフラ層までの全体構成</p>
+
+        <div class="mermaid-container">
+            <pre class="mermaid">
+graph TB
+    subgraph Client["🖥️ クライアント層"]
+        Web["Webブラウザ<br/>(Next.js / SSR)"]
+        Mobile["モバイルアプリ<br/>(React Native)"]
+    end
+
+    subgraph CDN["🌐 CDN & 配信"]
+        CloudFront["CloudFront (CDN)"]
+        S3["S3 (静的ファイル・画像)"]
+    end
+
+    subgraph LB["⚖️ ロードバランシング"]
+        ALB["Application Load Balancer"]
+    end
+
+    subgraph App["🔧 アプリケーション層"]
+        direction TB
+        WebAPI["Web API Server<br/>(NestJS / Node.js)"]
+        AuthSvc["認証サービス<br/>(JWT / OAuth2)"]
+        OrderSvc["注文サービス"]
+        ProductSvc["商品サービス"]
+        CartSvc["カートサービス"]
+    end
+
+    subgraph Cache["⚡ キャッシュ層"]
+        Redis["Redis Cluster<br/>(セッション・キャッシュ)"]
+    end
+
+    subgraph Data["💾 データ層"]
+        PG["PostgreSQL<br/>(主DB)"]
+        Mongo["MongoDB<br/>(ログ・レビュー)"]
+        Elastic["Elasticsearch<br/>(商品検索)"]
+    end
+
+    subgraph External["🔗 外部サービス"]
+        Stripe["Stripe (決済)"]
+        SendGrid["SendGrid (メール)"]
+        AWSLambda["AWS Lambda<br/>(イベント処理)"]
+    end
+
+    Web --> CloudFront
+    Mobile --> CloudFront
+    CloudFront --> S3
+    CloudFront --> ALB
+    ALB --> WebAPI
+    ALB --> AuthSvc
+    ALB --> OrderSvc
+    ALB --> ProductSvc
+    ALB --> CartSvc
+
+    WebAPI --> Redis
+    AuthSvc --> Redis
+    OrderSvc --> PG
+    ProductSvc --> PG
+    ProductSvc --> Elastic
+    CartSvc --> Redis
+    CartSvc --> PG
+
+    Stripe -.->|決済API| OrderSvc
+    SendGrid -.->|通知メール| AWSLambda
+    AWSLambda -.->|Webhook| OrderSvc
+            </pre>
+        </div>
+    </div>
+
+    <!-- ===== 3. データベースER図（修正済み） ===== -->
+    <div class="section">
+        <h2><span class="icon" style="background:#fef3c7;color:#f59e0b;">🗄️</span> データベース ER図</h2>
+        <p style="color:var(--text-muted);margin-bottom:1rem;">主要エンティティとリレーションシップ（Mermaid v10対応）</p>
+
+        <div class="mermaid-container">
+            <pre class="mermaid">erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    CUSTOMER ||--o{ REVIEW : writes
+    CUSTOMER ||--o{ ADDRESS : has
+    
+    CUSTOMER {
+        uuid id PK
+        string email UK
+        string password_hash
+        string name
+        string phone
+        date created_at
+        string status
+    }
+
+    ORDER ||--|{ ORDER_ITEM : contains
+    ORDER ||--|| PAYMENT : has
+    
+    ORDER {
+        uuid id PK
+        uuid customer_id FK
+        decimal total_amount
+        string status
+        date ordered_at
+        string shipping_address
+    }
+
+    ORDER_ITEM {
+        uuid id PK
+        uuid order_id FK
+        uuid product_id FK
+        int quantity
+        decimal unit_price
+    }
+
+    PRODUCT ||--o{ ORDER_ITEM : "referenced by"
+    PRODUCT ||--o{ REVIEW : receives
+    PRODUCT ||--|| CATEGORY : belongs_to
+    
+    PRODUCT {
+        uuid id PK
+        string name
+        text description
+        decimal price
+        int stock_quantity
+        string sku UK
+        boolean is_active
+        date created_at
+    }
+
+    CATEGORY {
+        uuid id PK
+        string name
+        uuid parent_id FK
+        int sort_order
+    }
+
+    PAYMENT {
+        uuid id PK
+        uuid order_id FK
+        string method
+        decimal amount
+        string status
+        string stripe_payment_intent_id
+        date paid_at
+    }
+
+    ADDRESS {
+        uuid id PK
+        uuid customer_id FK
+        string name
+        string postal_code
+        string address_line1
+        string address_line2
+        string city
+        string state
+    }
+
+    REVIEW {
+        uuid id PK
+        uuid product_id FK
+        uuid customer_id FK
+        int rating
+        text comment
+        date created_at
+    }
+
+    PRODUCT ||--o{ PRODUCT_IMAGE : has
+    
+    PRODUCT_IMAGE {
+        uuid id PK
+        uuid product_id FK
+        string url
+        int sort_order
+        boolean is_primary
+    }
+            </pre>
+        </div>
+    </div>
+
+    <!-- ===== 4. サイトマップ / ページ構成 ===== -->
+    <div class="section">
+        <h2><span class="icon" style="background:#f3e8ff;color:#7c3aed;">📄</span> サイトマップ（ページ構成）</h2>
+        <p style="color:var(--text-muted);margin-bottom:1rem;">ユーザーがアクセスする主要ページの階層構造</p>
+
+        <div class="mermaid-container">
+            <pre class="mermaid">graph TD
+    Home["🏠 ホーム<br/>index"] --> Products["📦 商品一覧<br/>/products"]
+    Home --> Categories["📂 カテゴリー一覧<br/>/categories"]
+    Home --> Deals["⭐ おすすめ<br/>/deals"]
+
+    Products --> ProductDetail["🛍️ 商品詳細<br/>/products/:slug"]
+    Products --> Search["🔍 検索結果<br/>/search?q="]
+
+    ProductDetail --> Cart["🛒 カート<br/>/cart"]
+    ProductDetail --> Reviews["💬 レビュー一覧"]
+
+    Cart --> Checkout["💳 チェックアウト<br/>/checkout"]
+    Cart --> Login["🔐 ログイン画面"]
+
+    Checkout --> Payment["💰 決済処理<br/>/payment"]
+    Checkout --> OrderConfirm["✅ 注文確認<br/>/order-confirm"]
+
+    Payment --> ThankYou["🎉 購入完了<br/>/thank-you"]
+
+    ThankYou --> MyOrders["📋 マイページ - 注文履歴<br/>/my/orders"]
+    ThankYou --> ProductDetail
+
+    Login --> Signup["📝 新規登録<br/>/signup"]
+    Login --> ForgotPassword["🔑 パスワード再設定<br/>/forgot-password"]
+
+    MyOrders --> OrderDetail["📋 注文詳細<br/>/my/orders/:id"]
+    MyOrders --> Profile["👤 プロフィール編集<br/>/my/profile"]
+    MyOrders --> Addresses["📍 配送先管理<br/>/my/addresses"]
+
+    style Home fill:#4f46e5,color:#fff
+    style Products fill:#3b82f6,color:#fff
+    style ProductDetail fill:#10b981,color:#fff
+    style Cart fill:#f59e0b,color:#fff
+    style Checkout fill:#ef4444,color:#fff
+    style Payment fill:#ef4444,color:#fff
+    style ThankYou fill:#10b981,color:#fff
+            </pre>
+        </div>
+    </div>
+
+    <!-- ===== 5. SVG: メイン画面レイアウト ===== -->
+    <div class="section">
+        <h2><span class="icon" style="background:#dbeafe;color:#3b82f6;">🎨</span> メイン画面レイアウト（SVG）</h2>
+        <p style="color:var(--text-muted);margin-bottom:1rem;">ECサイトのトップページ・商品詳細ページのUI構成イメージ</p>
+
+        <!-- トップページ -->
+        <h3>🏠 トップページ レイアウト</h3>
+        <div class="svg-wrapper">
+            <svg width="900" height="520" viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;">
+                <!-- Background -->
+                <rect width="900" height="520" rx="12" fill="#f8fafc"/>
+
+                <!-- Header / Navbar -->
+                <rect x="0" y="0" width="900" height="64" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+                <text x="24" y="38" font-family="sans-serif" font-size="18" font-weight="bold" fill="#4f46e5">🛒 ShopName</text>
+
+                <!-- Nav items -->
+                <rect x="180" y="18" width="72" height="28" rx="6" fill="#f1f5f9"/>
+                <text x="216" y="37" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#475569">商品</text>
+
+                <rect x="260" y="18" width="72" height="28" rx="6" fill="#f1f5f9"/>
+                <text x="296" y="37" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#475569">カテゴリー</text>
+
+                <rect x="340" y="18" width="72" height="28" rx="6" fill="#f1f5f9"/>
+                <text x="376" y="37" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#475569">おすすめ</text>
+
+                <!-- Search bar -->
+                <rect x="500" y="16" width="240" height="32" rx="16" fill="#f1f5f9" stroke="#e2e8f0"/>
+                <text x="520" y="37" font-family="sans-serif" font-size="12" fill="#94a3b8">🔍 商品を検索...</text>
+
+                <!-- Cart icon -->
+                <rect x="760" y="16" width="36" height="32" rx="8" fill="#fef3c7"/>
+                <text x="778" y="37" font-family="sans-serif" font-size="14" text-anchor="middle">🛒</text>
+
+                <!-- User icon -->
+                <rect x="806" y="16" width="36" height="32" rx="8" fill="#dbeafe"/>
+                <text x="824" y="37" font-family="sans-serif" font-size="14" text-anchor="middle">👤</text>
+
+                <!-- Hero Banner -->
+                <rect x="0" y="64" width="900" height="140" fill="url(#heroGrad)" rx="0"/>
+                <defs>
+                    <linearGradient id="heroGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#4f46e5;stop-opacity:1"/>
+                        <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:1"/>
+                    </linearGradient>
+                </defs>
+                <text x="45" y="110" font-family="sans-serif" font-size="28" font-weight="bold" fill="#ffffff">🔥 夏の特別セール</text>
+                <text x="45" y="140" font-family="sans-serif" font-size="14" fill="rgba(255,255,255,0.8)">最大50% OFF！期間限定キャンペーン実施中</text>
+                <rect x="45" y="152" width="120" height="36" rx="18" fill="#ffffff"/>
+                <text x="105" y="175" font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#4f46e5">詳しく見る →</text>
+
+                <!-- Section Title -->
+                <text x="45" y="240" font-family="sans-serif" font-size="20" font-weight="bold" fill="#1e293b">📦 新着商品</text>
+
+                <!-- Product Cards (4 cards) -->
+                <!-- Card 1 -->
+                <rect x="45" y="260" width="180" height="200" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+                <rect x="57" y="272" width="156" height="120" rx="8" fill="#f1f5f9"/>
+                <text x="135" y="340" font-family="sans-serif" font-size="28" text-anchor="middle">👟</text>
+                <text x="135" y="410" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#1e293b">スポーツシューズ</text>
+                <text x="135" y="430" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#ef4444">¥8,980</text>
+
+                <!-- Card 2 -->
+                <rect x="245" y="260" width="180" height="200" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+                <rect x="257" y="272" width="156" height="120" rx="8" fill="#f1f5f9"/>
+                <text x="335" y="340" font-family="sans-serif" font-size="28" text-anchor="middle">🎧</text>
+                <text x="335" y="410" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#1e293b">ワイヤレスイヤホン</text>
+                <text x="335" y="430" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#ef4444">¥5,480</text>
+
+                <!-- Card 3 -->
+                <rect x="445" y="260" width="180" height="200" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+                <rect x="457" y="272" width="156" height="120" rx="8" fill="#f1f5f9"/>
+                <text x="535" y="340" font-family="sans-serif" font-size="28" text-anchor="middle">⌚</text>
+                <text x="535" y="410" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#1e293b">スマートウォッチ</text>
+                <text x="535" y="430" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#ef4444">¥12,800</text>
+
+                <!-- Card 4 -->
+                <rect x="645" y="260" width="180" height="200" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+                <rect x="657" y="272" width="156" height="120" rx="8" fill="#f1f5f9"/>
+                <text x="735" y="340" font-family="sans-serif" font-size="28" text-anchor="middle">📷</text>
+                <text x="735" y="410" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#1e293b">ミラーレスカメラ</text>
+                <text x="735" y="430" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#ef4444">¥89,800</text>
+
+                <!-- Section Title 2 -->
+                <text x="45" y="490" font-family="sans-serif" font-size="20" font-weight="bold" fill="#1e293b">⭐ おすすめカテゴリー</text>
+
+                <!-- Category pills -->
+                <rect x="45" y="500" width="80" height="28" rx="14" fill="#dbeafe"/>
+                <text x="85" y="519" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#1d4ed8">ファッション</text>
+
+                <rect x="135" y="500" width="70" height="28" rx="14" fill="#dcfce7"/>
+                <text x="170" y="519" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#15803d">家電</text>
+
+                <rect x="215" y="500" width="70" height="28" rx="14" fill="#fef3c7"/>
+                <text x="250" y="519" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#b45309">本</text>
+
+                <rect x="295" y="500" width="80" height="28" rx="14" fill="#f3e8ff"/>
+                <text x="335" y="519" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#7c3aed">スポーツ</text>
+
+                <!-- Footer hint -->
+                <rect x="0" y="460" width="900" height="60" fill="#f1f5f9"/>
+                <text x="450" y="495" font-family="sans-serif" font-size="12" text-anchor="middle" fill="#94a3b8">© 2024 ShopName — All rights reserved</text>
+            </svg>
+        </div>
+
+        <!-- 商品詳細ページ -->
+        <h3>🛍️ 商品詳細ページ レイアウト</h3>
+        <div class="svg-wrapper">
+            <svg width="900" height="480" viewBox="0 0 900 480" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;">
+                <rect width="900" height="480" rx="12" fill="#f8fafc"/>
+
+                <!-- Breadcrumb -->
+                <text x="45" y="30" font-family="sans-serif" font-size="12" fill="#94a3b8">ホーム &gt; カテゴリ &gt; 商品詳細</text>
+
+                <!-- Product Image Area -->
+                <rect x="45" y="50" width="360" height="340" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+                <rect x="57" y="62" width="336" height="260" rx="8" fill="#f1f5f9"/>
+                <text x="225" y="200" font-family="sans-serif" font-size="64" text-anchor="middle">👟</text>
+
+                <!-- Thumbnail images -->
+                <rect x="57" y="338" width="60" height="40" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
+                <text x="87" y="363" font-family="sans-serif" font-size="16" text-anchor="middle">👟</text>
+
+                <rect x="127" y="338" width="60" height="40" rx="6" fill="#f1f5f9"/>
+                <text x="157" y="363" font-family="sans-serif" font-size="16" text-anchor="middle">👟</text>
+
+                <rect x="197" y="338" width="60" height="40" rx="6" fill="#f1f5f9"/>
+                <text x="227" y="363" font-family="sans-serif" font-size="16" text-anchor="middle">👟</text>
+
+                <!-- Product Info -->
+                <rect x="430" y="50" width="425" height="340" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+
+                <text x="460" y="90" font-family="sans-serif" font-size="11" class="badge badge-green">在庫あり</text>
+                <text x="530" y="90" font-family="sans-serif" font-size="11" fill="#f59e0b">★★★★★ 4.8 (128件)</text>
+
+                <text x="460" y="125" font-family="sans-serif" font-size="24" font-weight="bold" fill="#1e293b">プレミアムスポーツシューズ</text>
+                <text x="460" y="150" font-family="sans-serif" font-size="13" fill="#64748b">軽量・クッション性抜群。ランニングから日常使いまで。</text>
+
+                <!-- Price -->
+                <rect x="460" y="165" width="200" height="50" rx="8" fill="#fef2f2"/>
+                <text x="475" y="195" font-family="sans-serif" font-size="28" font-weight="bold" fill="#ef4444">¥8,980</text>
+                <text x="630" y="195" font-family="sans-serif" font-size="14" fill="#94a3b8" text-decoration="line-through">¥12,800</text>
+
+                <!-- Color selection -->
+                <text x="460" y="250" font-family="sans-serif" font-size="13" font-weight="bold" fill="#374151">カラーを選択</text>
+                <circle cx="480" cy="275" r="14" fill="#1e293b"/>
+                <circle cx="510" cy="275" r="14" fill="#3b82f6"/>
+                <circle cx="540" cy="275" r="14" fill="#ef4444"/>
+                <circle cx="570" cy="275" r="14" fill="#10b981"/>
+
+                <!-- Size selection -->
+                <text x="460" y="315" font-family="sans-serif" font-size="13" font-weight="bold" fill="#374151">サイズを選択</text>
+                <rect x="460" y="325" width="40" height="32" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
+                <text x="480" y="346" font-family="sans-serif" font-size="12" text-anchor="middle">25cm</text>
+
+                <rect x="508" y="325" width="40" height="32" rx="6" fill="#f1f5f9"/>
+                <text x="528" y="346" font-family="sans-serif" font-size="12" text-anchor="middle">26cm</text>
+
+                <rect x="556" y="325" width="40" height="32" rx="6" fill="#f1f5f9"/>
+                <text x="576" y="346" font-family="sans-serif" font-size="12" text-anchor="middle">27cm</text>
+
+                <!-- Quantity -->
+                <text x="460" y="385" font-family="sans-serif" font-size="13" font-weight="bold" fill="#374151">数量</text>
+                <rect x="460" y="392" width="36" height="32" rx="6" fill="#f1f5f9"/>
+                <text x="478" y="413" font-family="sans-serif" font-size="14" text-anchor="middle">−</text>
+
+                <rect x="498" y="392" width="40" height="32" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+                <text x="518" y="413" font-family="sans-serif" font-size="14" text-anchor="middle">1</text>
+
+                <rect x="540" y="392" width="36" height="32" rx="6" fill="#f1f5f9"/>
+                <text x="558" y="413" font-family="sans-serif" font-size="14" text-anchor="middle">+</text>
+
+                <!-- Buttons -->
+                <rect x="460" y="438" width="200" height="44" rx="10" fill="#4f46e5"/>
+                <text x="560" y="465" font-family="sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#ffffff">🛒 カートに追加</text>
+
+                <rect x="672" y="438" width="160" height="44" rx="10" fill="#fef3c7"/>
+                <text x="752" y="465" font-family="sans-serif" font-size="14" text-anchor="middle">❤️ お気に入り</text>
+
+                <!-- Features -->
+                <rect x="430" y="400" width="425" height="8" fill="#f1f5f9"/>
+            </svg>
+        </div>
+    </div>
+
+    <!-- ===== 6. 購入フロー ===== -->
+    <div class="section">
+        <h2><span class="icon" style="background:#dcfce7;color:#10b981;">🔄</span> 購入ユーザーフロー</h2>
+        <p style="color:var(--text-muted);margin-bottom:1rem;">ゲスト/ログインユーザーの購買行動の流れ</p>
+
+        <div class="mermaid-container">
+            <pre class="mermaid">flowchart TD
+    Start(["👀 商品ページ閲覧"]) --> AddCart["🛒 カートに追加"]
+    AddCart --> CartPage["📋 カート画面"]
+
+    CartPage --> CheckoutBtn{"チェックアウト<br/>ボタン押下？"}
+    CheckoutBtn -- Yes --> LoginCheck{"ログイン済み？"}
+    CheckoutBtn -- No --> ContinueShop["🛍️ 買い物を続ける"]
+    ContinueShop --> Start
+
+    LoginCheck -- Yes --> GuestCheck{"ゲスト購入？"}
+    LoginCheck -- No --> LoginPage["🔐 ログイン画面"]
+    LoginPage --> SignupPage["📝 新規登録"]
+    SignupPage --> LoginPage
+
+    GuestCheck -- Yes --> GuestCheckout["👤 ゲストチェックアウト"]
+    GuestCheck -- No --> CheckoutForm["📝 配送情報入力"]
+
+    GuestCheckout --> CheckoutForm
+
+    CheckoutForm --> PaymentMethod{"決済方法選択"}
+    PaymentMethod -- クレジットカード --> Stripe["💳 Stripe決済"]
+    PaymentMethod -- コンビニ --> Konbini["🏪 コーポレートID発行"]
+    PaymentMethod -- 銀行振込 --> BankTransfer["🏦 口座情報表示"]
+
+    Stripe --> Confirm["✅ 注文確認画面"]
+    Konbini --> Confirm
+    BankTransfer --> Confirm
+
+    Confirm --> PayBtn{"支払い実行？"}
+    PayBtn -- Yes --> Success["🎉 購入完了"]
+    PayBtn -- No --> CheckoutForm
+
+    Success --> OrderEmail["📧 注文確認メール送信"]
+    OrderEmail --> MyOrders["📋 マイページ - 注文履歴"]
+
+    style Start fill:#dbeafe
+    style AddCart fill:#fef3c7
+    style CartPage fill:#fef3c7
+    style LoginPage fill:#fee2e2
+    style Success fill:#dcfce7
+    style Confirm fill:#f3e8ff
+            </pre>
+        </div>
+    </div>
+
+    <!-- ===== 7. 注文処理フロー（バックエンド） ===== -->
+    <div class="section">
+        <h2><span class="icon" style="background:#fef3c7;color:#f59e0b;">⚡</span> バックエンド注文処理フロー</h2>
+        <p style="color:var(--text-muted);margin-bottom:1rem;">決済から在庫更新、通知までのサーバーサイド処理の流れ</p>
+
+        <div class="mermaid-container">
+            <pre class="mermaid">sequenceDiagram
+    participant U as 👤 ユーザー
+    participant FE as 🖥️ フロントエンド<br/>(Next.js)
+    participant API as 🔧 APIサーバー<br/>(NestJS)
+    participant DB as 💾 PostgreSQL
+    participant Redis as ⚡ Redis
+    participant Stripe as 💳 Stripe
+    participant Mail as 📧 SendGrid
+
+    U->>FE: 注文情報送信
+    FE->>API: POST /api/orders (JWT認証)
+    API->>Redis: セッション検証
+    API->>DB: トランザクション開始
+
+    DB->>DB: 在庫チェック &amp; 予約
+    alt 在庫あり
+        DB-->>API: 注文レコード作成
+        API->>Stripe: createPaymentIntent
+        Stripe-->>API: client_secret返却
+        API-->>FE: 注文ID + client_secret
+
+        FE->>U: 決済画面表示
+        U->>FE: 決済情報入力
+        FE->>Stripe: confirmPayment
+        Stripe-->>FE: 決済成功
+        FE->>API: POST /api/orders/:id/pay
+
+        API->>DB: 注文ステータス更新<br/>(paid)
+        DB->>DB: 在庫確定減算
+        API->>Mail: 注文確認メール送信
+        Mail-->>U: 📧 メール配信
+        API-->>FE: 200 OK
+        FE->>U: 🎉 購入完了画面
+
+    else 在庫不足
+        DB-->>API: エラー
+        API-->>FE: 409 Conflict
+        FE->>U: ⚠️ 在庫切れメッセージ
+    end
+            </pre>
+        </div>
+    </div>
+
+    <!-- ===== 8. 管理画面構成 ===== -->
+    <div class="section">
+        <h2><span class="icon" style="background:#f3e8ff;color:#7c3aed;">🔧</span> 管理画面（Admin Dashboard）構成</h2>
+        <p style="color:var(--text-muted);margin-bottom:1rem;">運営者が使用するバックオフィス機能のレイアウト</p>
+
+        <div class="svg-wrapper">
+            <svg width="900" height="460" viewBox="0 0 900 460" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;">
+                <rect width="900" height="460" rx="12" fill="#f8fafc"/>
+
+                <!-- Sidebar -->
+                <rect x="0" y="0" width="200" height="460" rx="12" fill="#1e293b"/>
+                <text x="20" y="35" font-family="sans-serif" font-size="16" font-weight="bold" fill="#ffffff">⚙️ Admin</text>
+
+                <!-- Sidebar menu -->
+                <rect x="12" y="55" width="176" height="36" rx="8" fill="#334155"/>
+                <text x="90" y="78" font-family="sans-serif" font-size="13" text-anchor="middle" fill="#ffffff">📊 ダッシュボード</text>
+
+                <rect x="12" y="96" width="176" height="36" rx="8" fill="transparent"/>
+                <text x="90" y="119" font-family="sans-serif" font-size="13" text-anchor="middle" fill="#94a3b8">📦 商品管理</text>
+
+                <rect x="12" y="137" width="176" height="36" rx="8" fill="transparent"/>
+                <text x="90" y="160" font-family="sans-serif" font-size="13" text-anchor="middle" fill="#94a3b8">📋 注文管理</text>
+
+                <rect x="12" y="178" width="176" height="36" rx="8" fill="transparent"/>
+                <text x="90" y="201" font-family="sans-serif" font-size="13" text-anchor="middle" fill="#94a3b8">👥 顧客管理</text>
+
+                <rect x="12" y="219" width="176" height="36" rx="8" fill="transparent"/>
+                <text x="90" y="242" font-family="sans-serif" font-size="13" text-anchor="middle" fill="#94a3b8">📈 売上分析</text>
+
+                <rect x="12" y="260" width="176" height="36" rx="8" fill="transparent"/>
+                <text x="90" y="283" font-family="sans-serif" font-size="13" text-anchor="middle" fill="#94a3b8">🏷️ プロモーション</text>
+
+                <rect x="12" y="301" width="176" height="36" rx="8" fill="transparent"/>
+                <text x="90" y="324" font-family="sans-serif" font-size="13" text-anchor="middle" fill="#94a3b8">📝 レビュー管理</text>
+
+                <rect x="12" y="342" width="176" height="36" rx="8" fill="transparent"/>
+                <text x="90" y="365" font-family="sans-serif" font-size="13" text-anchor="middle" fill="#94a3b8">⚙️ 設定</text>
+
+                <!-- Main Content -->
+                <rect x="212" y="0" width="688" height="460" rx="12" fill="#ffffff"/>
+
+                <!-- Top bar -->
+                <rect x="212" y="0" width="688" height="56" fill="#f8fafc"/>
+                <text x="235" y="34" font-family="sans-serif" font-size="18" font-weight="bold" fill="#1e293b">📊 ダッシュボード</text>
+
+                <!-- Date filter -->
+                <rect x="700" y="14" width="160" height="28" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+                <text x="780" y="33" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#64748b">📅 今月</text>
+
+                <!-- Stats Cards -->
+                <rect x="235" y="72" width="150" height="90" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+                <text x="310" y="100" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#64748b">売上</text>
+                <text x="310" y="135" font-family="sans-serif" font-size="22" font-weight="bold" text-anchor="middle" fill="#1e293b">¥2,450,000</text>
+                <text x="310" y="152" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#10b981">▲ 12.5%</text>
+
+                <rect x="400" y="72" width="150" height="90" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+                <text x="475" y="100" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#64748b">注文数</text>
+                <text x="475" y="135" font-family="sans-serif" font-size="22" font-weight="bold" text-anchor="middle" fill="#1e293b">386件</text>
+                <text x="475" y="152" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#10b981">▲ 8.2%</text>
+
+                <rect x="565" y="72" width="150" height="90" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+                <text x="640" y="100" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#64748b">顧客数</text>
+                <text x="640" y="135" font-family="sans-serif" font-size="22" font-weight="bold" text-anchor="middle" fill="#1e293b">1,248人</text>
+                <text x="640" y="152" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#ef4444">▼ 2.1%</text>
+
+                <rect x="730" y="72" width="150" height="90" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+                <text x="805" y="100" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#64748b">平均単価</text>
+                <text x="805" y="135" font-family="sans-serif" font-size="22" font-weight="bold" text-anchor="middle" fill="#1e293b">¥6,347</text>
+                <text x="805" y="152" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#10b981">▲ 3.8%</text>
+
+                <!-- Chart area -->
+                <rect x="235" y="180" width="400" height="200" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+                <text x="255" y="205" font-family="sans-serif" font-size="13" font-weight="bold" fill="#374151">📈 月間売上推移</text>
+
+                <!-- Simple bar chart -->
+                <rect x="260" y="340" width="30" height="20" rx="3" fill="#818cf8"/>
+                <rect x="305" y="320" width="30" height="40" rx="3" fill="#818cf8"/>
+                <rect x="350" y="300" width="30" height="60" rx="3" fill="#818cf8"/>
+                <rect x="395" y="280" width="30" height="80" rx="3" fill="#818cf8"/>
+                <rect x="440" y="260" width="30" height="100" rx="3" fill="#818cf8"/>
+                <rect x="485" y="240" width="30" height="120" rx="3" fill="#4f46e5"/>
+
+                <!-- Chart labels -->
+                <text x="275" y="370" font-family="sans-serif" font-size="9" text-anchor="middle" fill="#94a3b8">1月</text>
+                <text x="320" y="370" font-family="sans-serif" font-size="9" text-anchor="middle" fill="#94a3b8">2月</text>
+                <text x="365" y="370" font-family="sans-serif" font-size="9" text-anchor="middle" fill="#94a3b8">3月</text>
+                <text x="410" y="370" font-family="sans-serif" font-size="9" text-anchor="middle" fill="#94a3b8">4月</text>
+                <text x="455" y="370" font-family="sans-serif" font-size="9" text-anchor="middle" fill="#94a3b8">5月</text>
+                <text x="500" y="370" font-family="sans-serif" font-size="9" text-anchor="middle" fill="#94a3b8">6月</text>
+
+                <!-- Recent Orders Table -->
+                <rect x="655" y="180" width="225" height="200" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+                <text x="675" y="205" font-family="sans-serif" font-size="13" font-weight="bold" fill="#374151">📋 最近の注文</text>
+
+                <!-- Table rows -->
+                <rect x="665" y="218" width="205" height="28" rx="4" fill="#f8fafc"/>
+                <text x="675" y="236" font-family="sans-serif" font-size="10" fill="#1e293b">#ORD-001</text>
+                <text x="760" y="236" font-family="sans-serif" font-size="10" fill="#64748b">田中太郎</text>
+                <rect x="850" y="224" width="16" height="16" rx="3" fill="#dcfce7"/>
+                <text x="858" y="236" font-family="sans-serif" font-size="8" text-anchor="middle" fill="#15803d">済</text>
+
+                <rect x="665" y="250" width="205" height="28" rx="4" fill="#f8fafc"/>
+                <text x="675" y="268" font-family="sans-serif" font-size="10" fill="#1e293b">#ORD-002</text>
+                <text x="760" y="268" font-family="sans-serif" font-size="10" fill="#64748b">鈴木花子</text>
+                <rect x="850" y="256" width="16" height="16" rx="3" fill="#fef3c7"/>
+                <text x="858" y="268" font-family="sans-serif" font-size="8" text-anchor="middle" fill="#b45309">処理中</text>
+
+                <rect x="665" y="282" width="205" height="28" rx="4" fill="#f8fafc"/>
+                <text x="675" y="300" font-family="sans-serif" font-size="10" fill="#1e293b">#ORD-003</text>
+                <text x="760" y="300" font-family="sans-serif" font-size="10" fill="#64748b">山田次郎</text>
+                <rect x="850" y="288" width="16" height="16" rx="3" fill="#dcfce7"/>
+                <text x="858" y="300" font-family="sans-serif" font-size="8" text-anchor="middle" fill="#15803d">済</text>
+
+                <rect x="665" y="314" width="205" height="28" rx="4" fill="#f8fafc"/>
+                <text x="675" y="332" font-family="sans-serif" font-size="10" fill="#1e293b">#ORD-004</text>
+                <text x="760" y="332" font-family="sans-serif" font-size="10" fill="#64748b">佐藤三子</text>
+                <rect x="850" y="320" width="16" height="16" rx="3" fill="#fee2e2"/>
+                <text x="858" y="332" font-family="sans-serif" font-size="8" text-anchor="middle" fill="#dc2626">取消</text>
+
+                <!-- Bottom section -->
+                <rect x="235" y="395" width="400" height="55" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+                <text x="255" y="418" font-family="sans-serif" font-size="12" font-weight="bold" fill="#374151">🔥 売上TOP商品</text>
+
+                <rect x="255" y="426" width="100" height="14" rx="3" fill="#dbeafe"/>
+                <text x="260" y="437" font-family="sans-serif" font-size="9" fill="#1d4ed8">👟 シューズ 45件</text>
+
+                <rect x="365" y="426" width="100" height="14" rx="3" fill="#dcfce7"/>
+                <text x="370" y="437" font-family="sans-serif" font-size="9" fill="#15803d">🎧 イヤホン 32件</text>
+
+                <rect x="475" y="426" width="100" height="14" rx="3" fill="#fef3c7"/>
+                <text x="480" y="437" font-family="sans-serif" font-size="9" fill="#b45309">⌚ ウォッチ 28件</text>
+
+                <!-- Right bottom -->
+                <rect x="655" y="395" width="225" height="55" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+                <text x="675" y="418" font-family="sans-serif" font-size="12" font-weight="bold" fill="#374151">⚠️ 在庫警告</text>
+
+                <rect x="675" y="426" width="190" height="14" rx="3" fill="#fee2e2"/>
+                <text x="680" y="437" font-family="sans-serif" font-size="9" fill="#dc2626">📷 カメラ (残り3個)</text>
+
+                <rect x="675" y="444" width="190" height="14" rx="3" fill="#fef3c7"/>
+                <text x="680" y="455" font-family="sans-serif" font-size="9" fill="#b45309">🎒 バックパック (残り5個)</text>
+            </svg>
+        </div>
+    </div>
+
+    <!-- ===== 9. API設計 ===== -->
+    <div class="section">
+        <h2><span class="icon" style="background:#fee2e2;color:#ef4444;">🔌</span> APIエンドポイント設計</h2>
+        <p style="color:var(--text-muted);margin-bottom:1rem;">RESTful APIの主要エンドポイント一覧</p>
+
+        <table class="spec-table">
+            <thead>
+                <tr>
+                    <th>メソッド</th>
+                    <th>エンドポイント</th>
+                    <th>説明</th>
+                    <th>認証</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/products</code></td><td>商品一覧（分页・フィルター・検索）</td><td>公開</td></tr>
+                <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/products/:slug</code></td><td>商品詳細情報</td><td>公開</td></tr>
+                <tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/cart</code></td><td>カートに追加</td><td>必須</td></tr>
+                <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/cart</code></td><td>カート内容取得</td><td>必須</td></tr>
+                <tr><td><span class="badge badge-orange">PUT</span></td><td><code>/api/cart/items/:id</code></td><td>カート商品更新（数量等）</td><td>必須</td></tr>
+                <tr><td><span class="badge badge-red">DELETE</span></td><td><code>/api/cart/items/:id</code></td><td>カートから削除</td><td>必須</td></tr>
+                <tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/orders</code></td><td>注文作成</td><td>必須</td></tr>
+                <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/orders/:id</code></td><td>注文詳細取得</td><td>必須（本人のみ）</td></tr>
+                <tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/payments/intent</code></td><td>決済インテント作成</td><td>必須</td></tr>
+                <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/categories</code></td><td>カテゴリー一覧</td><td>公開</td></tr>
+                <tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/auth/register</code></td><td>新規登録</td><td>公開</td></tr>
+                <tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/auth/login</code></td><td>ログイン（JWT発行）</td><td>公開</td></tr>
+                <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/reviews/:productId</code></td><td>商品レビュー一覧</td><td>公開</td></tr>
+                <tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/admin/products</code></td><td>商品登録（管理画面）</td><td>管理者</td></tr>
+                <tr><td><span class="badge badge-orange">PUT</span></td><td><code>/api/admin/orders/:id/status</code></td><td>注文ステータス更新</td><td>管理者</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ===== 10. セキュリティ設計 ===== -->
+    <div class="section">
+        <h2><span class="icon" style="background:#dcfce7;color:#10b981;">🔒</span> セキュリティ設計</h2>
+        <p style="color:var(--text-muted);margin-bottom:1rem;">ECサイトにおける主要なセキュリティ対策</p>
+
+        <div class="two-col">
+            <div>
+                <h3>認証・認可</h3>
+                <ul style="padding-left:1.25rem;color:var(--text-muted);font-size:0.9rem;">
+                    <li><strong>JWT (JSON Web Token)</strong> によるセッション管理</li>
+                    <li><strong>OAuth 2.0</strong> 対応（Google / Apple ログイン）</li>
+                    <li><strong>BCrypt</strong> パスワードハッシュ化</li>
+                    <li><strong>RBAC</strong> ロールベースアクセス制御（一般/管理者）</li>
+                    <li>トークン有効期限: Access 15分 / Refresh 7日</li>
+                </ul>
+
+                <h3>データ保護</h3>
+                <ul style="padding-left:1.25rem;color:var(--text-muted);font-size:0.9rem;">
+                    <li><strong>TLS 1.3</strong> 通信暗号化（HTTPS必須）</li>
+                    <li><strong>PDO / Prisma</strong> によるSQLインジェクション対策</li>
+                    <li>XSS対策: CSPヘッダー + サニタイズ</li>
+                    <li>CSRF対策: SameSite Cookie + CSRF Token</li>
+                </ul>
+            </div>
+            <div>
+                <h3>決済セキュリティ</h3>
+                <ul style="padding-left:1.25rem;color:var(--text-muted);font-size:0.9rem;">
+                    <li><strong>PCI DSS Level 1</strong>準拠（Stripe利用で肩代わり）</li>
+                    <li>カード情報直接保存しない（トークン化）</li>
+                    <li>Webhook署名検証による改ざん防止</li>
+                </ul>
+
+                <h3>インフラセキュリティ</h3>
+                <ul style="padding-left:1.25rem;color:var(--text-muted);font-size:0.9rem;">
+                    <li><strong>WAF</strong> によるWeb攻撃遮断</li>
+                    <li><strong>DDoS対策</strong> CloudFront + Shield</li>
+                    <li>VPC内でのDB配置（パブリックアクセス禁止）</li>
+                    <li>定期的なセキュリティ監査・脆弱性スキャン</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 11. パフォーマンス最適化 ===== -->
+    <div class="section">
+        <h2><span class="icon" style="background:#fef3c7;color:#f59e0b;">🚀</span> パフォーマンス最適化戦略</h2>
+
+        <table class="spec-table">
+            <thead>
+                <tr>
+                    <th>施策</th>
+                    <th>対象</th>
+                    <th>手法</th>
+                    <th>期待効果</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td><span class="badge badge-blue">CDN</span></td><td>静的ファイル・画像</td><td>CloudFront + S3 Origin</td><td>グローバル高速配信</td></tr>
+                <tr><td><span class="badge badge-green">キャッシュ</span></td><td>商品一覧・詳細</td><td>Redis (TTL: 5分〜1時間)</td><td>DB負荷 80%削減</td></tr>
+                <tr><td><span class="badge badge-orange">SSR/ISR</span></td><td>ページレンダリング</td><td>Next.js ISR (revalidate: 60s)</td><td>SEO + FCP改善</td></tr>
+                <tr><td><span class="badge badge-purple">検索</span></td><td>商品検索</td><td>Elasticsearch (インデックス)</td><td>全文検索・高速</td></tr>
+                <tr><td><span class="badge badge-red">画像最適化</span></td><td>商品画像</td><td>WebP形式 + 遅延読み込み</td><td>転送量 60%削減</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<footer>
+    <p>📐 ECサイト設計図 — System Design Document v1.0</p>
+    <p style="margin-top:0.5rem;">Mermaid.js + SVG で構成されたインタラクティブな設計ドキュメント</p>
+</footer>
+
+<script>
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'default',
+        flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
+        er: { useMaxWidth: true },
+        sequence: { useMaxWidth: true }
+    });
+</script>
+
+</body>
+</html>
