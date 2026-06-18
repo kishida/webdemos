@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>色覚シミュレーター</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f5f3ee;
+  --surface: #ffffff;
+  --surface2: #eeece7;
+  --border: rgba(0,0,0,0.1);
+  --border2: rgba(0,0,0,0.18);
+  --text: #1a1815;
+  --text2: #6b6760;
+  --text3: #9e9b96;
+  --accent: #2b5cff;
+  --accent-bg: #edf1ff;
+  --danger-bg: #fff1f0;
+  --danger-text: #c0392b;
+  --success-bg: #f0faf4;
+  --success-text: #1e7e45;
+  --radius: 12px;
+  --radius-sm: 7px;
+}
+
+body {
+  font-family: 'Noto Sans JP', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 2rem 1.5rem 4rem;
+}
+
+header {
+  max-width: 960px;
+  margin: 0 auto 2rem;
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+.subtitle { font-size: 13px; color: var(--text2); }
+
+.main { max-width: 960px; margin: 0 auto; }
+
+.drop-zone {
+  border: 2px dashed var(--border2);
+  border-radius: var(--radius);
+  padding: 3rem 2rem;
+  text-align: center;
+  cursor: pointer;
+  background: var(--surface);
+  transition: border-color 0.15s, background 0.15s;
+  user-select: none;
+}
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+.drop-icon { font-size: 40px; margin-bottom: 12px; }
+.drop-title { font-size: 16px; font-weight: 500; margin-bottom: 6px; }
+.drop-hint { font-size: 13px; color: var(--text2); }
+.drop-hint kbd {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--text);
+}
+
+.btn {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 13px;
+  padding: 7px 14px;
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.1s;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.btn:hover { background: var(--surface2); }
+
+#result-area { display: none; margin-top: 1.5rem; }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.info { font-size: 12px; color: var(--text3); margin-left: auto; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.sim-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.sim-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  transform: translateY(-2px);
+}
+.sim-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 7px 10px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  line-height: 1.4;
+}
+.badge {
+  font-size: 10px;
+  font-family: 'DM Mono', monospace;
+  padding: 1px 6px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+.badge-common { background: var(--danger-bg); color: var(--danger-text); }
+.badge-rare   { background: var(--success-bg); color: var(--success-text); }
+.sim-canvas { width: 100%; display: block; }
+
+#modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 999;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+#modal.open { display: flex; }
+.modal-inner {
+  background: var(--surface);
+  border-radius: var(--radius);
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: auto;
+  padding: 1rem;
+  min-width: 280px;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  gap: 1rem;
+}
+.modal-title { font-size: 15px; font-weight: 500; }
+.modal-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  color: var(--text2);
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.modal-close:hover { background: var(--surface2); }
+#modal-canvas { display: block; max-width: 80vw; max-height: 75vh; }
+
+footer {
+  max-width: 960px;
+  margin: 2.5rem auto 0;
+  font-size: 12px;
+  color: var(--text3);
+  text-align: center;
+  line-height: 1.8;
+}
+
+#status {
+  font-size: 13px;
+  color: var(--text2);
+  margin-top: 10px;
+  min-height: 20px;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎨 色覚シミュレーター</h1>
+  <span class="subtitle">ユニバーサルデザイン配色チェックツール</span>
+</header>
+
+<main class="main">
+  <div class="drop-zone" id="drop-zone">
+    <div class="drop-icon">🖼️</div>
+    <div class="drop-title">クリックして画像を選択</div>
+    <div class="drop-hint" style="margin-top:6px;">またはここにドロップ &nbsp;|&nbsp; PNG・JPG・WebP 対応</div>
+    <div style="margin-top:14px; display:flex; gap:8px; justify-content:center; align-items:center; flex-wrap:wrap;">
+      <span class="drop-hint">キーボード: <kbd>Ctrl+V</kbd> / <kbd>⌘V</kbd></span>
+      <span class="drop-hint">または</span>
+      <button id="paste-btn" class="btn" style="font-size:13px; padding:5px 14px;">📋 クリップボードから貼り付け</button>
+    </div>
+  </div>
+  <input type="file" id="file-input" accept="image/*" style="display:none;">
+  <div id="status"></div>
+
+  <div id="result-area">
+    <div class="toolbar">
+      <button class="btn" id="reload-btn">↩ 別の画像を読み込む</button>
+      <span class="info">各カードをクリックで拡大</span>
+    </div>
+    <div class="grid" id="sim-grid"></div>
+  </div>
+</main>
+
+<footer>
+  画像はすべてブラウザ内で処理されます。外部サーバーへの送信は一切行いません。<br>
+  色覚シミュレーションは Viénot et al. / Brettel et al. のアルゴリズムに基づいています。
+</footer>
+
+<div id="modal">
+  <div class="modal-inner">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-label"></span>
+      <button class="modal-close" id="modal-close-btn" aria-label="閉じる">✕</button>
+    </div>
+    <canvas id="modal-canvas"></canvas>
+  </div>
+</div>
+
+<script>
+const SIM_TYPES = [
+  { id: 'normal',        label: '通常の色覚',           badge: null,     matrix: null },
+  { id: 'deuteranopia',  label: '2型2色覚（緑覚異常）',  badge: 'common', matrix: [0.367,0.861,-0.228, 0.367,0.861,-0.228, -0.009,0.041,0.968] },
+  { id: 'protanopia',    label: '1型2色覚（赤覚異常）',  badge: 'common', matrix: [0.153,0.772,0.075,  0.153,0.772,0.075,  -0.002,0.014,0.988] },
+  { id: 'tritanopia',    label: '3型2色覚（青覚異常）',  badge: 'rare',   matrix: [1.255,-0.077,-0.178, -0.078,0.931,0.148,  0.005,0.691,0.304] },
+  { id: 'deuteranomaly', label: '2型異常3色覚（軽度）',  badge: 'common', matrix: [0.575,0.424,0.002,  0.167,0.832,0.001,  0.000,0.015,0.985] },
+  { id: 'protanomaly',   label: '1型異常3色覚（軽度）',  badge: 'common', matrix: [0.458,0.512,0.030,  0.157,0.829,0.015, -0.008,0.030,0.978] },
+  { id: 'achromatopsia', label: '全色覚異常（モノクロ）', badge: 'rare',   matrix: [0.299,0.587,0.114,  0.299,0.587,0.114,  0.299,0.587,0.114] },
+];
+
+function setStatus(msg) {
+  document.getElementById('status').textContent = msg;
+}
+
+function applyMatrix(imageData, matrix) {
+  const src = imageData.data;
+  const dst = new Uint8ClampedArray(src.length);
+  const [r0,r1,r2, g0,g1,g2, b0,b1,b2] = matrix;
+  for (let i = 0; i < src.length; i += 4) {
+    const r = src[i], g = src[i+1], b = src[i+2];
+    dst[i]   = Math.min(255, Math.max(0, r*r0 + g*r1 + b*r2));
+    dst[i+1] = Math.min(255, Math.max(0, r*g0 + g*g1 + b*g2));
+    dst[i+2] = Math.min(255, Math.max(0, r*b0 + g*b1 + b*b2));
+    dst[i+3] = src[i+3];
+  }
+  return new ImageData(dst, imageData.width, imageData.height);
+}
+
+function renderAll(img) {
+  setStatus('処理中...');
+
+  const MAX = 680;
+  let w = img.naturalWidth || img.width;
+  let h = img.naturalHeight || img.height;
+  if (!w || !h) { setStatus('画像サイズを取得できませんでした。'); return; }
+  if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+
+  const base = document.createElement('canvas');
+  base.width = w;
+  base.height = h;
+  const bctx = base.getContext('2d');
+  bctx.drawImage(img, 0, 0, w, h);
+  const baseData = bctx.getImageData(0, 0, w, h);
+
+  const grid = document.getElementById('sim-grid');
+  grid.innerHTML = '';
+
+  SIM_TYPES.forEach(function(sim) {
+    const card = document.createElement('div');
+    card.className = 'sim-card';
+
+    let labelHtml = sim.label;
+    if (sim.badge) {
+      const txt = sim.badge === 'common' ? '頻度高' : '希少';
+      labelHtml += '<span class="badge badge-' + sim.badge + '">' + txt + '</span>';
+    }
+    card.innerHTML = '<div class="sim-label">' + labelHtml + '</div>';
+
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    c.className = 'sim-canvas';
+    const cctx = c.getContext('2d');
+
+    if (!sim.matrix) {
+      cctx.putImageData(baseData, 0, 0);
+    } else {
+      cctx.putImageData(applyMatrix(baseData, sim.matrix), 0, 0);
+    }
+
+    card.appendChild(c);
+    (function(label, canvas) {
+      card.addEventListener('click', function() { openModal(label, canvas); });
+    })(sim.label, c);
+
+    grid.appendChild(card);
+  });
+
+  document.getElementById('result-area').style.display = 'block';
+  document.getElementById('drop-zone').style.display = 'none';
+  setStatus('');
+}
+
+function loadFile(file) {
+  if (!file) { setStatus('ファイルが取得できませんでした。'); return; }
+  var validTypes = ['image/png','image/jpeg','image/jpg','image/gif','image/webp','image/bmp','image/svg+xml'];
+  if (file.type && !file.type.startsWith('image/')) {
+    setStatus('画像ファイルを選択してください（PNG・JPG・WebP）。'); return;
+  }
+  setStatus('読み込み中...');
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() { renderAll(img); };
+    img.onerror = function() { setStatus('画像のデコードに失敗しました。別の画像をお試しください。'); };
+    img.src = e.target.result;
+  };
+  reader.onerror = function() { setStatus('ファイルの読み込みに失敗しました。'); };
+  reader.readAsDataURL(file);
+}
+
+function openModal(label, canvas) {
+  const mc = document.getElementById('modal-canvas');
+  document.getElementById('modal-label').textContent = label;
+  mc.width = canvas.width;
+  mc.height = canvas.height;
+  mc.getContext('2d').drawImage(canvas, 0, 0);
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+}
+
+function resetView() {
+  document.getElementById('result-area').style.display = 'none';
+  document.getElementById('drop-zone').style.display = '';
+  document.getElementById('file-input').value = '';
+  setStatus('');
+}
+
+// ファイル選択（ドロップゾーンクリック）
+document.getElementById('drop-zone').addEventListener('click', function(e) {
+  if (e.target.id === 'paste-btn') return;
+  document.getElementById('file-input').click();
+});
+
+// ファイル入力変更
+document.getElementById('file-input').addEventListener('change', function() {
+  if (this.files && this.files.length > 0) {
+    loadFile(this.files[0]);
+  }
+});
+
+// 別の画像ボタン
+document.getElementById('reload-btn').addEventListener('click', resetView);
+
+// ドラッグ&ドロップ
+var dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', function() { dz.classList.remove('drag-over'); });
+dz.addEventListener('drop', function(e) {
+  e.preventDefault();
+  dz.classList.remove('drag-over');
+  var files = e.dataTransfer.files;
+  if (files && files.length > 0) loadFile(files[0]);
+});
+
+// ペースト（キーボード ⌘V / Ctrl+V）
+document.addEventListener('paste', function(e) {
+  var items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].type.startsWith('image/')) {
+      e.preventDefault();
+      loadFile(items[i].getAsFile());
+      return;
+    }
+  }
+});
+
+// ペーストボタン（Clipboard API）
+document.getElementById('paste-btn').addEventListener('click', function(e) {
+  e.stopPropagation();
+  if (!navigator.clipboard || !navigator.clipboard.read) {
+    setStatus('このブラウザはクリップボードAPIに対応していません。⌘V / Ctrl+V をお使いください。');
+    return;
+  }
+  navigator.clipboard.read().then(function(items) {
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      for (var j = 0; j < item.types.length; j++) {
+        if (item.types[j].startsWith('image/')) {
+          item.getType(item.types[j]).then(function(blob) { loadFile(blob); });
+          return;
+        }
+      }
+    }
+    setStatus('クリップボードに画像が見つかりませんでした。');
+  }).catch(function() {
+    setStatus('クリップボードへのアクセスが許可されていません。⌘V / Ctrl+V をお試しください。');
+  });
+});
+
+// モーダル
+document.getElementById('modal-close-btn').addEventListener('click', closeModal);
+document.getElementById('modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeModal();
+});
+</script>
+</body>
+</html>
