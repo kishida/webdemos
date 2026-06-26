@@ -2,6 +2,12 @@
 Web Demos  
 https://kishida.github.io/webdemos/
 
+## Amp Sim
+[Guitar Amp Simulator](ampsim/guitar-amp-sim.html)  
+![Amp Sim](assets/ampsim.png)  
+
+2026/06/26
+
 ## EC Demo
 [EC Demo](ecdemo/ec-demo.html)  
 ![EC Demo](assets/ecdemo.png)  

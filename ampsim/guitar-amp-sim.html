@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<meta property="og:title" content="Guitar Amp Simulator">
+<meta property="og:description" content="Guitar Amp Simulator">
+<meta property="og:image" content="https://kishida.github.io/webdemos/ampsim/ogp.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/ampsim/guitar-amp-sim.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<title>Guitar Amp & FX Simulator</title>
+<style>
+  :root {
+    --bg0: #14110e;
+    --bg1: #1c1815;
+    --rack-rail: #2a2622;
+    --text: #ece6db;
+    --text-dim: #9b9286;
+    --brass: #c9a14a;
+    --led-on: #ff5a3c;
+    --on: #5dd66f;
+    --enclosure: #b23b30;
+    --metal-hi: #6a6661;
+    --metal-lo: #2a2724;
+    --wood1: #6b4326;
+    --wood2: #4a2c17;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    background:
+      radial-gradient(120% 80% at 50% -10%, #25201b 0%, var(--bg0) 60%),
+      var(--bg0);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 22px 22px 60px;
+  }
+
+  /* ===== Header / Master panel ===== */
+  header {
+    display: flex; justify-content: space-between; align-items: stretch;
+    gap: 18px; flex-wrap: wrap; margin-bottom: 22px;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand-mark {
+    font-size: 30px; color: var(--brass);
+    text-shadow: 0 1px 0 #000, 0 0 18px rgba(201,161,74,0.35);
+    letter-spacing: -4px;
+  }
+  .brand-text h1 {
+    font-size: 26px; font-weight: 800; letter-spacing: 3px;
+    color: var(--text);
+    text-shadow: 0 1px 0 #000, 0 2px 3px rgba(0,0,0,0.6);
+  }
+  .subtitle { font-size: 10px; letter-spacing: 3px; color: var(--text-dim); margin-top: 3px; }
+
+  .master-panel {
+    display: flex; align-items: center; gap: 20px;
+    padding: 14px 20px;
+    border-radius: 10px;
+    background:
+      linear-gradient(180deg, #3a3631, #211d19);
+    border: 1px solid #000;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 20px rgba(0,0,0,0.5);
+    position: relative;
+  }
+  .master-panel::before, .master-panel::after {
+    content: ''; position: absolute; top: 50%; width: 11px; height: 11px;
+    border-radius: 50%; transform: translateY(-50%);
+    background: radial-gradient(circle at 35% 30%, #d8d2c6, #6a655c 60%, #2a2620);
+    box-shadow: inset 0 0 2px #000;
+  }
+  .master-panel::before { left: 7px; } .master-panel::after { right: 7px; }
+
+  .meters { display: flex; flex-direction: column; gap: 5px; min-width: 180px; }
+  .meter-row { display: flex; align-items: center; gap: 8px; }
+  .meter-tag { font-size: 10px; color: var(--text-dim); width: 28px; letter-spacing: 1px; }
+  .level-meter {
+    flex: 1; height: 9px; background: #0a0908; border-radius: 3px;
+    overflow: hidden; border: 1px solid #000;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.8);
+  }
+  .level-bar {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--on) 0%, #d4d44a 65%, #ff3b3b 100%);
+    transition: width 0.05s;
+  }
+  .sig-row { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
+  .sig-lamp { display: flex; align-items: center; gap: 5px; font-size: 9px; color: var(--text-dim); letter-spacing: 1px; }
+  .sig-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #1a1714; border: 1px solid #000;
+    box-shadow: inset 0 1px 1px rgba(0,0,0,0.8);
+    transition: all 0.08s;
+  }
+  .sig-dot.sig-on { background: var(--on); box-shadow: 0 0 9px var(--on), inset 0 0 2px #fff; }
+  .sig-dot.clip-on { background: #ff3b3b; box-shadow: 0 0 10px #ff3b3b, inset 0 0 2px #fff; }
+  .status-text { font-size: 9px; letter-spacing: 1.5px; color: var(--brass); margin-left: auto; }
+
+  .master-knob { display: flex; align-items: flex-end; }
+
+  .scene-box { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .scene-label { font-size: 8px; letter-spacing: 2px; color: var(--text-dim); }
+  .scene-buttons { display: flex; gap: 4px; }
+  .scene-btn {
+    width: 24px; height: 28px; border-radius: 5px; cursor: pointer;
+    background: linear-gradient(180deg, #3a3631, #1d1a16);
+    border: 1px solid #000; color: var(--text-dim);
+    font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 4px rgba(0,0,0,0.5);
+    transition: all 0.12s;
+  }
+  .scene-btn:hover { border-color: var(--brass); color: var(--text); }
+  .scene-btn.active {
+    background: linear-gradient(180deg, var(--brass), #8a6a26);
+    color: #1a1308; border-color: var(--brass);
+    box-shadow: 0 0 12px rgba(201,161,74,0.5), inset 0 1px 0 rgba(255,255,255,0.3);
+  }
+
+  .power {
+    display: flex; align-items: center; gap: 8px;
+    background: linear-gradient(180deg, #4a4641, #26221e);
+    color: var(--text); border: 1px solid #000;
+    padding: 12px 18px; border-radius: 8px;
+    font-size: 12px; font-weight: 700; letter-spacing: 2px; cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 3px 6px rgba(0,0,0,0.5);
+    transition: all 0.15s;
+  }
+  .power:hover { border-color: var(--brass); }
+  .power-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #3a2420; box-shadow: inset 0 0 2px #000;
+  }
+  .power.live { box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 0 18px rgba(255,90,60,0.35); }
+  .power.live .power-dot { background: var(--led-on); box-shadow: 0 0 9px var(--led-on), inset 0 0 2px #fff; }
+
+  /* ===== Rack rows ===== */
+  .rack { display: flex; flex-direction: column; gap: 16px; max-width: 1180px; margin: 0 auto; }
+  .rack-row {
+    background: linear-gradient(180deg, #211d19, #18140f);
+    border: 1px solid #000;
+    border-radius: 12px;
+    padding: 12px 16px 16px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 6px 16px rgba(0,0,0,0.4);
+    position: relative;
+  }
+  .row-label {
+    font-size: 9px; letter-spacing: 3px; color: var(--text-dim);
+    margin-bottom: 12px; padding-left: 2px;
+    border-left: 3px solid var(--brass); padding-left: 8px;
+  }
+  .row-units { display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap; }
+  .unit.amp .amp-panel { flex: 1; display: flex; flex-direction: column; }
+  .unit.amp .knob-bank { margin-top: auto; }
+
+  /* ===== Common knob ===== */
+  .knob-bank, .cab-controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+  .knob-wrap { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 58px; }
+  .knob {
+    width: 46px; height: 46px; border-radius: 50%; position: relative; cursor: ns-resize;
+    touch-action: none;
+    background:
+      radial-gradient(circle at 38% 30%, #555049 0%, #2a2723 55%, #100e0c 100%);
+    border: 1px solid #000;
+    box-shadow:
+      inset 0 2px 3px rgba(255,255,255,0.12),
+      inset 0 -3px 5px rgba(0,0,0,0.7),
+      0 2px 4px rgba(0,0,0,0.5);
+  }
+  .knob::before {
+    content: ''; position: absolute; inset: 9px; border-radius: 50%;
+    background: repeating-conic-gradient(#1a1815 0deg 6deg, #2c2925 6deg 12deg);
+    box-shadow: inset 0 0 4px rgba(0,0,0,0.8);
+  }
+  .knob-pointer {
+    position: absolute; top: 4px; left: 50%; width: 3px; height: 15px;
+    background: var(--brass); border-radius: 2px;
+    transform-origin: 50% 19px; transform: translateX(-50%) rotate(var(--rot, -135deg));
+    box-shadow: 0 0 4px rgba(201,161,74,0.6); z-index: 2;
+  }
+  .knob-label { font-size: 9px; color: rgba(255,255,255,0.82); text-transform: uppercase; letter-spacing: 1px; text-shadow: 0 1px 2px rgba(0,0,0,0.7); }
+  .knob-val { font-size: 10px; color: rgba(255,255,255,0.95); font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px rgba(0,0,0,0.7); }
+
+  select {
+    background: #1a1714; color: var(--text);
+    border: 1px solid #000; border-radius: 5px;
+    padding: 5px 6px; font-size: 10px; letter-spacing: 1px;
+  }
+  .select-wrap { width: 64px; }
+
+  /* ===== Foot / power switch ===== */
+  .foot-switch {
+    margin-top: 12px; width: 100%; height: 26px;
+    background: radial-gradient(circle at 50% 0%, #c8c4bd, #5a5650 70%, #2c2926);
+    border: 1px solid #000; border-radius: 6px; cursor: pointer;
+    box-shadow: inset 0 1px 1px rgba(255,255,255,0.4), 0 2px 3px rgba(0,0,0,0.6);
+    position: relative;
+  }
+  .foot-switch::after {
+    content: 'OFF'; position: absolute; inset: 0; display: flex;
+    align-items: center; justify-content: center;
+    font-size: 8px; font-weight: 700; letter-spacing: 1px; color: #3a3733;
+  }
+  .foot-switch.on::after { content: 'ON'; color: #1d3a1f; }
+  .amp-power { margin-top: 0; width: 80px; height: 22px; }
+
+  /* ===== Pedal ===== */
+  .unit { transition: opacity 0.2s, filter 0.2s; }
+  .unit.off { opacity: 0.5; filter: grayscale(0.5); }
+
+  .unit.pedal {
+    width: auto; min-width: 150px; padding: 14px 14px 12px;
+    border-radius: 10px; position: relative;
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--enclosure) 88%, #fff 12%), var(--enclosure) 45%, color-mix(in srgb, var(--enclosure) 70%, #000 30%));
+    border: 1px solid #000;
+    box-shadow:
+      inset 0 2px 3px rgba(255,255,255,0.25),
+      inset 0 -4px 8px rgba(0,0,0,0.35),
+      0 6px 14px rgba(0,0,0,0.5);
+  }
+  .unit.pedal .led {
+    position: absolute; top: 11px; left: 50%; transform: translateX(-50%);
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #401612; border: 1px solid rgba(0,0,0,0.6);
+    box-shadow: inset 0 0 2px #000;
+  }
+  .unit.pedal:not(.off) .led {
+    background: var(--led-on);
+    box-shadow: 0 0 10px var(--led-on), 0 0 3px #fff inset;
+  }
+  .unit-name {
+    text-align: center; font-size: 11px; font-weight: 800; letter-spacing: 1.5px;
+    color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+    margin: 22px 0 12px; text-transform: uppercase;
+  }
+  .screw {
+    position: absolute; width: 9px; height: 9px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #d8d2c6, #4a4640 70%, #1a1714);
+    box-shadow: inset 0 0 2px #000;
+  }
+  .screw::after {
+    content: ''; position: absolute; inset: 2px; border-top: 1.5px solid rgba(0,0,0,0.5);
+    transform: rotate(35deg);
+  }
+  .screw.tl { top: 6px; left: 6px; } .screw.tr { top: 6px; right: 6px; }
+  .screw.bl { bottom: 6px; left: 6px; } .screw.br { bottom: 6px; right: 6px; }
+
+  /* ===== Tuner ===== */
+  .unit.tuner {
+    width: auto; min-width: 168px; padding: 14px 14px 12px;
+    border-radius: 10px; position: relative;
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--enclosure) 88%, #fff 12%), var(--enclosure) 45%, color-mix(in srgb, var(--enclosure) 70%, #000 30%));
+    border: 1px solid #000;
+    box-shadow:
+      inset 0 2px 3px rgba(255,255,255,0.25),
+      inset 0 -4px 8px rgba(0,0,0,0.35),
+      0 6px 14px rgba(0,0,0,0.5);
+  }
+  .unit.tuner .led {
+    position: absolute; top: 11px; left: 50%; transform: translateX(-50%);
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #401612; border: 1px solid rgba(0,0,0,0.6);
+    box-shadow: inset 0 0 2px #000;
+  }
+  .unit.tuner:not(.off) .led {
+    background: var(--led-on);
+    box-shadow: 0 0 10px var(--led-on), 0 0 3px #fff inset;
+  }
+  .tuner-display {
+    background: #0a1410; border: 1px solid #000; border-radius: 6px;
+    padding: 8px 6px 6px; margin-bottom: 10px;
+    box-shadow: inset 0 0 14px rgba(0,0,0,0.85);
+  }
+  .tuner-note {
+    text-align: center; font-size: 30px; font-weight: 800;
+    font-variant-numeric: tabular-nums; line-height: 1;
+    color: #2c8f4a; text-shadow: 0 0 6px rgba(60,220,120,0.25);
+    transition: color 0.1s, text-shadow 0.1s;
+  }
+  .tuner-note.in-tune { color: #5dd66f; text-shadow: 0 0 12px rgba(93,214,111,0.7); }
+  .tuner-note small { font-size: 14px; vertical-align: super; opacity: 0.7; }
+  .tuner-meter {
+    position: relative; height: 16px; margin: 7px 4px 2px;
+    border-radius: 8px; background: #06100c;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.8);
+  }
+  /* 目盛り: 中央 = ジャスト */
+  .tuner-meter::before {
+    content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px;
+    width: 2px; transform: translateX(-50%);
+    background: #5dd66f; box-shadow: 0 0 5px rgba(93,214,111,0.6);
+  }
+  .tuner-needle {
+    position: absolute; top: 1px; bottom: 1px; width: 6px;
+    left: 50%; transform: translateX(-50%);
+    border-radius: 3px; background: var(--led-on);
+    box-shadow: 0 0 7px var(--led-on);
+    transition: left 0.08s, background 0.1s, box-shadow 0.1s;
+  }
+  .tuner-needle.in-tune { background: #5dd66f; box-shadow: 0 0 9px #5dd66f; }
+  .tuner-cents {
+    text-align: center; font-size: 9px; color: var(--text-dim);
+    letter-spacing: 1px; margin-top: 4px; font-variant-numeric: tabular-nums;
+  }
+
+  /* ===== Amp head ===== */
+  .unit.amp {
+    flex: 1; min-width: 360px; padding: 0; border-radius: 10px; overflow: hidden;
+    border: 1px solid #000;
+    background: linear-gradient(180deg, #2a2622, #1a1613);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 6px 16px rgba(0,0,0,0.5);
+    display: flex; flex-direction: column;
+  }
+  .amp-grille {
+    height: 78px;
+    background:
+      repeating-linear-gradient(90deg, rgba(0,0,0,0.55) 0 1px, transparent 1px 4px),
+      repeating-linear-gradient(0deg, rgba(0,0,0,0.4) 0 1px, transparent 1px 4px),
+      linear-gradient(180deg, #a8805c, #7a5a28);
+    background-color: #8a6a32;
+    border-bottom: 3px solid #000;
+    box-shadow: inset 0 0 40px rgba(0,0,0,0.6);
+  }
+  .amp-panel {
+    padding: 12px 18px 14px; position: relative;
+    background:
+      linear-gradient(180deg, #34302a, #211d19);
+  }
+  .amp-brand { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding-right: 100px; }
+  .amp-brand .led {
+    width: 8px; height: 8px; border-radius: 50%; background: #401612;
+    box-shadow: inset 0 0 2px #000;
+  }
+  .unit.amp:not(.off) .amp-brand .led { background: var(--led-on); box-shadow: 0 0 8px var(--led-on); }
+  .amp-logo { font-size: 13px; font-weight: 800; letter-spacing: 3px; color: var(--brass); text-shadow: 0 1px 1px #000; }
+  .amp-panel { position: relative; }
+  .amp-panel .amp-power { position: absolute; top: 12px; right: 18px; width: 80px; }
+
+  /* ===== Cabinet ===== */
+  .unit.cab {
+    width: 220px; padding: 10px; border-radius: 10px;
+    background: linear-gradient(180deg, var(--wood1), var(--wood2));
+    border: 1px solid #000;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 6px 16px rgba(0,0,0,0.5);
+  }
+  .cab-frame {
+    background:
+      repeating-linear-gradient(45deg, rgba(0,0,0,0.25) 0 2px, transparent 2px 5px),
+      #15110d;
+    border: 1px solid #000; border-radius: 6px;
+    padding: 14px; display: flex; gap: 12px; justify-content: center;
+    box-shadow: inset 0 0 16px rgba(0,0,0,0.8);
+  }
+  .speaker {
+    width: 74px; height: 74px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 45%, #2a2722, #0c0a08 70%);
+    border: 3px solid #0a0806;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.9), 0 1px 0 rgba(255,255,255,0.06);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cone {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 40%, #4a443c, #1a1714 75%);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.8);
+  }
+  .dust {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, #6a635a, #211d18);
+    box-shadow: inset 0 1px 2px rgba(255,255,255,0.15), 0 1px 2px rgba(0,0,0,0.6);
+  }
+  .cab-bottom { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding: 0 4px; }
+  .cab-logo { font-size: 11px; font-weight: 800; letter-spacing: 2px; color: var(--brass); text-shadow: 0 1px 1px #000; }
+  .cab-controls { gap: 10px; align-items: center; }
+  .cab-controls .foot-switch { margin-top: 0; width: 54px; height: 22px; }
+
+  /* ===== Cabinet IR loader ===== */
+  .cab-ir {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 8px; padding: 0 4px;
+  }
+  .ir-btn {
+    background: linear-gradient(180deg, #3a3631, #1d1a16);
+    color: var(--brass); border: 1px solid var(--brass);
+    border-radius: 4px; padding: 4px 9px;
+    font-size: 9px; letter-spacing: 1.5px; font-weight: 700;
+    cursor: pointer; white-space: nowrap;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
+    transition: background 0.12s;
+  }
+  .ir-btn:hover { background: linear-gradient(180deg, #4a4641, #2d2a26); }
+  .ir-btn.ir-loaded { color: var(--on); border-color: var(--on); }
+  .ir-name {
+    font-size: 9px; color: var(--text-dim); letter-spacing: 0.5px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    flex: 1; min-width: 0;
+  }
+  .ir-clear {
+    background: none; border: none; color: var(--text-dim);
+    font-size: 13px; line-height: 1; cursor: pointer; padding: 0 2px;
+    opacity: 0.6; display: none;
+  }
+  .ir-clear:hover { opacity: 1; color: var(--led-on); }
+  .ir-clear.visible { display: block; }
+
+  /* ===== Hint ===== */
+  .hint {
+    margin: 24px auto 0; max-width: 1180px; font-size: 12px;
+    color: var(--text-dim); line-height: 1.7;
+    background: rgba(0,0,0,0.3); border: 1px solid #000;
+    border-radius: 8px; padding: 12px 16px;
+  }
+  .hint b { color: var(--text); }
+
+  /* ===== Per-unit activity graph (mini, top-right by LED) ===== */
+  .vu {
+    display: block; width: 34px; height: 16px;
+    background: #0a0c0a;
+    border: 1px solid #000; border-radius: 3px;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.8);
+  }
+  /* ペダル: 右上、ネジ(tr)を避けた位置に絶対配置 */
+  .unit.pedal { }
+  .unit.pedal > .vu { position: absolute; top: 9px; right: 22px; }
+  /* アンプ: ブランド行の右端に寄せる */
+  .amp-brand .vu { margin-left: auto; }
+  /* キャビ: ロゴ行内、コントロールの左 */
+  .cab-bottom .vu { width: 30px; height: 16px; margin: 0 6px; }
+
+  @media (max-width: 720px) {
+    .row-units { gap: 12px; }
+    .unit.amp { min-width: 100%; }
+    .unit.cab { width: 100%; }
+    .master-panel { width: 100%; justify-content: space-between; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="brand-mark">◢◤</div>
+    <div class="brand-text">
+      <h1>VALVE STACK</h1>
+      <div class="subtitle">REALTIME GUITAR RIG · WEB AUDIO</div>
+    </div>
+  </div>
+
+  <div class="master-panel">
+    <div class="meters">
+      <div class="meter-row"><span class="meter-tag">IN</span><div class="level-meter"><div class="level-bar" id="inBar"></div></div></div>
+      <div class="meter-row"><span class="meter-tag">OUT</span><div class="level-meter"><div class="level-bar" id="levelBar"></div></div></div>
+      <div class="sig-row">
+        <span class="sig-lamp"><span class="sig-dot" id="sigDot"></span>SIGNAL</span>
+        <span class="sig-lamp"><span class="sig-dot" id="clipDot"></span>CLIP</span>
+        <span class="status-text" id="status">STANDBY</span>
+      </div>
+    </div>
+    <div class="master-knob" id="masterKnob"></div>
+    <div class="scene-box">
+      <div class="scene-label">SCENE</div>
+      <div class="scene-buttons" id="sceneButtons"></div>
+    </div>
+    <button class="power" id="powerBtn"><span class="power-dot"></span>POWER</button>
+  </div>
+</header>
+
+<div class="rack" id="rack"></div>
+
+<div class="hint">
+  <b>使い方:</b> POWER を押してオーディオインターフェース/マイクへのアクセスを許可してください。ペダルはフットスイッチ、アンプ/キャビは電源スイッチでON/OFF。ノブは上下ドラッグで調整、ダブルクリックで初期値に戻ります。<br>
+  <b>シーン:</b> 上部の 1〜5 ボタン（または数字キー 1〜5）で5つの音色を切り替え。各シーンは離れる直前の状態を自動で記憶します。<br>
+  <b>ハウリング対策:</b> スピーカーではなく<b>ヘッドホン</b>を。レイテンシを下げるにはオーディオインターフェース（48kHz）を推奨します。
+</div>
+
+<script>
+let ctx, source, stream, analyser, rafId;
+let running = false;
+const nodes = {};
+let cabIRBuffer = null, cabIRName = null, cabIRGainValue = 1;
+
+// ---- エフェクトチェーン定義 ----
+// 信号順: input -> noiseGate -> compressor -> overdrive -> tone(amp EQ) -> cabinet(IR) -> delay -> reverb -> output
+
+const pedals = [
+  {
+    id: 'tuner', name: 'Tuner', kind: 'tuner', color: '#2c3e50', defaultOn: false,
+    knobs: [{ id: 'ref', label: 'A Ref', min: 432, max: 446, val: 440, unit: 'Hz' }]
+  },
+  {
+    id: 'gate', name: 'Noise Gate', kind: 'pedal', color: '#3a6ea5', defaultOn: true,
+    knobs: [{ id: 'thresh', label: 'Thresh', min: -90, max: -20, val: -65, unit: 'dB' }]
+  },
+  {
+    id: 'comp', name: 'Compressor', kind: 'pedal', color: '#c9a227', defaultOn: false,
+    knobs: [
+      { id: 'thresh', label: 'Thresh', min: -60, max: 0, val: -24, unit: 'dB' },
+      { id: 'ratio', label: 'Ratio', min: 1, max: 20, val: 4, unit: ':1' },
+    ]
+  },
+  {
+    id: 'autowah', name: 'Auto Wah', kind: 'pedal', color: '#d98c1f', defaultOn: false,
+    knobs: [
+      { id: 'sens', label: 'Sens', min: 0, max: 100, val: 55, unit: '' },
+      { id: 'range', label: 'Range', min: 200, max: 3000, val: 1600, unit: 'Hz' },
+      { id: 'q', label: 'Q', min: 1, max: 15, val: 6, unit: '' },
+    ]
+  },
+  {
+    id: 'drive', name: 'Distortion', kind: 'pedal', color: '#c0392b', defaultOn: true,
+    knobs: [
+      { id: 'gain', label: 'Gain', min: 0, max: 100, val: 60, unit: '' },
+      { id: 'drive', label: 'Drive', min: 1, max: 30, val: 6, unit: 'x' },
+      { id: 'locut', label: 'Lo Cut', min: 20, max: 800, val: 120, unit: 'Hz' },
+      { id: 'tone', label: 'Tone', min: 200, max: 6000, val: 2500, unit: 'Hz' },
+      { id: 'level', label: 'Level', min: 0, max: 100, val: 70, unit: '' },
+    ],
+    select: { id: 'type', label: 'Type', options: ['soft', 'hard', 'fuzz', 'metal'], val: 'soft' }
+  },
+  {
+    id: 'amp', name: 'Amplifier', kind: 'amp', defaultOn: true,
+    knobs: [
+      { id: 'bass', label: 'Bass', min: -15, max: 15, val: 2, unit: 'dB' },
+      { id: 'mid', label: 'Mid', min: -15, max: 15, val: 0, unit: 'dB' },
+      { id: 'treble', label: 'Treble', min: -15, max: 15, val: 3, unit: 'dB' },
+      { id: 'presence', label: 'Presence', min: -15, max: 15, val: 4, unit: 'dB' },
+    ]
+  },
+  {
+    id: 'cab', name: 'Cabinet', kind: 'cab', defaultOn: true,
+    knobs: [{ id: 'cutoff', label: 'Cut', min: 2000, max: 8000, val: 4500, unit: 'Hz' }]
+  },
+  {
+    id: 'chorus', name: 'Chorus', kind: 'pedal', color: '#1abc9c', defaultOn: false,
+    knobs: [
+      { id: 'rate', label: 'Rate', min: 0.1, max: 8, val: 1.2, unit: 'Hz' },
+      { id: 'depth', label: 'Depth', min: 0, max: 100, val: 45, unit: '%' },
+      { id: 'mix', label: 'Mix', min: 0, max: 100, val: 50, unit: '%' },
+    ]
+  },
+  {
+    id: 'delay', name: 'Delay', kind: 'pedal', color: '#16a085', defaultOn: false,
+    knobs: [
+      { id: 'time', label: 'Time', min: 0.02, max: 1.0, val: 0.32, unit: 's' },
+      { id: 'fb', label: 'Feedbk', min: 0, max: 90, val: 35, unit: '%' },
+      { id: 'mix', label: 'Mix', min: 0, max: 100, val: 28, unit: '%' },
+    ]
+  },
+  {
+    id: 'reverb', name: 'Reverb', kind: 'pedal', color: '#8e44ad', defaultOn: false,
+    knobs: [
+      { id: 'size', label: 'Size', min: 0.3, max: 4, val: 1.8, unit: 's' },
+      { id: 'mix', label: 'Mix', min: 0, max: 100, val: 25, unit: '%' },
+    ]
+  },
+  {
+    id: 'master', name: 'Master', kind: 'master', defaultOn: true,
+    knobs: [{ id: 'vol', label: 'Volume', min: 0, max: 100, val: 60, unit: '' }]
+  },
+];
+
+// 3段レイアウト定義
+const rows = [
+  { label: 'INPUT STAGE', ids: ['tuner', 'gate', 'comp', 'autowah'] },
+  { label: 'AMP STACK', ids: ['drive', 'amp', 'cab'] },
+  { label: 'TIME & SPACE', ids: ['chorus', 'delay', 'reverb'] },
+];
+
+const state = {};
+pedals.forEach(p => {
+  state[p.id] = { on: p.defaultOn };
+  p.knobs.forEach(k => state[p.id][k.id] = k.val);
+  if (p.select) state[p.id][p.select.id] = p.select.val;
+});
+
+// ---- シーン (プリセット) ----
+const NUM_SCENES = 5;
+const cloneState = () => JSON.parse(JSON.stringify(state));
+const applyStateObj = obj => {
+  Object.keys(obj).forEach(id => {
+    if (state[id]) Object.assign(state[id], obj[id]);
+  });
+};
+let currentScene = 0;
+// 各シーンは初期状態のコピーで開始
+const scenes = Array.from({ length: NUM_SCENES }, () => cloneState());
+
+// UIを状態に合わせて再描画するための登録関数群
+const uiRefreshers = [];   // ノブ・セレクト用
+const switchRefreshers = []; // スイッチ用
+function refreshAllUI() {
+  uiRefreshers.forEach(fn => fn());
+  switchRefreshers.forEach(fn => fn());
+}
+
+// ---- UI構築 ----
+const pedalMap = {};
+pedals.forEach(p => pedalMap[p.id] = p);
+
+// 共通ノブ生成
+function buildKnob(p, k) {
+  const wrap = document.createElement('div');
+  wrap.className = 'knob-wrap';
+  const knob = document.createElement('div');
+  knob.className = 'knob';
+  knob.innerHTML = '<div class="knob-pointer"></div>';
+  const valEl = document.createElement('div');
+  valEl.className = 'knob-val';
+
+  const fmt = v => (Math.abs(v) >= 100 || Number.isInteger(v)) ? Math.round(v) : v.toFixed(2);
+  const render = () => {
+    const v = state[p.id][k.id];
+    const t = (v - k.min) / (k.max - k.min);
+    knob.style.setProperty('--rot', (-135 + t * 270) + 'deg');
+    valEl.textContent = fmt(v) + (k.unit ? ' ' + k.unit : '');
+  };
+  render();
+  uiRefreshers.push(render);
+
+  let dragging = false, startY = 0, startV = 0;
+  const onMove = e => {
+    if (!dragging) return;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const dy = startY - y;
+    const range = k.max - k.min;
+    state[p.id][k.id] = Math.max(k.min, Math.min(k.max, startV + (dy / 150) * range));
+    render();
+    applyParam(p.id, k.id);
+    e.preventDefault();
+  };
+  const onUp = () => { dragging = false; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+  knob.addEventListener('mousedown', e => {
+    dragging = true; startY = e.clientY; startV = state[p.id][k.id];
+    document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+  });
+  knob.addEventListener('dblclick', () => { state[p.id][k.id] = k.val; render(); applyParam(p.id, k.id); });
+  knob.addEventListener('touchstart', e => { dragging = true; startY = e.touches[0].clientY; startV = state[p.id][k.id]; }, {passive:false});
+  knob.addEventListener('touchmove', onMove, {passive:false});
+  knob.addEventListener('touchend', () => dragging = false);
+
+  wrap.appendChild(knob);
+  const lbl = document.createElement('div');
+  lbl.className = 'knob-label'; lbl.textContent = k.label;
+  wrap.appendChild(lbl);
+  wrap.appendChild(valEl);
+  return wrap;
+}
+
+function buildSelect(p) {
+  const wrap = document.createElement('div');
+  wrap.className = 'knob-wrap select-wrap';
+  const sel = document.createElement('select');
+  p.select.options.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o; opt.textContent = o.toUpperCase(); sel.appendChild(opt);
+  });
+  sel.value = p.select.val;
+  sel.onchange = () => { state[p.id][p.select.id] = sel.value; if (running) applyParam(p.id, p.select.id); };
+  uiRefreshers.push(() => { sel.value = state[p.id][p.select.id]; });
+  wrap.appendChild(sel);
+  const lbl = document.createElement('div');
+  lbl.className = 'knob-label'; lbl.textContent = p.select.label;
+  wrap.appendChild(lbl);
+  return wrap;
+}
+
+// フットスイッチ（ペダル用）/ パワースイッチ（amp/cab用）
+function buildSwitch(p, el) {
+  const sw = document.createElement('button');
+  sw.className = 'foot-switch' + (p.defaultOn ? ' on' : '');
+  sw.setAttribute('aria-label', p.name + ' on/off');
+  sw.onclick = () => {
+    state[p.id].on = !state[p.id].on;
+    sw.classList.toggle('on', state[p.id].on);
+    el.classList.toggle('off', !state[p.id].on);
+    if (running) rebuildChain();
+  };
+  switchRefreshers.push(() => {
+    const on = state[p.id].on;
+    sw.classList.toggle('on', on);
+    el.classList.toggle('off', !on);
+  });
+  return sw;
+}
+
+// 小型VU(5バー)を生成
+function buildMiniVU(p) {
+  const vu = document.createElement('canvas');
+  vu.className = 'vu'; vu.width = 40; vu.height = 18; vu.dataset.vu = p.id;
+  return vu;
+}
+
+// 各機材の見た目を生成
+function buildUnit(p) {
+  const el = document.createElement('div');
+  el.className = `unit ${p.kind}` + (p.defaultOn ? '' : ' off');
+  el.dataset.pedal = p.id;
+  if (p.color) el.style.setProperty('--enclosure', p.color);
+
+  if (p.kind === 'pedal') {
+    el.innerHTML = `
+      <div class="screw tl"></div><div class="screw tr"></div>
+      <div class="screw bl"></div><div class="screw br"></div>
+      <div class="led"></div>
+      <div class="unit-name">${p.name}</div>
+      <div class="knob-bank"></div>`;
+    const bank = el.querySelector('.knob-bank');
+    p.knobs.forEach(k => bank.appendChild(buildKnob(p, k)));
+    if (p.select) bank.appendChild(buildSelect(p));
+    el.appendChild(buildSwitch(p, el));
+    el.appendChild(buildMiniVU(p)); // 右上(LED横)に絶対配置
+
+  } else if (p.kind === 'amp') {
+    el.innerHTML = `
+      <div class="amp-grille"></div>
+      <div class="amp-panel">
+        <div class="amp-brand">
+          <span class="led"></span>
+          <span class="amp-logo">${p.name}</span>
+        </div>
+        <div class="knob-bank"></div>
+      </div>`;
+    const bank = el.querySelector('.knob-bank');
+    p.knobs.forEach(k => bank.appendChild(buildKnob(p, k)));
+    const pwr = buildSwitch(p, el);
+    pwr.classList.add('amp-power');
+    el.querySelector('.amp-panel').appendChild(pwr);
+    el.querySelector('.amp-brand').appendChild(buildMiniVU(p)); // ロゴ行の右端
+
+  } else if (p.kind === 'tuner') {
+    el.innerHTML = `
+      <div class="screw tl"></div><div class="screw tr"></div>
+      <div class="screw bl"></div><div class="screw br"></div>
+      <div class="led"></div>
+      <div class="unit-name">${p.name}</div>
+      <div class="tuner-display">
+        <div class="tuner-note">—</div>
+        <div class="tuner-meter"><div class="tuner-needle"></div></div>
+        <div class="tuner-cents">— cent</div>
+      </div>
+      <div class="knob-bank"></div>`;
+    const bank = el.querySelector('.knob-bank');
+    p.knobs.forEach(k => bank.appendChild(buildKnob(p, k)));
+    el.appendChild(buildSwitch(p, el));
+
+  } else if (p.kind === 'cab') {
+    el.innerHTML = `
+      <div class="cab-frame">
+        <div class="speaker"><div class="cone"><div class="dust"></div></div></div>
+        <div class="speaker"><div class="cone"><div class="dust"></div></div></div>
+      </div>
+      <div class="cab-bottom">
+        <span class="cab-logo">${p.name}</span>
+        <div class="cab-controls"></div>
+      </div>
+      <div class="cab-ir">
+        <input type="file" class="ir-file-input" accept=".wav,.aif,.aiff" style="display:none">
+        <button class="ir-btn">LOAD IR</button>
+        <span class="ir-name">— no IR —</span>
+        <button class="ir-clear" title="Clear IR">✕</button>
+      </div>`;
+    const ctrls = el.querySelector('.cab-controls');
+    p.knobs.forEach(k => ctrls.appendChild(buildKnob(p, k)));
+    ctrls.appendChild(buildSwitch(p, el));
+    el.querySelector('.cab-bottom').insertBefore(buildMiniVU(p), el.querySelector('.cab-controls'));
+
+    // IR loader wiring
+    const fileInput = el.querySelector('.ir-file-input');
+    const irBtn = el.querySelector('.ir-btn');
+    const irName = el.querySelector('.ir-name');
+    const irClear = el.querySelector('.ir-clear');
+
+    irBtn.onclick = () => fileInput.click();
+    fileInput.onchange = async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      try {
+        irBtn.textContent = 'LOADING…';
+        const arrayBuf = await file.arrayBuffer();
+        // decodeAudioData needs a running AudioContext
+        const decodeCtx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuffer = await decodeCtx.decodeAudioData(arrayBuf);
+        cabIRBuffer = audioBuffer;
+        cabIRName = file.name.replace(/\.[^.]+$/, '');
+
+        // IR の L2 ノルム = sqrt(全サンプルの二乗和 / チャンネル数)
+        // コンボルバーの出力 RMS ≈ 入力 RMS × L2ノルム なので 1/L2 で正規化し
+        // さらに ×2.4 してバイクアッドフィルター相当の音量感に揃える
+        let sumSq = 0;
+        for (let ch = 0; ch < audioBuffer.numberOfChannels; ch++) {
+          const d = audioBuffer.getChannelData(ch);
+          for (let i = 0; i < d.length; i++) sumSq += d[i] * d[i];
+        }
+        const irL2 = Math.sqrt(sumSq / audioBuffer.numberOfChannels);
+        cabIRGainValue = Math.min(30, Math.max(0.5, 2.4 / (irL2 || 1)));
+
+        irName.textContent = cabIRName;
+        irBtn.textContent = 'LOAD IR';
+        irBtn.classList.add('ir-loaded');
+        irClear.classList.add('visible');
+        if (running) { nodes.cabIR.buffer = cabIRBuffer; nodes.cabIRGain.gain.value = cabIRGainValue; rebuildChain(); }
+      } catch (err) {
+        irBtn.textContent = 'LOAD IR';
+        irName.textContent = 'error loading';
+        console.error(err);
+      }
+      fileInput.value = '';
+    };
+    irClear.onclick = () => {
+      cabIRBuffer = null;
+      cabIRName = null;
+      irName.textContent = '— no IR —';
+      irBtn.classList.remove('ir-loaded');
+      irClear.classList.remove('visible');
+      if (running) { nodes.cabIR.buffer = null; rebuildChain(); }
+    };
+  }
+  return el;
+}
+
+// 3段に配置
+const rack = document.getElementById('rack');
+rows.forEach(row => {
+  const rowEl = document.createElement('div');
+  rowEl.className = 'rack-row';
+  const lbl = document.createElement('div');
+  lbl.className = 'row-label';
+  lbl.textContent = row.label;
+  rowEl.appendChild(lbl);
+  const units = document.createElement('div');
+  units.className = 'row-units';
+  row.ids.forEach(id => units.appendChild(buildUnit(pedalMap[id])));
+  rowEl.appendChild(units);
+  rack.appendChild(rowEl);
+});
+
+// Master をインジケータ群の中に生成
+(function buildMaster() {
+  const p = pedalMap['master'];
+  const host = document.getElementById('masterKnob');
+  if (host) host.appendChild(buildKnob(p, p.knobs[0]));
+})();
+
+// ---- シーン切替 ----
+const sceneBtns = [];
+(function buildScenes() {
+  const host = document.getElementById('sceneButtons');
+  for (let i = 0; i < NUM_SCENES; i++) {
+    const b = document.createElement('button');
+    b.className = 'scene-btn' + (i === 0 ? ' active' : '');
+    b.textContent = (i + 1);
+    b.onclick = () => switchScene(i);
+    host.appendChild(b);
+    sceneBtns.push(b);
+  }
+})();
+
+function switchScene(idx) {
+  if (idx === currentScene) return;
+  // 現在の状態を今のシーンに退避（＝最終状態を保持）
+  scenes[currentScene] = cloneState();
+  currentScene = idx;
+  // 新しいシーンの状態を読み込んで反映
+  applyStateObj(scenes[idx]);
+  refreshAllUI();
+  if (running) rebuildChain();
+  sceneBtns.forEach((b, i) => b.classList.toggle('active', i === idx));
+}
+
+// 数字キー 1〜5 でシーン切替
+window.addEventListener('keydown', e => {
+  if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= NUM_SCENES) switchScene(n - 1);
+});
+
+// ---- オーディオグラフ ----
+function makeDistortionCurve(amount, type) {
+  const n = 44100, curve = new Float32Array(n);
+  // amount(0-100) を強めのドライブ係数へ。指数的に効かせてMax付近で激しく歪む
+  const k = Math.pow(amount / 100, 1.5) * 60 + amount * 0.3;
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / n - 1;
+    let y;
+    if (type === 'soft') {
+      // チューブ風ソフトクリップ
+      y = Math.tanh((k * 0.15 + 1) * x);
+    } else if (type === 'hard') {
+      // ハードクリップ（ディストーション）
+      y = (k * 0.2 + 1.5) * x;
+      y = Math.max(-0.8, Math.min(0.8, y));
+    } else if (type === 'fuzz') {
+      // ファズ：非対称でブチッと潰す
+      const g = (k * 0.3 + 2) * x;
+      y = Math.sign(g) * (1 - Math.exp(-Math.abs(g * 1.5)));
+      y = y * 0.85 + (x > 0 ? 0.05 : -0.02); // 非対称バイアス
+    } else { // metal：高ゲインでほぼ矩形波に近い激歪み
+      const g = (k * 0.5 + 3) * x;
+      y = Math.tanh(g * 3);
+      y = Math.sign(y) * Math.pow(Math.abs(y), 0.7); // 倍音を強調
+    }
+    curve[i] = Math.max(-1, Math.min(1, y));
+  }
+  return curve;
+}
+
+function makeImpulse(seconds) {
+  const len = ctx.sampleRate * seconds;
+  const imp = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = imp.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.5);
+    }
+  }
+  return imp;
+}
+
+function buildNodes() {
+  // Gate (simple via dynamics-ish: use a gain controlled later; here use a high-ratio compressor as expander approximation)
+  nodes.gateGain = ctx.createGain();
+  nodes.gateGain.gain.value = 1; // 初期は開いた状態
+
+  nodes.comp = ctx.createDynamicsCompressor();
+
+  // Auto Wah: envelope-following bandpass
+  nodes.wah = ctx.createBiquadFilter();
+  nodes.wah.type = 'bandpass';
+  nodes.wah.frequency.value = 500;
+  nodes.wah.Q.value = 6;
+
+  nodes.driveIn = ctx.createGain();
+  nodes.driveLoCut = ctx.createBiquadFilter();
+  nodes.driveLoCut.type = 'highpass';
+  nodes.driveLoCut.Q.value = 0.7;
+  nodes.shaper = ctx.createWaveShaper();
+  nodes.shaper.oversample = '4x';
+  nodes.driveTone = ctx.createBiquadFilter();
+  nodes.driveTone.type = 'lowpass';
+  nodes.driveLevel = ctx.createGain();
+
+  nodes.bass = ctx.createBiquadFilter(); nodes.bass.type = 'lowshelf'; nodes.bass.frequency.value = 120;
+  nodes.mid = ctx.createBiquadFilter(); nodes.mid.type = 'peaking'; nodes.mid.frequency.value = 800; nodes.mid.Q.value = 0.8;
+  nodes.treble = ctx.createBiquadFilter(); nodes.treble.type = 'highshelf'; nodes.treble.frequency.value = 3000;
+  nodes.presence = ctx.createBiquadFilter(); nodes.presence.type = 'peaking'; nodes.presence.frequency.value = 5000; nodes.presence.Q.value = 0.7;
+
+  nodes.cab = ctx.createBiquadFilter(); nodes.cab.type = 'lowpass'; nodes.cab.Q.value = 0.7;
+  nodes.cabHp = ctx.createBiquadFilter(); nodes.cabHp.type = 'highpass'; nodes.cabHp.frequency.value = 90;
+  nodes.cabIR = ctx.createConvolver();
+  nodes.cabIR.normalize = false; // 手動でゲイン補正するので自動正規化は無効
+  if (cabIRBuffer) nodes.cabIR.buffer = cabIRBuffer;
+  nodes.cabIRGain = ctx.createGain();
+  nodes.cabIRGain.gain.value = cabIRGainValue;
+
+  // delay
+  nodes.delay = ctx.createDelay(2.0);
+  nodes.delayFb = ctx.createGain();
+  nodes.delayWet = ctx.createGain();
+  nodes.delayDry = ctx.createGain();
+  nodes.delay.connect(nodes.delayFb); nodes.delayFb.connect(nodes.delay);
+
+  // chorus: 2-voice modulated delay
+  nodes.chorusDry = ctx.createGain();
+  nodes.chorusWet = ctx.createGain();
+  nodes.chorusD1 = ctx.createDelay(0.05);
+  nodes.chorusD2 = ctx.createDelay(0.05);
+  nodes.chorusD1.delayTime.value = 0.018;
+  nodes.chorusD2.delayTime.value = 0.023;
+  nodes.chorusLfo1 = ctx.createOscillator();
+  nodes.chorusLfo2 = ctx.createOscillator();
+  nodes.chorusLfo1.type = 'sine';
+  nodes.chorusLfo2.type = 'sine';
+  nodes.chorusLfo2.frequency.value = 1.2; // slightly detuned phase via different base later
+  nodes.chorusDepth1 = ctx.createGain();
+  nodes.chorusDepth2 = ctx.createGain();
+  nodes.chorusLfo1.connect(nodes.chorusDepth1); nodes.chorusDepth1.connect(nodes.chorusD1.delayTime);
+  nodes.chorusLfo2.connect(nodes.chorusDepth2); nodes.chorusDepth2.connect(nodes.chorusD2.delayTime);
+  nodes.chorusLfo1.start(); nodes.chorusLfo2.start();
+
+  // reverb
+  nodes.reverb = ctx.createConvolver();
+  nodes.reverbWet = ctx.createGain();
+  nodes.reverbDry = ctx.createGain();
+
+  nodes.master = ctx.createGain();
+  nodes.analyser = ctx.createAnalyser();
+  nodes.analyser.fftSize = 1024;
+  analyser = nodes.analyser;
+
+  // 入力レベル監視用（チェーンとは独立して常に入力直後を見る）
+  nodes.inAnalyser = ctx.createAnalyser();
+  nodes.inAnalyser.fftSize = 1024;
+
+  // チューナー用ピッチ検出アナライザー（低音まで取れるよう大きめのバッファ）
+  nodes.tunerAnalyser = ctx.createAnalyser();
+  nodes.tunerAnalyser.fftSize = 4096;
+
+  // 各エフェクト出力監視用 tap アナライザー（ユニット内バーグラフ用）
+  nodes.taps = {};
+  ['gate','comp','autowah','drive','amp','cab','chorus','delay','reverb','master'].forEach(id => {
+    const a = ctx.createAnalyser();
+    a.fftSize = 512;
+    nodes.taps[id] = a;
+  });
+}
+
+function disconnectAll() {
+  Object.values(nodes).forEach(n => { try { n.disconnect(); } catch(e){} });
+  nodes.delay.connect(nodes.delayFb); nodes.delayFb.connect(nodes.delay);
+  // chorus LFO の内部変調接続を復元
+  nodes.chorusLfo1.connect(nodes.chorusDepth1); nodes.chorusDepth1.connect(nodes.chorusD1.delayTime);
+  nodes.chorusLfo2.connect(nodes.chorusDepth2); nodes.chorusDepth2.connect(nodes.chorusD2.delayTime);
+}
+
+function rebuildChain() {
+  disconnectAll();
+  let head = source;
+  source.connect(nodes.inAnalyser); // 入力監視（チェーンと独立）
+  source.connect(nodes.tunerAnalyser); // チューナー用（チェーンと独立・常時接続）
+
+  if (state.gate.on) { head.connect(nodes.gateGain); head = nodes.gateGain; head.connect(nodes.taps.gate); }
+  if (state.comp.on) { head.connect(nodes.comp); head = nodes.comp; head.connect(nodes.taps.comp); }
+  if (state.autowah.on) { head.connect(nodes.wah); head = nodes.wah; head.connect(nodes.taps.autowah); }
+  if (state.drive.on) {
+    head.connect(nodes.driveIn);
+    nodes.driveIn.connect(nodes.driveLoCut);
+    nodes.driveLoCut.connect(nodes.shaper);
+    nodes.shaper.connect(nodes.driveTone);
+    nodes.driveTone.connect(nodes.driveLevel);
+    head = nodes.driveLevel; head.connect(nodes.taps.drive);
+  }
+  if (state.amp.on) {
+    head.connect(nodes.bass); nodes.bass.connect(nodes.mid);
+    nodes.mid.connect(nodes.treble); nodes.treble.connect(nodes.presence);
+    head = nodes.presence; head.connect(nodes.taps.amp);
+  }
+  if (state.cab.on) {
+    head.connect(nodes.cabHp);
+    if (cabIRBuffer && nodes.cabIR.buffer) {
+      nodes.cabHp.connect(nodes.cabIR);
+      nodes.cabIR.connect(nodes.cabIRGain);
+      head = nodes.cabIRGain;
+    } else {
+      nodes.cabHp.connect(nodes.cab);
+      head = nodes.cab;
+    }
+    head.connect(nodes.taps.cab);
+  }
+  if (state.chorus.on) {
+    head.connect(nodes.chorusDry);
+    head.connect(nodes.chorusD1);
+    head.connect(nodes.chorusD2);
+    nodes.chorusD1.connect(nodes.chorusWet);
+    nodes.chorusD2.connect(nodes.chorusWet);
+    const sum = ctx.createGain();
+    nodes.chorusDry.connect(sum); nodes.chorusWet.connect(sum);
+    nodes._chorusSum = sum;
+    head = sum; head.connect(nodes.taps.chorus);
+  }
+  if (state.delay.on) {
+    head.connect(nodes.delayDry);
+    head.connect(nodes.delay);
+    nodes.delay.connect(nodes.delayWet);
+    const sum = ctx.createGain();
+    nodes.delayDry.connect(sum); nodes.delayWet.connect(sum);
+    nodes._delaySum = sum;
+    head = sum; head.connect(nodes.taps.delay);
+  }
+  if (state.reverb.on) {
+    nodes.reverb.buffer = makeImpulse(state.reverb.size);
+    head.connect(nodes.reverbDry);
+    head.connect(nodes.reverb);
+    nodes.reverb.connect(nodes.reverbWet);
+    const sum = ctx.createGain();
+    nodes.reverbDry.connect(sum); nodes.reverbWet.connect(sum);
+    nodes._reverbSum = sum;
+    head = sum; head.connect(nodes.taps.reverb);
+  }
+
+  head.connect(nodes.master);
+  nodes.master.connect(nodes.analyser);
+  nodes.master.connect(nodes.taps.master);
+  nodes.analyser.connect(ctx.destination);
+
+  // apply all params
+  pedals.forEach(p => p.knobs.forEach(k => applyParam(p.id, k.id)));
+  applyParam('drive', 'type');
+}
+
+function applyParam(pedal, param) {
+  const s = state[pedal];
+  switch (pedal) {
+    case 'gate':
+      // crude gate threshold mapping to a fixed gain reduction floor handled in meter loop
+      break;
+    case 'comp':
+      nodes.comp.threshold.value = s.thresh;
+      nodes.comp.ratio.value = s.ratio;
+      nodes.comp.knee.value = 6;
+      nodes.comp.attack.value = 0.003;
+      nodes.comp.release.value = 0.25;
+      break;
+    case 'autowah':
+      nodes.wah.Q.value = s.q;
+      break;
+    case 'drive':
+      nodes.shaper.curve = makeDistortionCurve(s.gain, s.type);
+      nodes.driveTone.frequency.value = s.tone;
+      nodes.driveLoCut.frequency.value = s.locut;
+      // Drive: 歪みへの突っ込み量。大きいほど深く歪む
+      nodes.driveIn.gain.value = s.drive;
+      // 高ゲイン時は出力が暴れるのでLevelで補正（Driveが上がるほど自動で少し下げる）
+      nodes.driveLevel.gain.value = (s.level / 100) * 1.2 / Math.sqrt(s.drive);
+      break;
+    case 'amp':
+      nodes.bass.gain.value = s.bass;
+      nodes.mid.gain.value = s.mid;
+      nodes.treble.gain.value = s.treble;
+      nodes.presence.gain.value = s.presence;
+      break;
+    case 'cab':
+      nodes.cab.frequency.value = s.cutoff;
+      break;
+    case 'delay':
+      nodes.delay.delayTime.value = s.time;
+      nodes.delayFb.gain.value = s.fb / 100;
+      nodes.delayWet.gain.value = s.mix / 100;
+      nodes.delayDry.gain.value = 1;
+      break;
+    case 'chorus':
+      nodes.chorusLfo1.frequency.value = s.rate;
+      nodes.chorusLfo2.frequency.value = s.rate * 1.15;
+      // depth: 0〜100% を 0〜5ms の揺れ幅にマップ
+      nodes.chorusDepth1.gain.value = s.depth / 100 * 0.004;
+      nodes.chorusDepth2.gain.value = s.depth / 100 * 0.0045;
+      nodes.chorusWet.gain.value = s.mix / 100;
+      nodes.chorusDry.gain.value = 1 - (s.mix / 100) * 0.3;
+      break;
+    case 'reverb':
+      nodes.reverbWet.gain.value = s.mix / 100;
+      nodes.reverbDry.gain.value = 1;
+      break;
+    case 'master':
+      nodes.master.gain.value = s.vol / 100 * 1.5;
+      break;
+  }
+}
+
+// ---- メーター & 簡易ノイズゲート ----
+let clipHold = 0;
+
+// 各ユニットの粗いバーグラフ（右→左に流れる。5バー・粗いタイムスケール）
+const BAR_GAP = 1;       // バー間の隙間(px)
+const VU_DECIMATE = 6;   // 何フレームに1回バーを進めるか（大きいほど粗い＝ゆっくり）
+let vuTick = 0;
+const vuCanvases = {};   // id -> {cv, ctx, bars:[], barW}
+document.querySelectorAll('canvas.vu').forEach(cv => {
+  const id = cv.dataset.vu;
+  const bars = 5;                       // バー本数を5に固定
+  const barW = cv.width / bars;         // 1本の幅
+  vuCanvases[id] = { cv, ctx: cv.getContext('2d'), bars: new Array(bars).fill(0), barW };
+});
+
+// 段ごとの表示ゲイン（ディストーション前は音が小さいので持ち上げる）
+const VU_GAIN = {
+  gate: 8, comp: 8, autowah: 8,
+  drive: 3.2, amp: 3.2, cab: 3.2,
+  chorus: 3.2, delay: 3.2, reverb: 3.2, master: 3.2,
+};
+
+function pushVU(id, level) {
+  const v = vuCanvases[id];
+  if (!v) return;
+  v.bars.shift();
+  v.bars.push(Math.min(1, level));
+}
+
+function renderVU(id) {
+  const v = vuCanvases[id];
+  if (!v) return;
+  const { ctx, cv, bars, barW } = v;
+  const h = cv.height;
+  ctx.clearRect(0, 0, cv.width, h);
+  for (let i = 0; i < bars.length; i++) {
+    const lv = bars[i];
+    if (lv <= 0.001) continue;
+    const bh = Math.max(2, lv * h);
+    ctx.fillStyle = lv > 0.7 ? '#ff5a3c' : (lv > 0.4 ? '#d4d44a' : '#5dd66f');
+    ctx.fillRect(i * barW, h - bh, barW - BAR_GAP, bh);
+  }
+}
+
+// tapアナライザーからRMSを取得（段別ゲイン適用）
+const _tapBuf = new Float32Array(512);
+function tapLevel(id) {
+  const a = nodes.taps && nodes.taps[id];
+  if (!a) return 0;
+  a.getFloatTimeDomainData(_tapBuf);
+  let s = 0;
+  for (let i = 0; i < _tapBuf.length; i++) s += _tapBuf[i] * _tapBuf[i];
+  return Math.sqrt(s / _tapBuf.length) * (VU_GAIN[id] || 3.2);
+}
+
+// ---- チューナー（自己相関によるピッチ検出） ----
+const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const tunerDom = (() => {
+  const el = document.querySelector('.unit.tuner');
+  if (!el) return null;
+  return {
+    note: el.querySelector('.tuner-note'),
+    needle: el.querySelector('.tuner-needle'),
+    cents: el.querySelector('.tuner-cents'),
+  };
+})();
+const _tunerBuf = new Float32Array(4096);
+let tunerSilentFrames = 0;
+
+// 自己相関でピッチ(周波数)を推定。無音/非周期なら -1
+function detectPitch(buf, sampleRate) {
+  const SIZE = buf.length;
+  let rms = 0;
+  for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
+  rms = Math.sqrt(rms / SIZE);
+  if (rms < 0.005) return -1; // 無音
+
+  // 探索する周期の範囲（ギター: 約 70Hz〜1200Hz）
+  const minLag = Math.floor(sampleRate / 1200);
+  const maxLag = Math.floor(sampleRate / 70);
+  let bestLag = -1, bestCorr = 0;
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let corr = 0;
+    for (let i = 0; i < SIZE - lag; i++) corr += buf[i] * buf[i + lag];
+    corr /= (SIZE - lag);
+    if (corr > bestCorr) { bestCorr = corr; bestLag = lag; }
+  }
+  if (bestLag <= 0 || bestCorr < rms * rms * 0.25) return -1;
+
+  // 放物線補間でラグを高精度化
+  const c0 = lagCorr(buf, bestLag - 1), c1 = lagCorr(buf, bestLag), c2 = lagCorr(buf, bestLag + 1);
+  const denom = (c0 - 2 * c1 + c2);
+  const shift = denom !== 0 ? 0.5 * (c0 - c2) / denom : 0;
+  const refinedLag = bestLag + Math.max(-1, Math.min(1, shift));
+  return sampleRate / refinedLag;
+}
+function lagCorr(buf, lag) {
+  if (lag <= 0 || lag >= buf.length) return 0;
+  let corr = 0;
+  for (let i = 0; i < buf.length - lag; i++) corr += buf[i] * buf[i + lag];
+  return corr / (buf.length - lag);
+}
+
+function updateTuner() {
+  if (!tunerDom) return;
+  nodes.tunerAnalyser.getFloatTimeDomainData(_tunerBuf);
+  const freq = detectPitch(_tunerBuf, ctx.sampleRate);
+  if (freq <= 0) {
+    if (++tunerSilentFrames > 12) { // しばらく無音ならリセット
+      tunerDom.note.textContent = '—';
+      tunerDom.note.classList.remove('in-tune');
+      tunerDom.needle.style.left = '50%';
+      tunerDom.needle.classList.remove('in-tune');
+      tunerDom.cents.textContent = '— cent';
+    }
+    return;
+  }
+  tunerSilentFrames = 0;
+  const aRef = state.tuner.ref;
+  // A基準からの半音数（A4=69 を基準に MIDI ノート番号を算出）
+  const midi = 69 + 12 * Math.log2(freq / aRef);
+  const nearest = Math.round(midi);
+  const cents = Math.round((midi - nearest) * 100);
+  const name = NOTE_NAMES[((nearest % 12) + 12) % 12];
+  const octave = Math.floor(nearest / 12) - 1;
+  const inTune = Math.abs(cents) <= 4;
+
+  tunerDom.note.innerHTML = name.replace('#', '<small>#</small>') + '<small>' + octave + '</small>';
+  tunerDom.note.classList.toggle('in-tune', inTune);
+  // -50〜+50 cent を 8%〜92% にマップ
+  tunerDom.needle.style.left = (50 + Math.max(-50, Math.min(50, cents)) * 0.84) + '%';
+  tunerDom.needle.classList.toggle('in-tune', inTune);
+  tunerDom.cents.textContent = (cents > 0 ? '+' : '') + cents + ' cent';
+}
+
+function meterLoop() {
+  // 出力レベル（バー表示）
+  const buf = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(buf);
+  let rms = 0;
+  for (let i = 0; i < buf.length; i++) rms += buf[i] * buf[i];
+  rms = Math.sqrt(rms / buf.length);
+  const db = 20 * Math.log10(rms + 1e-9);
+  document.getElementById('levelBar').style.width = Math.max(0, Math.min(100, (db + 60) / 60 * 100)) + '%';
+
+  // タイムスケールを粗く: 数フレームに1回だけバーを進める
+  vuTick++;
+  if (vuTick >= VU_DECIMATE) {
+    vuTick = 0;
+    Object.keys(vuCanvases).forEach(id => {
+      const on = state[id] && state[id].on;
+      pushVU(id, on ? tapLevel(id) : 0);
+      renderVU(id);
+    });
+  }
+
+  // 入力レベル（SIGNAL / CLIP 判定）
+  const inBuf = new Float32Array(nodes.inAnalyser.fftSize);
+  nodes.inAnalyser.getFloatTimeDomainData(inBuf);
+  let peak = 0, inRms = 0;
+  for (let i = 0; i < inBuf.length; i++) {
+    const a = Math.abs(inBuf[i]);
+    if (a > peak) peak = a;
+    inRms += inBuf[i] * inBuf[i];
+  }
+  inRms = Math.sqrt(inRms / inBuf.length);
+  const inDb = 20 * Math.log10(inRms + 1e-9);
+  document.getElementById('inBar').style.width = Math.max(0, Math.min(100, (inDb + 60) / 60 * 100)) + '%';
+
+  // SIGNAL: 入力RMSが -50dB を超えたら点灯
+  document.getElementById('sigDot').classList.toggle('sig-on', inDb > -50);
+  // CLIP: 入力ピークが 0.98 を超えたら点灯し、約0.4秒ホールド
+  if (peak > 0.98) clipHold = 24;
+  if (clipHold > 0) clipHold--;
+  document.getElementById('clipDot').classList.toggle('clip-on', clipHold > 0);
+
+  // simple noise gate（入力レベルで判定する）
+  if (state.gate.on && nodes.gateGain) {
+    const target = inDb < state.gate.thresh ? 0 : 1;
+    const cur = nodes.gateGain.gain.value;
+    nodes.gateGain.gain.value = cur + (target - cur) * 0.2;
+  }
+
+  // Auto Wah: 入力エンベロープでバンドパスの中心周波数を動かす
+  if (state.autowah.on && nodes.wah) {
+    const s = state.autowah;
+    // inRms(おおよそ0〜0.5)を感度で増幅し 0..1 のエンベロープに
+    const env = Math.min(1, inRms * (1 + s.sens / 10));
+    const base = 250;
+    const target = base + env * s.range;
+    const cur = nodes.wah.frequency.value;
+    // アタックは速く、リリースはゆっくり追従させてワウらしい動き
+    const coef = target > cur ? 0.5 : 0.08;
+    nodes.wah.frequency.value = cur + (target - cur) * coef;
+  }
+
+  // チューナー（ONのときだけピッチ検出）
+  if (state.tuner.on && nodes.tunerAnalyser) updateTuner();
+
+  rafId = requestAnimationFrame(meterLoop);
+}
+
+// ---- 起動/停止 ----
+async function start() {
+  try {
+    ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+    source = ctx.createMediaStreamSource(stream);
+    buildNodes();
+    rebuildChain();
+    running = true;
+    const btn = document.getElementById('powerBtn');
+    btn.innerHTML = '<span class="power-dot"></span>ON';
+    btn.classList.add('live');
+    document.getElementById('status').textContent = `${ctx.sampleRate / 1000}kHz`;
+    meterLoop();
+  } catch (e) {
+    document.getElementById('status').textContent = 'ERROR';
+  }
+}
+
+function stop() {
+  running = false;
+  cancelAnimationFrame(rafId);
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  if (ctx) ctx.close();
+  const btn = document.getElementById('powerBtn');
+  btn.innerHTML = '<span class="power-dot"></span>POWER';
+  btn.classList.remove('live');
+  document.getElementById('status').textContent = 'STANDBY';
+  document.getElementById('levelBar').style.width = '0%';
+  document.getElementById('inBar').style.width = '0%';
+  document.getElementById('sigDot').classList.remove('sig-on');
+  document.getElementById('clipDot').classList.remove('clip-on');
+  // 全ユニットのバーグラフをクリア
+  Object.values(vuCanvases).forEach(v => {
+    v.bars.fill(0);
+    v.ctx.clearRect(0, 0, v.cv.width, v.cv.height);
+  });
+}
+
+document.getElementById('powerBtn').onclick = () => running ? stop() : start();
+</script>
+</body>
+</html>
