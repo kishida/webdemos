@@ -3,14 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<meta property="og:title" content="Guitar Amp Simulator">
-<meta property="og:description" content="Guitar Amp Simulator">
-<meta property="og:image" content="https://kishida.github.io/webdemos/ampsim/ogp.png">
-<meta property="og:url" content="https://kishida.github.io/webdemos/ampsim/guitar-amp-sim.html"/>
-<meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:site" content="@kis"/>
-
 <title>Guitar Amp & FX Simulator</title>
 <style>
   :root {
@@ -887,17 +879,20 @@ function makeDistortionCurve(amount, type) {
     const x = (i * 2) / n - 1;
     let y;
     if (type === 'soft') {
-      // チューブ風ソフトクリップ
-      y = Math.tanh((k * 0.15 + 1) * x);
+      // 非対称tanh: 正負で微妙に違う圧縮をかけて偶数次倍音を混ぜる
+      const g = (k * 0.15 + 1);
+      const pos = Math.tanh(g * x * 1.05);
+      const neg = Math.tanh(g * x * 0.95);
+      y = x >= 0 ? pos : neg;
     } else if (type === 'hard') {
-      // ハードクリップ（ディストーション）
-      y = (k * 0.2 + 1.5) * x;
-      y = Math.max(-0.8, Math.min(0.8, y));
+      // ハードクリップ：正側0.75/負側0.82で非対称にクリップ（偶数次倍音）
+      const g = (k * 0.2 + 1.5) * x;
+      y = Math.max(-0.82, Math.min(0.75, g));
     } else if (type === 'fuzz') {
       // ファズ：非対称でブチッと潰す
       const g = (k * 0.3 + 2) * x;
       y = Math.sign(g) * (1 - Math.exp(-Math.abs(g * 1.5)));
-      y = y * 0.85 + (x > 0 ? 0.05 : -0.02); // 非対称バイアス
+      y = y * 0.85 + (x > 0 ? 0.06 : -0.02); // 非対称バイアス
     } else { // metal：高ゲインでほぼ矩形波に近い激歪み
       const g = (k * 0.5 + 3) * x;
       y = Math.tanh(g * 3);
@@ -934,6 +929,16 @@ function buildNodes() {
   nodes.wah.Q.value = 6;
 
   nodes.driveIn = ctx.createGain();
+  // プリEQ: 歪ませる前にローをカット・ミッドを持ち上げる（ヌケの核心）
+  nodes.drivePre = ctx.createBiquadFilter();
+  nodes.drivePre.type = 'peaking';
+  nodes.drivePre.frequency.value = 900;   // 中域の中心
+  nodes.drivePre.Q.value = 0.9;
+  nodes.drivePre.gain.value = 8;          // ミッドを8dBブースト
+  nodes.drivePreHp = ctx.createBiquadFilter();
+  nodes.drivePreHp.type = 'highpass';
+  nodes.drivePreHp.frequency.value = 180; // 余分なローを歪み前に落とす
+  nodes.drivePreHp.Q.value = 0.7;
   nodes.driveLoCut = ctx.createBiquadFilter();
   nodes.driveLoCut.type = 'highpass';
   nodes.driveLoCut.Q.value = 0.7;
@@ -942,6 +947,17 @@ function buildNodes() {
   nodes.driveTone = ctx.createBiquadFilter();
   nodes.driveTone.type = 'lowpass';
   nodes.driveLevel = ctx.createGain();
+  // ポストEQ: 歪み後の耳障りな帯域を整理
+  nodes.drivePostLm = ctx.createBiquadFilter(); // ローミッドのもたつきを削る
+  nodes.drivePostLm.type = 'peaking';
+  nodes.drivePostLm.frequency.value = 350;
+  nodes.drivePostLm.Q.value = 1.2;
+  nodes.drivePostLm.gain.value = -6;
+  nodes.drivePostAir = ctx.createBiquadFilter(); // 4〜5kHzの「抜け帯域」を持ち上げる
+  nodes.drivePostAir.type = 'peaking';
+  nodes.drivePostAir.frequency.value = 4200;
+  nodes.drivePostAir.Q.value = 1.0;
+  nodes.drivePostAir.gain.value = 4;
 
   nodes.bass = ctx.createBiquadFilter(); nodes.bass.type = 'lowshelf'; nodes.bass.frequency.value = 120;
   nodes.mid = ctx.createBiquadFilter(); nodes.mid.type = 'peaking'; nodes.mid.frequency.value = 800; nodes.mid.Q.value = 0.8;
@@ -1027,11 +1043,15 @@ function rebuildChain() {
   if (state.autowah.on) { head.connect(nodes.wah); head = nodes.wah; head.connect(nodes.taps.autowah); }
   if (state.drive.on) {
     head.connect(nodes.driveIn);
-    nodes.driveIn.connect(nodes.driveLoCut);
+    nodes.driveIn.connect(nodes.drivePreHp);  // HPF（歪み前のロー処理）
+    nodes.drivePreHp.connect(nodes.drivePre); // ミッドブースト
+    nodes.drivePre.connect(nodes.driveLoCut); // 既存Lo Cut
     nodes.driveLoCut.connect(nodes.shaper);
     nodes.shaper.connect(nodes.driveTone);
     nodes.driveTone.connect(nodes.driveLevel);
-    head = nodes.driveLevel; head.connect(nodes.taps.drive);
+    nodes.driveLevel.connect(nodes.drivePostLm); // ローミッド整理
+    nodes.drivePostLm.connect(nodes.drivePostAir); // 抜け帯域ブースト
+    head = nodes.drivePostAir; head.connect(nodes.taps.drive);
   }
   if (state.amp.on) {
     head.connect(nodes.bass); nodes.bass.connect(nodes.mid);
@@ -1114,7 +1134,8 @@ function applyParam(pedal, param) {
       // Drive: 歪みへの突っ込み量。大きいほど深く歪む
       nodes.driveIn.gain.value = s.drive;
       // 高ゲイン時は出力が暴れるのでLevelで補正（Driveが上がるほど自動で少し下げる）
-      nodes.driveLevel.gain.value = (s.level / 100) * 1.2 / Math.sqrt(s.drive);
+      // プリのミッドブースト(+8dB)分、全体が持ち上がるので係数を 1.2→1.0 に軽く絞る
+      nodes.driveLevel.gain.value = (s.level / 100) * 1.0 / Math.sqrt(s.drive);
       break;
     case 'amp':
       nodes.bass.gain.value = s.bass;
@@ -1206,7 +1227,7 @@ function tapLevel(id) {
 }
 
 // ---- チューナー（自己相関によるピッチ検出） ----
-const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const NOTE_NAMES = ['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
 const tunerDom = (() => {
   const el = document.querySelector('.unit.tuner');
   if (!el) return null;
@@ -1277,7 +1298,7 @@ function updateTuner() {
   const octave = Math.floor(nearest / 12) - 1;
   const inTune = Math.abs(cents) <= 4;
 
-  tunerDom.note.innerHTML = name.replace('#', '<small>#</small>') + '<small>' + octave + '</small>';
+  tunerDom.note.innerHTML = name.replace('♭', '<small>♭</small>') + '<small>' + octave + '</small>';
   tunerDom.note.classList.toggle('in-tune', inTune);
   // -50〜+50 cent を 8%〜92% にマップ
   tunerDom.needle.style.left = (50 + Math.max(-50, Math.min(50, cents)) * 0.84) + '%';
