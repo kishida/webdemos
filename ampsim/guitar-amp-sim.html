@@ -22,6 +22,8 @@
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:site" content="@kis"/>
 
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Guitar Amp & FX Simulator</title>
 <style>
   :root {
@@ -70,7 +72,7 @@
 
   .master-panel {
     display: flex; align-items: center; gap: 20px;
-    padding: 14px 20px;
+    padding: 14px 16px;
     border-radius: 10px;
     background:
       linear-gradient(180deg, #3a3631, #211d19);
@@ -78,13 +80,6 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 20px rgba(0,0,0,0.5);
     position: relative;
   }
-  .master-panel::before, .master-panel::after {
-    content: ''; position: absolute; top: 50%; width: 11px; height: 11px;
-    border-radius: 50%; transform: translateY(-50%);
-    background: radial-gradient(circle at 35% 30%, #d8d2c6, #6a655c 60%, #2a2620);
-    box-shadow: inset 0 0 2px #000;
-  }
-  .master-panel::before { left: 7px; } .master-panel::after { right: 7px; }
 
   .meters { display: flex; flex-direction: column; gap: 5px; min-width: 180px; }
   .meter-row { display: flex; align-items: center; gap: 8px; }
@@ -418,6 +413,85 @@
   }
   .ir-clear:hover { opacity: 1; color: var(--led-on); }
   .ir-clear.visible { display: block; }
+
+  /* ===== Metronome & Looper (Utility) ===== */
+  .unit.util {
+    min-width: 250px; flex: 1; padding: 12px 16px 14px; border-radius: 10px;
+    background: linear-gradient(180deg, #2a2622, #1a1613);
+    border: 1px solid #000;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 6px 16px rgba(0,0,0,0.5);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .util-title {
+    font-size: 12px; font-weight: 800; letter-spacing: 2px; color: var(--brass);
+    text-shadow: 0 1px 1px #000; display: flex; align-items: center; gap: 8px;
+  }
+  .util-row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+  .util-field { display: flex; flex-direction: column; gap: 3px; }
+  .util-field > label { font-size: 8px; letter-spacing: 1px; color: var(--text-dim); text-transform: uppercase; }
+  .util-num { display: flex; align-items: stretch; }
+  .util-num button {
+    width: 22px; background: linear-gradient(180deg, #3a3631, #1d1a16);
+    border: 1px solid #000; color: var(--text); cursor: pointer; font-size: 13px; line-height: 1;
+  }
+  .util-num button:first-child { border-radius: 4px 0 0 4px; }
+  .util-num button:last-child { border-radius: 0 4px 4px 0; }
+  .util-num input {
+    width: 48px; text-align: center; background: #0a1410; color: var(--text);
+    border: 1px solid #000; border-left: none; border-right: none;
+    font-size: 13px; font-variant-numeric: tabular-nums; padding: 4px 0;
+    -moz-appearance: textfield;
+  }
+  .util-num input::-webkit-outer-spin-button, .util-num input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  select.util-sel { width: auto; padding: 5px 6px; }
+  .util-btn {
+    padding: 6px 12px; border-radius: 5px; border: 1px solid #000;
+    background: linear-gradient(180deg, #3a3631, #1d1a16); color: var(--text);
+    font-size: 10px; font-weight: 700; letter-spacing: 1px; cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07); transition: all 0.12s;
+  }
+  .util-btn:hover { border-color: var(--brass); }
+  .util-btn.active { background: linear-gradient(180deg, var(--brass), #8a6a26); color: #1a1308; border-color: var(--brass); }
+  .util-btn.rec { color: #ff7a6a; border-color: #6a2a22; }
+  .util-btn.rec.armed { background: linear-gradient(180deg, #c0392b, #7a241a); color: #fff; box-shadow: 0 0 12px rgba(255,80,60,0.6); }
+  .util-btn.play.active { background: linear-gradient(180deg, #2e8b57, #1d5a37); color: #fff; box-shadow: 0 0 12px rgba(80,220,120,0.5); }
+  .beat-dots { display: flex; gap: 6px; min-height: 12px; }
+  .beat-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: #1a1714; border: 1px solid #000;
+    box-shadow: inset 0 1px 1px rgba(0,0,0,0.8); transition: all 0.05s;
+  }
+  .beat-dot.on { background: var(--on); box-shadow: 0 0 8px var(--on); }
+  .beat-dot.accent { border-color: var(--brass); }
+  .beat-dot.accent.on { background: var(--led-on); box-shadow: 0 0 10px var(--led-on); }
+  .metro-led {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: #1a1714; border: 1px solid #000;
+    box-shadow: inset 0 1px 1px rgba(0,0,0,0.8); transition: all 0.05s;
+  }
+  .metro-led.on { background: var(--on); box-shadow: 0 0 8px var(--on); }
+  .metro-led.accent.on { background: var(--led-on); box-shadow: 0 0 10px var(--led-on); }
+  .util-title .util-btn { margin-left: auto; padding: 4px 12px; }
+  .looper-status { font-size: 9px; letter-spacing: 1.5px; color: var(--brass); min-height: 12px; }
+
+  /* ヘッダー内のコンパクトなメトロノーム（ロゴの右） */
+  .metro-panel {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 16px; border-radius: 10px;
+    background: linear-gradient(180deg, #3a3631, #211d19);
+    border: 1px solid #000;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 20px rgba(0,0,0,0.5);
+  }
+  .metro-tag {
+    font-size: 9px; letter-spacing: 2px; color: var(--brass);
+    writing-mode: vertical-rl; text-orientation: mixed;
+    line-height: 1; text-shadow: 0 1px 1px #000;
+  }
+  .metro-cols { display: flex; flex-direction: column; gap: 8px; }
+  .metro-line { display: flex; align-items: flex-end; gap: 12px; }
+  .metro-line.bottom { align-items: center; }
+  .metro-line .beat-dots { flex: 1; }
+  .metro-panel .util-btn { padding: 7px 16px; margin-left: auto; }
 
   /* ===== Hint ===== */
   .hint {
@@ -1034,6 +1108,23 @@ function buildNodes() {
   nodes.tunerAnalyser = ctx.createAnalyser();
   nodes.tunerAnalyser.fftSize = 4096;
 
+  // ルーパー録音用: マスター出力をタップしてサンプル単位で取り込む
+  nodes.looperRec = ctx.createScriptProcessor(2048, 1, 1);
+  nodes.looperSilent = ctx.createGain();
+  nodes.looperSilent.gain.value = 0; // 録音タップは音を出さない
+  nodes.looperRec.onaudioprocess = (e) => {
+    if (!looper.recActive) return;
+    const inp = e.inputBuffer.getChannelData(0);
+    const remain = looper.recNeeded - looper.recCount;
+    const n = Math.min(inp.length, remain);
+    looper.recData.push(inp.slice(0, n));
+    looper.recCount += n;
+    if (looper.recCount >= looper.recNeeded) {
+      looper.recActive = false;
+      finalizeLoop();
+    }
+  };
+
   // 各エフェクト出力監視用 tap アナライザー（ユニット内バーグラフ用）
   nodes.taps = {};
   ['gate','comp','autowah','drive','amp','cab','chorus','delay','reverb','master'].forEach(id => {
@@ -1124,6 +1215,11 @@ function rebuildChain() {
   nodes.master.connect(nodes.analyser);
   nodes.master.connect(nodes.taps.master);
   nodes.analyser.connect(ctx.destination);
+
+  // ルーパー録音タップ（マスター＝加工済み出力を録る）
+  nodes.master.connect(nodes.looperRec);
+  nodes.looperRec.connect(nodes.looperSilent);
+  nodes.looperSilent.connect(ctx.destination);
 
   // apply all params
   pedals.forEach(p => p.knobs.forEach(k => applyParam(p.id, k.id)));
@@ -1265,7 +1361,7 @@ function detectPitch(buf, sampleRate) {
   let rms = 0;
   for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
   rms = Math.sqrt(rms / SIZE);
-  if (rms < 0.005) return -1; // 無音
+  if (rms < 0.0018) return -1; // 無音（小さい音も拾えるよう閾値を下げた）
 
   // 探索する周期の範囲（ギター: 約 70Hz〜1200Hz）
   const minLag = Math.floor(sampleRate / 1200);
@@ -1277,7 +1373,8 @@ function detectPitch(buf, sampleRate) {
     corr /= (SIZE - lag);
     if (corr > bestCorr) { bestCorr = corr; bestLag = lag; }
   }
-  if (bestLag <= 0 || bestCorr < rms * rms * 0.25) return -1;
+  // 信頼度: ゼロラグエネルギー(rms^2)に対する相関の比。閾値を 0.25→0.12 に緩めて感度UP
+  if (bestLag <= 0 || bestCorr < rms * rms * 0.12) return -1;
 
   // 放物線補間でラグを高精度化
   const c0 = lagCorr(buf, bestLag - 1), c1 = lagCorr(buf, bestLag), c2 = lagCorr(buf, bestLag + 1);
@@ -1298,7 +1395,7 @@ function updateTuner() {
   nodes.tunerAnalyser.getFloatTimeDomainData(_tunerBuf);
   const freq = detectPitch(_tunerBuf, ctx.sampleRate);
   if (freq <= 0) {
-    if (++tunerSilentFrames > 12) { // しばらく無音ならリセット
+    if (++tunerSilentFrames > 25) { // しばらく無音ならリセット（減衰音でも表示を保持）
       tunerDom.note.textContent = '—';
       tunerDom.note.classList.remove('in-tune');
       tunerDom.needle.style.left = '50%';
@@ -1431,6 +1528,372 @@ function stop() {
     v.bars.fill(0);
     v.ctx.clearRect(0, 0, v.cv.width, v.cv.height);
   });
+  // ルーパーは電源に依存するので停止（メトロノームは独立して継続）
+  stopPlayback();
+  looper.state = 'empty'; looper.recActive = false;
+  looper.buffer = null; looper.recData = [];
+  resetLooperUI();
+  updateClock(); // メトロノームが動作中ならクロックは維持される
+}
+
+// ---- メトロノーム & ルーパー ----
+const metro = { on: false, bpm: 120, beats: 4 };
+const looper = {
+  countBeats: 4, bars: 4, recMetro: true, recScene: 0, playScene: 1,
+  state: 'empty',              // empty | countin | recording | playing | stopped
+  buffer: null, source: null, gain: null,
+  recActive: false, recData: [], recNeeded: 0, recCount: 0,
+  phaseBeat: 0, targetBeats: 0,
+};
+const clock = { running: false, timer: null, nextTime: 0, barBeat: 0 };
+
+// メトロノームは電源(ギターチェーン)とは独立した専用の AudioContext を使う
+let metroCtx = null;
+function ensureMetroCtx() {
+  if (!metroCtx) metroCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (metroCtx.state === 'suspended') metroCtx.resume();
+  return metroCtx;
+}
+
+// メトロノーム(ヘッダー) と ルーパー(3段目) を生成
+let utilDom = {};
+(function buildUtility() {
+  const sceneOpts = Array.from({ length: NUM_SCENES }, (_, i) => `<option value="${i}">${i + 1}</option>`).join('');
+
+  // --- メトロノーム: ヘッダーのロゴ(brand)の右に挿入 ---
+  const metroEl = document.createElement('div');
+  metroEl.className = 'metro-panel';
+  metroEl.id = 'metroUnit';
+  metroEl.innerHTML = `
+    <span class="metro-tag">METRO</span>
+    <div class="metro-cols">
+      <div class="metro-line">
+        <div class="util-field">
+          <label>Tempo</label>
+          <div class="util-num">
+            <button data-mbpm="-5">–</button>
+            <input type="number" id="mBpm" min="40" max="240" step="1" value="120">
+            <button data-mbpm="5">+</button>
+          </div>
+        </div>
+        <div class="util-field">
+          <label>Beats</label>
+          <select id="mBeats" class="util-sel">
+            <option value="2">2/4</option><option value="3">3/4</option>
+            <option value="4" selected>4/4</option><option value="5">5/4</option>
+            <option value="6">6/8</option>
+          </select>
+        </div>
+      </div>
+      <div class="metro-line bottom">
+        <div class="beat-dots" id="mDots"></div>
+        <button class="util-btn" id="mToggle">START</button>
+      </div>
+    </div>`;
+  const brand = document.querySelector('header .brand');
+  brand.insertAdjacentElement('afterend', metroEl);
+
+  // --- ルーパー: 3段目(TIME & SPACE 行)に追加 ---
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+      <div class="unit util" id="looperUnit">
+        <div class="util-title">LOOPER</div>
+        <div class="util-row">
+          <div class="util-field">
+            <label>Count (拍)</label>
+            <div class="util-num">
+              <button data-lcount="-1">–</button>
+              <input type="number" id="lCount" min="0" max="16" step="1" value="4">
+              <button data-lcount="1">+</button>
+            </div>
+          </div>
+          <div class="util-field">
+            <label>Bars (小節)</label>
+            <div class="util-num">
+              <button data-lbars="-1">–</button>
+              <input type="number" id="lBars" min="1" max="32" step="1" value="4">
+              <button data-lbars="1">+</button>
+            </div>
+          </div>
+          <div class="util-field">
+            <label>Rec Metro</label>
+            <button class="util-btn active" id="lRecMetro">ON</button>
+          </div>
+        </div>
+        <div class="util-row">
+          <div class="util-field"><label>Rec Scene</label><select id="lRecScene" class="util-sel">${sceneOpts}</select></div>
+          <div class="util-field"><label>Play Scene</label><select id="lPlayScene" class="util-sel">${sceneOpts}</select></div>
+        </div>
+        <div class="util-row">
+          <button class="util-btn rec" id="lRec">● REC</button>
+          <button class="util-btn play" id="lPlayStop">▶ PLAY</button>
+          <button class="util-btn" id="lClear">CLEAR</button>
+        </div>
+        <div class="looper-status" id="lStatus">EMPTY</div>
+      </div>`;
+
+  // 3段目(index 2 = TIME & SPACE)の .row-units 末尾に差し込む
+  const timeRow = rack.querySelectorAll('.rack-row')[2];
+  const units = timeRow.querySelector('.row-units');
+  while (wrap.firstElementChild) units.appendChild(wrap.firstElementChild);
+
+  const q = sel => units.querySelector(sel);   // ルーパー用(3段目)
+  const m = sel => metroEl.querySelector(sel); // メトロノーム用(ヘッダー)
+  utilDom = {
+    mLed: null, mBpm: m('#mBpm'), mBeats: m('#mBeats'),
+    mToggle: m('#mToggle'), mDots: m('#mDots'),
+    lRecMetro: q('#lRecMetro'),
+    lRecScene: q('#lRecScene'), lPlayScene: q('#lPlayScene'),
+    lRec: q('#lRec'), lPlayStop: q('#lPlayStop'), lClear: q('#lClear'),
+    lStatus: q('#lStatus'), lCount: q('#lCount'), lBars: q('#lBars'),
+  };
+  utilDom.lPlayScene.value = '1';
+
+  // --- メトロノーム操作 ---
+  metroEl.querySelectorAll('[data-mbpm]').forEach(b => b.onclick = () => {
+    metro.bpm = Math.max(40, Math.min(240, metro.bpm + Number(b.dataset.mbpm)));
+    utilDom.mBpm.value = metro.bpm;
+  });
+  utilDom.mBpm.onchange = () => {
+    metro.bpm = Math.max(40, Math.min(240, Math.round(Number(utilDom.mBpm.value) || 120)));
+    utilDom.mBpm.value = metro.bpm;
+  };
+  utilDom.mBeats.onchange = () => { metro.beats = Number(utilDom.mBeats.value); renderDots(-1); };
+  utilDom.mToggle.onclick = () => {
+    metro.on = !metro.on;
+    utilDom.mToggle.textContent = metro.on ? 'STOP' : 'START';
+    utilDom.mToggle.classList.toggle('active', metro.on);
+    updateClock();
+  };
+
+  // --- ルーパー操作 ---
+  units.querySelectorAll('[data-lcount]').forEach(b => b.onclick = () => {
+    looper.countBeats = Math.max(0, Math.min(16, looper.countBeats + Number(b.dataset.lcount)));
+    utilDom.lCount.value = looper.countBeats;
+  });
+  utilDom.lCount.onchange = () => { looper.countBeats = Math.max(0, Math.min(16, Math.round(Number(utilDom.lCount.value) || 0))); utilDom.lCount.value = looper.countBeats; };
+  units.querySelectorAll('[data-lbars]').forEach(b => b.onclick = () => {
+    looper.bars = Math.max(1, Math.min(32, looper.bars + Number(b.dataset.lbars)));
+    utilDom.lBars.value = looper.bars;
+  });
+  utilDom.lBars.onchange = () => { looper.bars = Math.max(1, Math.min(32, Math.round(Number(utilDom.lBars.value) || 1))); utilDom.lBars.value = looper.bars; };
+  utilDom.lRecMetro.onclick = () => {
+    looper.recMetro = !looper.recMetro;
+    utilDom.lRecMetro.textContent = looper.recMetro ? 'ON' : 'OFF';
+    utilDom.lRecMetro.classList.toggle('active', looper.recMetro);
+  };
+  utilDom.lRecScene.onchange = () => looper.recScene = Number(utilDom.lRecScene.value);
+  utilDom.lPlayScene.onchange = () => looper.playScene = Number(utilDom.lPlayScene.value);
+  utilDom.lRec.onclick = armRecord;
+  utilDom.lPlayStop.onclick = togglePlayStop;
+  utilDom.lClear.onclick = clearLoop;
+
+  renderDots(-1);
+})();
+
+function setStatus(t) { if (utilDom.lStatus) utilDom.lStatus.textContent = t; }
+
+// PLAY/STOP 兼用ボタンの表示更新
+function updatePlayStopBtn() {
+  const b = utilDom.lPlayStop;
+  if (!b) return;
+  if (looper.state === 'playing') { b.textContent = '■ STOP'; b.classList.add('active'); }
+  else if (looper.state === 'countin' || looper.state === 'recording') { b.textContent = '■ STOP'; b.classList.remove('active'); }
+  else { b.textContent = '▶ PLAY'; b.classList.remove('active'); }
+}
+function togglePlayStop() {
+  if (looper.state === 'playing' || looper.state === 'countin' || looper.state === 'recording') stopLooper();
+  else playLoop();
+}
+
+function renderDots(active) {
+  const host = utilDom.mDots;
+  if (host) {
+    if (host.children.length !== metro.beats) {
+      host.innerHTML = '';
+      for (let i = 0; i < metro.beats; i++) {
+        const d = document.createElement('div');
+        d.className = 'beat-dot' + (i === 0 ? ' accent' : '');
+        host.appendChild(d);
+      }
+    }
+    [...host.children].forEach((d, i) => d.classList.toggle('on', i === active));
+  }
+  // タイトル横 LED も拍で点滅（1拍目はアクセント色）
+  if (utilDom.mLed) {
+    utilDom.mLed.classList.toggle('on', active >= 0);
+    utilDom.mLed.classList.toggle('accent', active === 0);
+  }
+}
+
+// ---- クロック（metroCtx ベースの先読みスケジューラ）----
+function updateClock() {
+  const need = metro.on || looper.state === 'countin' || looper.state === 'recording';
+  if (need && !clock.running) {
+    ensureMetroCtx();
+    clock.running = true;
+    clock.nextTime = metroCtx.currentTime + 0.12;
+    clock.barBeat = 0;
+    clock.timer = setInterval(clockTick, 25);
+  } else if (!need && clock.running) {
+    stopClock();
+  }
+}
+function stopClock() {
+  if (clock.timer) clearInterval(clock.timer);
+  clock.timer = null; clock.running = false;
+  renderDots(-1);
+}
+function clockTick() {
+  const spb = 60 / metro.bpm;
+  while (clock.nextTime < metroCtx.currentTime + 0.13) {
+    handleBeat(clock.nextTime);
+    clock.nextTime += spb;
+    clock.barBeat = (clock.barBeat + 1) % metro.beats;
+  }
+}
+
+function handleBeat(time) {
+  const beatInBar = clock.barBeat % metro.beats;
+  const accent = beatInBar === 0;
+
+  let doClick;
+  if (looper.state === 'countin') doClick = true;          // カウントは常に鳴らす
+  else if (looper.state === 'recording') doClick = looper.recMetro;
+  else doClick = metro.on;
+  if (doClick) scheduleClick(time, accent);
+  scheduleDot(time, beatInBar);
+
+  if (looper.state === 'countin') {
+    looper.phaseBeat++;
+    setStatus('COUNT-IN ' + looper.phaseBeat + '/' + looper.countBeats);
+    if (looper.phaseBeat >= looper.countBeats) {
+      // 次の拍から録音開始
+      looper.state = 'recording';
+      looper.phaseBeat = 0;
+      looper.targetBeats = looper.bars * metro.beats;
+      scheduleAt(time + 60 / metro.bpm, startCapture);
+    }
+  } else if (looper.state === 'recording') {
+    looper.phaseBeat++;
+    const bar = Math.floor(looper.phaseBeat / metro.beats) + 1;
+    setStatus('● REC ' + Math.min(bar, looper.bars) + '/' + looper.bars);
+  }
+}
+
+// クリック音は metroCtx で鳴らす（ループには録音されない）
+function scheduleClick(time, accent) {
+  const c = ensureMetroCtx();
+  const o = c.createOscillator(), g = c.createGain();
+  o.type = 'square';
+  o.frequency.value = accent ? 1600 : 1000;
+  g.gain.setValueAtTime(0.0001, time);
+  g.gain.exponentialRampToValueAtTime(accent ? 0.55 : 0.32, time + 0.001);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+  o.connect(g); g.connect(c.destination);
+  o.start(time); o.stop(time + 0.06);
+}
+function scheduleDot(time, idx) {
+  setTimeout(() => renderDots(idx), Math.max(0, (time - metroCtx.currentTime) * 1000));
+}
+function scheduleAt(time, fn) {
+  setTimeout(fn, Math.max(0, (time - metroCtx.currentTime) * 1000));
+}
+
+// ---- ルーパー本体（録音はギターの ctx を使うので電源ONが必要）----
+function armRecord() {
+  if (!running) { setStatus('POWER OFF'); return; }
+  switchScene(looper.recScene);
+  looper.state = 'countin';
+  looper.phaseBeat = 0;
+  looper.recData = []; looper.recCount = 0; looper.recActive = false;
+  clock.barBeat = 0; // カウントインを小節頭から
+  utilDom.lRec.classList.add('armed');
+  updatePlayStopBtn();
+  setStatus('COUNT-IN');
+  updateClock();
+}
+
+function startCapture() {
+  const spb = 60 / metro.bpm;
+  looper.recNeeded = Math.round(looper.bars * metro.beats * spb * ctx.sampleRate);
+  looper.recCount = 0;
+  looper.recData = [];
+  looper.recActive = true;
+}
+
+function finalizeLoop() {
+  const len = looper.recNeeded;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  let off = 0;
+  for (const chunk of looper.recData) { d.set(chunk, off); off += chunk.length; }
+  // ループ境界のプチノイズ対策に短いフェード
+  const f = Math.min(256, len >> 1);
+  for (let i = 0; i < f; i++) { const g = i / f; d[i] *= g; d[len - 1 - i] *= g; }
+  looper.buffer = buf;
+  looper.recData = [];
+  looper.state = 'playing';
+  switchScene(looper.playScene);   // 再生シーンへ切替
+  startPlayback();
+  utilDom.lRec.classList.remove('armed');
+  updatePlayStopBtn();
+  setStatus('▶ PLAYING (' + looper.bars + ' bars)');
+  updateClock();
+}
+
+function startPlayback() {
+  stopPlayback();
+  if (!looper.buffer) return;
+  const src = ctx.createBufferSource();
+  src.buffer = looper.buffer; src.loop = true;
+  const g = ctx.createGain(); g.gain.value = 1;
+  src.connect(g); g.connect(ctx.destination);
+  src.start();
+  looper.source = src; looper.gain = g;
+}
+function stopPlayback() {
+  if (looper.source) { try { looper.source.stop(); } catch (e) {} try { looper.source.disconnect(); } catch (e) {} looper.source = null; }
+  if (looper.gain) { try { looper.gain.disconnect(); } catch (e) {} looper.gain = null; }
+}
+
+function playLoop() {
+  if (!running || !looper.buffer) { setStatus(looper.buffer ? 'POWER OFF' : 'EMPTY'); return; }
+  switchScene(looper.playScene);
+  looper.state = 'playing';
+  startPlayback();
+  updatePlayStopBtn();
+  setStatus('▶ PLAYING');
+  updateClock();
+}
+function stopLooper() {
+  const had = looper.buffer;
+  looper.recActive = false;
+  stopPlayback();
+  looper.state = had ? 'stopped' : 'empty';
+  looper.phaseBeat = 0;
+  utilDom.lRec.classList.remove('armed');
+  updatePlayStopBtn();
+  setStatus(had ? 'STOPPED' : 'EMPTY');
+  updateClock();
+}
+function clearLoop() {
+  looper.recActive = false;
+  stopPlayback();
+  looper.buffer = null; looper.recData = [];
+  looper.state = 'empty'; looper.phaseBeat = 0;
+  utilDom.lRec.classList.remove('armed');
+  updatePlayStopBtn();
+  setStatus('EMPTY');
+  updateClock();
+}
+
+// 電源OFF時のルーパーUIリセット（メトロノームは触らない）
+function resetLooperUI() {
+  if (!utilDom.lRec) return;
+  utilDom.lRec.classList.remove('armed');
+  updatePlayStopBtn();
+  setStatus('EMPTY');
 }
 
 document.getElementById('powerBtn').onclick = () => running ? stop() : start();
