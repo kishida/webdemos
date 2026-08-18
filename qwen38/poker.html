@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="おねえさんのポーカー・ナイト">
+<meta property="og:description" content="おねえさんのポーカー・ナイト by Qwen3.8-27B">
+<meta property="og:image" content="https://kishida.github.io/webdemos/qwen38/images/poker.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/qwen38/poker.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>おねえさんのポーカー・ナイト</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=RocknRoll+One&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --gold:#e9b45b; --gold-d:#8a5c1c; --red:#c3354a; --cream:#f4ead6;
+  --panel:rgba(12,22,17,.86); --line:rgba(233,180,91,.45);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:#060a08}
+body{font-family:'Zen Maru Gothic',sans-serif;color:var(--cream)}
+#app{position:fixed;inset:0}
+canvas{display:block}
+
+/* ===== HUD ===== */
+#hud{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;padding:14px 18px;pointer-events:none;opacity:0;transition:opacity .8s;z-index:4}
+body.playing #hud{opacity:1}
+.stackbox{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+.stackbox .who{font-family:'RocknRoll One';font-size:11px;letter-spacing:.12em;color:var(--gold);opacity:.9}
+.stackbox .num{font-family:'RocknRoll One';font-size:22px;min-width:86px;text-align:right}
+.stackbox.d .num{color:#f2a0a8}.stackbox.p .num{color:var(--gold)}
+.cchip{width:26px;height:26px;border-radius:50%;flex:none;
+  background:repeating-conic-gradient(var(--c1) 0 14deg,var(--c2) 14deg 30deg);
+  box-shadow:inset 0 0 0 3px rgba(0,0,0,.25),inset 0 0 0 5px var(--c1),0 2px 6px rgba(0,0,0,.6);
+  animation:spins 9s linear infinite}
+.stackbox.p .cchip{--c1:#e9b45b;--c2:#fdf6e6}
+.stackbox.d .cchip{--c1:#c3354a;--c2:#3a1017}
+@keyframes spins{to{transform:rotate(360deg)}}
+.pulse{animation:pop .35s}
+@keyframes pop{40%{transform:scale(1.22)}}
+#potbox{display:flex;flex-direction:column;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 22px}
+#potbox .lbl{font-family:'RocknRoll One';font-size:10px;letter-spacing:.3em;color:var(--gold)}
+#potnum{font-family:'RocknRoll One';font-size:26px;text-shadow:0 0 14px rgba(233,180,91,.5)}
+
+/* ===== 街アナウンス ===== */
+#street{position:absolute;top:13%;left:50%;transform:translateX(-50%);pointer-events:none;text-align:center;opacity:0;z-index:5}
+#street.show{animation:strIn 1.8s ease forwards}
+#street .big{font-family:'RocknRoll One';font-size:44px;color:var(--gold);text-shadow:0 0 22px rgba(233,180,91,.6),0 3px 0 #5c3d10;letter-spacing:.1em}
+#street .sub{font-size:13px;color:var(--cream);opacity:.8;letter-spacing:.35em;margin-top:2px}
+@keyframes strIn{0%{opacity:0;transform:translateX(-50%) scale(1.6);filter:blur(6px)}
+ 18%{opacity:1;transform:translateX(-50%) scale(1);filter:blur(0)}
+ 75%{opacity:1}100%{opacity:0;transform:translateX(-50%) scale(.94)}}
+
+/* ===== 吹き出し ===== */
+#bubble{position:absolute;max-width:300px;background:rgba(250,244,232,.96);color:#2b1d12;
+ border:2px solid #2b1d12;border-radius:14px;padding:10px 14px;font-size:15px;font-weight:700;
+ line-height:1.55;pointer-events:none;opacity:0;transition:opacity .25s;box-shadow:0 6px 20px rgba(0,0,0,.5);z-index:6}
+#bubble:after{content:'';position:absolute;left:50%;top:100%;transform:translateX(-50%);
+ border:9px solid transparent;border-top-color:#2b1d12}
+#bubble.in{opacity:1}
+
+/* ===== 手札表示 ===== */
+#handtag{position:absolute;bottom:100px;left:50%;transform:translateX(-50%);pointer-events:none;
+ font-family:'RocknRoll One';font-size:13px;letter-spacing:.15em;color:var(--cream);
+ background:var(--panel);border:1px solid var(--line);padding:5px 16px;border-radius:20px;opacity:0;transition:opacity .5s;z-index:4}
+#handtag.in{opacity:1}
+
+/* ===== 行動バー ===== */
+#bar{position:absolute;bottom:0;left:50%;transform:translateX(-50%);display:flex;gap:12px;align-items:flex-end;
+ padding:14px 18px 16px;background:var(--panel);border:1px solid var(--line);border-bottom:none;border-radius:16px 16px 0 0;
+ opacity:0;pointer-events:none;transition:opacity .4s;box-shadow:0 -8px 30px rgba(0,0,0,.5);z-index:7}
+#bar.on{opacity:1;pointer-events:auto}
+.btn{font-family:'RocknRoll One';font-size:16px;letter-spacing:.08em;border:none;cursor:pointer;
+ padding:13px 22px;border-radius:10px;position:relative;transition:transform .12s, box-shadow .12s, filter .12s;color:#1c1208}
+.btn:hover{transform:translateY(-3px)}
+.btn:active{transform:translateY(0) scale(.97)}
+.btn:disabled{filter:grayscale(.8) brightness(.6);cursor:default;transform:none}
+.btn.fold{background:linear-gradient(180deg,#e2566b,#a92438);color:#fff;box-shadow:0 4px 0 #6d1523,0 6px 14px rgba(0,0,0,.4)}
+.btn.fold:hover:not(:disabled){box-shadow:0 7px 0 #6d1523,0 10px 18px rgba(196,53,74,.35)}
+.btn.call{background:linear-gradient(180deg,#f2c878,#d99b32);box-shadow:0 4px 0 #7d5518,0 6px 14px rgba(0,0,0,.4)}
+.btn.call:hover:not(:disabled){box-shadow:0 7px 0 #7d5518,0 10px 18px rgba(233,180,91,.35)}
+.btn.raise{background:linear-gradient(180deg,#5fd0a5,#2f9b70);color:#07231a;box-shadow:0 4px 0 #1b5c42,0 6px 14px rgba(0,0,0,.4)}
+.btn.raise:hover:not(:disabled){box-shadow:0 7px 0 #1b5c42,0 10px 18px rgba(95,208,165,.35)}
+.btn.small{font-size:12px;padding:9px 14px}
+#raisePanel{position:absolute;bottom:calc(100% + 12px);left:50%;transform:translateX(-50%);
+ background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;display:none;flex-direction:column;gap:10px;min-width:320px}
+#raisePanel.on{display:flex}
+#raisePanel .rt{font-family:'RocknRoll One';font-size:13px;color:var(--gold);letter-spacing:.1em}
+#raisePanel .rt b{font-size:20px;color:#fff;margin-left:6px}
+input[type=range]{width:100%;accent-color:var(--gold);height:22px;cursor:pointer}
+#raisePanel .row{display:flex;gap:8px}
+#raisePanel .row .btn{flex:1;font-size:12px;padding:9px 6px}
+#raisePanel .ghost{background:transparent;border:1px solid var(--line);color:var(--cream);font-family:'Zen Maru Gothic';font-weight:900}
+#raisePanel .ok{background:linear-gradient(180deg,#f2c878,#d99b32);box-shadow:0 3px 0 #7d5518}
+
+/* ===== 結果 ===== */
+#result{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(5,9,7,.45);z-index:8}
+#result.on{display:flex}
+#resultCard{background:var(--panel);border:2px solid var(--line);border-radius:16px;padding:28px 40px;text-align:center;
+ min-width:340px;box-shadow:0 20px 60px rgba(0,0,0,.7);animation:rcIn .5s cubic-bezier(.2,1.4,.4,1)}
+@keyframes rcIn{from{transform:scale(.7) rotate(-2deg);opacity:0}}
+#resTitle{font-family:'RocknRoll One';font-size:30px;letter-spacing:.05em}
+#resTitle.win{color:var(--gold);text-shadow:0 0 20px rgba(233,180,91,.6)}
+#resTitle.lose{color:#e2848f}
+#resHands{display:flex;gap:26px;justify-content:center;margin:18px 0 6px}
+.hcol{background:rgba(0,0,0,.35);border:1px solid rgba(233,180,91,.25);border-radius:10px;padding:10px 16px}
+.hcol .hn{font-size:11px;color:var(--gold);font-family:'RocknRoll One';letter-spacing:.1em;margin-bottom:6px}
+.hcol .cards{display:flex;gap:4px;justify-content:center}
+.mini{width:26px;height:37px;background:#f8f6ef;border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:900;font-size:13px;line-height:1}
+.mini .s{font-size:11px}
+.mini.red{color:#b3273c}.mini blk{color:#222}
+#resHandName{font-size:14px;font-weight:700;margin-bottom:16px;color:var(--cream)}
+#nextBtn{font-size:17px;padding:12px 34px}
+
+/* ===== 導入 / 破産 ===== */
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:10;
+ background:radial-gradient(120% 100% at 50% 20%, #12312a 0%, #081210 55%, #04080a 100%)}
+#intro{transition:opacity .7s}
+#intro.off{opacity:0;pointer-events:none}
+#intro.off.done{display:none}
+.intro-card{position:relative;text-align:center;padding:40px 56px;border:2px solid var(--line);border-radius:18px;
+ background:rgba(10,20,16,.88);box-shadow:0 30px 80px rgba(0,0,0,.7);max-width:560px}
+.intro-card:before,.intro-card:after{content:'♠ ♥ ♦ ♣';position:absolute;top:-15px;left:50%;transform:translateX(-50%);
+ background:#0a1410;padding:0 16px;color:var(--gold);letter-spacing:14px;font-size:15px;white-space:nowrap}
+.intro-card:after{content:'♦ ♥ ♠ ♣';bottom:-15px;top:auto;color:var(--red)}
+#intro h1{font-family:'RocknRoll One';font-size:clamp(30px,5vw,46px);color:var(--gold);text-shadow:0 0 30px rgba(233,180,91,.45),0 4px 0 #4a320e;line-height:1.25}
+#intro .tag{font-size:14px;letter-spacing:.4em;color:var(--cream);opacity:.75;margin:10px 0 22px}
+.rules{text-align:left;font-size:13.5px;line-height:2;background:rgba(0,0,0,.3);border-radius:10px;padding:14px 20px;margin-bottom:24px}
+.rules b{color:var(--gold)}
+#startBtn{font-size:20px;padding:15px 48px;background:linear-gradient(180deg,#f2c878,#d99b32);
+ box-shadow:0 5px 0 #7d5518,0 12px 26px rgba(233,180,91,.3);animation:glow 2s ease-in-out infinite}
+@keyframes glow{50%{box-shadow:0 5px 0 #7d5518,0 0 34px rgba(233,180,91,.65)}}
+#mute{position:absolute;top:16px;right:16px;z-index:20;background:var(--panel);border:1px solid var(--line);
+ color:var(--cream);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:13px}
+#bust .big{font-family:'RocknRoll One';font-size:52px;color:var(--red);text-shadow:0 0 30px rgba(195,53,74,.6)}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud">
+  <div class="stackbox p"><div class="cchip"></div><div><div class="who">YOU / あなた</div><div class="num" id="pStack">1000</div></div></div>
+  <div id="potbox"><div class="lbl">POT</div><div id="potnum">0</div></div>
+  <div class="stackbox d"><div><div class="who">DEALER / おねえさん</div><div class="num" id="dStack">1000</div></div><div class="cchip"></div></div>
+</div>
+
+<div id="street"><div class="big"></div><div class="sub"></div></div>
+<div id="bubble"></div>
+<div id="handtag"></div>
+
+<div id="bar">
+  <div id="raisePanel">
+    <div class="rt">ライズ先 <b id="raiseVal">40</b></div>
+    <input type="range" id="raiseSlider" min="40" max="400" step="20" value="40">
+    <div class="row">
+      <button class="btn small ghost" id="rHalf">半分</button>
+      <button class="btn small ghost" id="rAll">オールイン</button>
+      <button class="btn small ok" id="rOk">決定</button>
+    </div>
+  </div>
+  <button class="btn fold" id="btnFold">見切り</button>
+  <button class="btn call" id="btnCall">チェック</button>
+  <button class="btn raise" id="btnRaise">ライズ</button>
+</div>
+
+<div id="result">
+  <div id="resultCard">
+    <div id="resTitle"></div>
+    <div id="resHands"></div>
+    <div id="resHandName"></div>
+    <button class="btn call" id="nextBtn">次の手へ →</button>
+  </div>
+</div>
+
+<button id="mute">🔊 効果音</button>
+
+<div id="intro" class="overlay">
+  <div class="intro-card">
+    <h1>おねえさんの<br>ポーカー・ナイト</h1>
+    <div class="tag">FIRST PERSON · TEXAS HOLD'EM</div>
+    <div class="rules">
+      ♠ <b>あなた 1000チップ</b> vs <b>おねえさんディーラー 1000チップ</b><br>
+      ♣ 各ストリートで「見切り / チェック・コール / ライズ」から選択<br>
+      ♥ 7枚から最強5枚を組んで、おねえさんの手を上回れ<br>
+      ♦ 自分の2枚は常に表向き。画面下のタグで今の最強手も分かるよ
+    </div>
+    <button class="btn" id="startBtn">席に着く</button>
+  </div>
+</div>
+
+<div id="bust" class="overlay hidden">
+  <div class="intro-card" style="text-align:center">
+    <div class="big">GAME OVER</div>
+    <div id="bustText" style="margin:18px 0 26px;line-height:1.9"></div>
+    <button class="btn call" id="restartBtn">もう一度</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ============================================================
+   おねえさんのポーカー・ナイト — 3D first-person hold'em
+   ============================================================ */
+const $=s=>document.querySelector(s);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const rand=(a,b)=>a+Math.random()*(b-a);
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+const easeIO=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+
+/* ---------- tweens ---------- */
+const tweens=[];
+function tween(o){o.t0=performance.now();o.dur=o.dur||600;tweens.push(o);
+ return new Promise(res=>{o.done=()=>{o.finished=true;res()}})}
+function stepTweens(now){
+  for(let i=tweens.length-1;i>=0;i--){const o=tweens[i];if(o.finished)continue;
+    const k=clamp((now-o.t0)/o.dur,0,1);o.update(easeIO(k));
+    if(k>=1){o.update(1);tweens.splice(i,1);
+      if(o.onDone){try{o.onDone()}catch(e){}}
+      o.done()}}
+}
+
+/* ---------- audio ---------- */
+const Snd={ctx:null,on:true,
+ init(){if(this.ctx)return;try{
+   const C=window.AudioContext||window.webkitAudioContext;this.ctx=new C();
+   this.master=this.ctx.createGain();this.master.gain.value=.5;this.master.connect(this.ctx.destination);
+   this.noise=this.ctx.createBuffer(1,this.ctx.sampleRate,this.ctx.sampleRate);
+   const d=this.noise.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+ }catch(e){}},
+ env(g,t0,a,pk,dec){g.gain.setValueAtTime(0,t0);g.gain.linearRampToValueAtTime(pk,t0+a);g.gain.exponentialRampToValueAtTime(.0001,t0+a+dec)},
+ click(){if(!this.on||!this.ctx)return;try{
+   const t=this.ctx.currentTime,o=this.ctx.createOscillator(),g=this.ctx.createGain();
+   o.type='square';o.frequency.value=1500;this.env(g,t,.002,.12,.03);o.connect(g).connect(this.master);o.start(t);o.stop(t+.05)}catch(e){}},
+ card(){if(!this.on||!this.ctx)return;try{
+   const t=this.ctx.currentTime,s=this.ctx.createBufferSource();s.buffer=this.noise;
+   const f=this.ctx.createBiquadFilter();f.type='bandpass';f.frequency.setValueAtTime(2600,t);f.frequency.exponentialRampToValueAtTime(500,t+.09);f.Q.value=1.2;
+   const g=this.ctx.createGain();this.env(g,t,.004,.5,.1);s.connect(f).connect(g).connect(this.master);s.start(t);s.stop(t+.14)}catch(e){}},
+ chip(){if(!this.on||!this.ctx)return;try{
+   const t=this.ctx.currentTime;
+   for(let i=0;i<2;i++){const o=this.ctx.createOscillator(),g=this.ctx.createGain();o.type='triangle';
+     o.frequency.setValueAtTime(2200+i*400,t+i*.025);o.frequency.exponentialRampToValueAtTime(700,t+i*.025+.06);
+     this.env(g,t+i*.025,.002,.16,.06);o.connect(g).connect(this.master);o.start(t+i*.025);o.stop(t+i*.025+.09)}}catch(e){}},
+ chime(win){if(!this.on||!this.ctx)return;try{
+   const t=this.ctx.currentTime;const seq=win?[523,659,784,1047]:[392,330,262];
+   seq.forEach((f,i)=>{const o=this.ctx.createOscillator(),g=this.ctx.createGain();o.type='triangle';o.frequency.value=f;
+     this.env(g,t+i*.13,.01,.25,.25);o.connect(g).connect(this.master);o.start(t+i*.13);o.stop(t+i*.13+.3)})}catch(e){}}
+};
+
+/* ---------- 3D setup ---------- */
+let renderer,scene,camera,cameraBase=null;
+const scene2={};
+const TABLE_Y=0.8, FELT_DEPTH=0.075, TOP=TABLE_Y+FELT_DEPTH;   /* フェルト表面 y=0.875 */
+const COMM_Y=TOP+0.02, HAND_Y=TOP+0.015, DEAL_Y=TOP+0.015;
+function initThree(){
+ renderer=new THREE.WebGLRenderer({antialias:true});
+ renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+ renderer.setSize(innerWidth,innerHeight);
+ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+ renderer.outputEncoding=THREE.sRGBEncoding;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.12;
+ $('#app').appendChild(renderer.domElement);
+ scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0x07100d,.05);
+ camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,.1,60);
+ scene.add(camera);
+ camera.position.set(0,1.36,2.7);
+ camera.lookAt(0,.86,-.15);
+ cameraBase={q:camera.quaternion.clone(),y:1.36};
+ buildRoom();buildTable();buildDealer();buildParticles();
+ addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+ (function loop(){requestAnimationFrame(loop);
+   try{stepTweens(performance.now());animateScene(performance.now());renderer.render(scene,camera)}
+   catch(err){console.error(err)}})();
+}
+function tex(c){const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;t.anisotropy=8;return t}
+function canvas(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c}
+
+/* ---- room & lights ---- */
+function buildRoom(){
+ scene.add(new THREE.AmbientLight(0x33443c,1.5));
+ scene.add(new THREE.HemisphereLight(0x8fb5a5,0x0a0e0c,.35));
+ const floor=new THREE.Mesh(new THREE.CircleGeometry(9,48),new THREE.MeshStandardMaterial({color:0x0c1310,roughness:.95}));
+ floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;scene.add(floor);
+ const wall=new THREE.Mesh(new THREE.CylinderGeometry(8.6,8.6,4,48,1,true),new THREE.MeshStandardMaterial({color:0x14201b,roughness:1,side:THREE.BackSide}));
+ wall.position.y=2;scene.add(wall);
+ const spot=new THREE.SpotLight(0xffd9a3,1.35,9,.62,.55,1.6);
+ spot.position.set(0,2.9,-.25);spot.target.position.set(0,TABLE_Y,-.1);spot.castShadow=true;
+ spot.shadow.mapSize.set(2048,2048);spot.shadow.camera.near=.5;spot.shadow.camera.far=6;scene.add(spot,spot.target);
+ const rim=new THREE.PointLight(0x5d7cff,.7,7);rim.position.set(0,1.8,-3.1);scene.add(rim);
+ const playerL=new THREE.PointLight(0xffc98a,.4,4);playerL.position.set(.2,1.3,2.3);scene.add(playerL);
+ const neonL=new THREE.PointLight(0xff5d9e,.5,6);neonL.position.set(0,2.3,-4.2);scene.add(neonL);scene2.neonL=neonL;
+ const lamp=new THREE.Group();lamp.position.set(0,2.9,-.25);
+ const cord=new THREE.Mesh(new THREE.CylinderGeometry(.012,.012,.9),new THREE.MeshStandardMaterial({color:0x222}));cord.position.y=.45;lamp.add(cord);
+ const shade=new THREE.Mesh(new THREE.ConeGeometry(.34,.28,28,1,true),new THREE.MeshStandardMaterial({color:0x1e3b31,roughness:.4,metalness:.6,side:THREE.DoubleSide}));lamp.add(shade);
+ const bulb=new THREE.Mesh(new THREE.SphereGeometry(.06,12,10),new THREE.MeshBasicMaterial({color:0xffe6b0}));bulb.position.y=-.12;lamp.add(bulb);
+ scene.add(lamp);
+ const nc=canvas(1024,400);const x=nc.getContext('2d');
+ x.textAlign='center';x.shadowColor='#ff4f93';x.shadowBlur=40;
+ x.fillStyle='#ffd9e8';x.font='900 120px "RocknRoll One", sans-serif';x.fillText('POKER NIGHT',512,150);
+ x.shadowColor='#e9b45b';x.shadowBlur=26;x.fillStyle='#ffe9c2';x.font='900 66px "Zen Maru Gothic"';x.fillText('おねえさんのプライベート・ルーム',512,270);
+ const sign=new THREE.Sprite(new THREE.SpriteMaterial({map:tex(nc),transparent:true,opacity:.95,depthWrite:false}));
+ sign.scale.set(5.2,2.0,1);sign.position.set(0,2.1,-4.6);scene.add(sign);
+ [[-3.4,1.3,-3.6,0xff3b5c],[3.4,1.3,-3.6,0x39c6ff]].forEach(p=>{
+   const m=new THREE.Mesh(new THREE.BoxGeometry(.06,2.4,.06),new THREE.MeshBasicMaterial({color:p[3]}));
+   m.position.set(p[0],p[1],p[2]);scene.add(m)});
+}
+/* ---- table ---- */
+function roundedShape(w,h,r){const s=new THREE.Shape(),x=-w/2,y=-h/2;
+ s.moveTo(x+r,y);s.lineTo(x+w-r,y);s.quadraticCurveTo(x+w,y,x+w,y+r);s.lineTo(x+w,y+h-r);
+ s.quadraticCurveTo(x+w,y+h,x+w-r,y+h);s.lineTo(x+r,y+h);s.quadraticCurveTo(x,y+h,x,y+h-r);
+ s.lineTo(x,y+r);s.quadraticCurveTo(x,y,x+r,y);return s}
+function buildTable(){
+ const g=new THREE.Group();
+ const feltC=canvas(512,320),fx=feltC.getContext('2d');
+ const grad=fx.createRadialGradient(256,160,40,256,160,290);
+ grad.addColorStop(0,'#1d7a55');grad.addColorStop(.7,'#135740');grad.addColorStop(1,'#0b3325');
+ fx.fillStyle=grad;fx.fillRect(0,0,512,320);
+ fx.strokeStyle='rgba(233,180,91,.35)';fx.lineWidth=3;fx.setLineDash([14,10]);
+ fx.beginPath();fx.arc(256,160,120,0,Math.PI*2);fx.stroke();
+ const felt=new THREE.Mesh(new THREE.ExtrudeGeometry(roundedShape(2.7,1.7,.42),{depth:FELT_DEPTH,bevelEnabled:false}),
+  new THREE.MeshStandardMaterial({map:tex(feltC),roughness:.92}));
+ felt.rotation.x=-Math.PI/2;felt.position.y=TABLE_Y;felt.receiveShadow=true;g.add(felt);
+ const rim=new THREE.Mesh(new THREE.ExtrudeGeometry(roundedShape(2.94,1.94,.48),{depth:.1,bevelEnabled:false}),
+  new THREE.MeshStandardMaterial({color:0x3a2314,roughness:.5,metalness:.15}));
+ rim.rotation.x=-Math.PI/2;rim.position.y=TABLE_Y-.075;rim.castShadow=true;g.add(rim);
+ const gold=new THREE.Mesh(new THREE.TorusGeometry(1,0.008,8,80),new THREE.MeshStandardMaterial({color:0xc9a24d,metalness:.85,roughness:.35}));
+ gold.rotation.x=Math.PI/2;gold.scale.set(1.02,.66,1);gold.position.y=TOP+.001;g.add(gold);
+ const base=new THREE.Mesh(new THREE.CylinderGeometry(.5,.7,0.72,24),new THREE.MeshStandardMaterial({color:0x241408,roughness:.7}));
+ base.position.y=.36;base.castShadow=true;g.add(base);
+ const box=new THREE.Group();box.position.set(.52,TOP,-.95);box.rotation.y=-.12;
+ const bx=new THREE.Mesh(new THREE.BoxGeometry(.3,.11,.2),new THREE.MeshStandardMaterial({color:0x8c2438,roughness:.6}));
+ bx.castShadow=true;box.add(bx);
+ const topC=new THREE.Mesh(new THREE.BoxGeometry(.27,.008,.17),new THREE.MeshStandardMaterial({map:tex(cardBackCanvas())}));
+ topC.position.y=.06;box.add(topC);g.add(box);
+ scene.add(g);
+ scene2.boxHand=new THREE.Vector3(.52,TOP+.14,-.82);
+ scene2.dPot=new THREE.Vector3(0,TOP+.05,-.78);
+ scene2.pot=new THREE.Vector3(0,TOP+.02,.08);
+ scene2.pStack=new THREE.Vector3(.95,HAND_Y+.02,.92);
+ scene2.restHand=new THREE.Vector3(0,TOP+.12,.2);
+}
+/* ---- particles ---- */
+function buildParticles(){
+ const n=140,pos=new Float32Array(n*3);
+ for(let i=0;i<n;i++){pos[i*3]=rand(-2.4,2.4);pos[i*3+1]=rand(.4,2.4);pos[i*3+2]=rand(-2.6,2)}
+ const gm=new THREE.BufferGeometry();gm.setAttribute('position',new THREE.BufferAttribute(pos,3));
+ const pts=new THREE.Points(gm,new THREE.PointsMaterial({color:0xffd9a3,size:.014,transparent:true,opacity:.4,depthWrite:false}));
+ scene.add(pts);scene2.dust=pts;
+}
+/* ---- cards & chips ---- */
+const RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+const SUITS=['♠','♥','♦','♣'];
+function cardFaceCanvas(rank,suit){
+ const c=canvas(256,352),x=c.getContext('2d'),red=suit==='♥'||suit==='♦';
+ const col=red?'#c1273c':'#23252b';
+ x.fillStyle='#f7f4ea';x.beginPath();
+ if(x.roundRect){x.roundRect(4,4,248,344,18)}else{x.rect(4,4,248,344)}
+ x.fill();
+ x.strokeStyle='rgba(0,0,0,.12)';x.lineWidth=3;x.stroke();
+ x.fillStyle=col;x.textAlign='center';
+ const rtxt=rank==='10'?'10':rank;
+ x.font='900 58px "RocknRoll One", sans-serif';x.fillText(rtxt,42,66);
+ x.font='44px sans-serif';x.fillText(SUITS[suit],42,110);
+ x.font='150px sans-serif';x.fillText(SUITS[suit],128,232);
+ x.save();x.translate(252,348);x.rotate(Math.PI);
+ x.font='900 58px "RocknRoll One",sans-serif';x.fillText(rtxt,-208,-282);
+ x.font='44px sans-serif';x.fillText(SUITS[suit],-208,-238);x.restore();
+ return c;
+}
+function cardBackCanvas(){
+ const c=canvas(256,352),x=c.getContext('2d');
+ x.fillStyle='#7c1f30';x.fillRect(0,0,256,352);
+ x.strokeStyle='#e9b45b';x.lineWidth=6;x.strokeRect(14,14,228,324);
+ x.lineWidth=2;for(let i=0;i<6;i++){x.beginPath();x.moveTo(30+i*42,20);x.lineTo(226-i*42,332);x.stroke();
+   x.beginPath();x.moveTo(226-i*42,20);x.lineTo(30+i*42,332);x.stroke()}
+ x.fillStyle='#e9b45b';x.font='900 84px "RocknRoll One"';x.textAlign='center';
+ x.save();x.translate(128,176);x.rotate(-Math.PI/4);x.fillText('PN',0,30);x.restore();
+ return c;
+}
+/* ★ BoxGeometry(.26,.006,.36) は「Y方向が薄い」ので 元から平たい。
+   面の順序: [+X(縁), -X(縁), +Y(上=表), -Y(下=裏), +Z(縁), -Z(縁)] */
+const cardGeo=new THREE.BoxGeometry(.26,.006,.36);
+const faceTex={};
+function faceMat(r,s){const k=r+'-'+s;if(!faceTex[k])faceTex[k]=tex(cardFaceCanvas(r,s));
+ return new THREE.MeshStandardMaterial({map:faceTex[k],roughness:.55})}
+const backMat=()=>new THREE.MeshStandardMaterial({map:tex(cardBackCanvas()),roughness:.55});
+function makeCard(){
+ const e=new THREE.MeshStandardMaterial({color:0xf3efe4,roughness:.7});
+ /* ★ 表=+Y(インデックス2) / 裏=-Y(インデックス3) */
+ const mesh=new THREE.Mesh(cardGeo,[e,e,faceMat(0,0),backMat(),e,e]);
+ mesh.castShadow=true;mesh.userData.isCard=true;
+ mesh._from=new THREE.Vector3();
+ return mesh;
+}
+const chipGeo=new THREE.CylinderGeometry(.085,.085,.02,26);
+const chipMats={};
+function chipEdgeCanvas(base,stripe){
+ const c=canvas(128,32),x=c.getContext('2d');
+ x.fillStyle=base;x.fillRect(0,0,128,32);
+ x.fillStyle=stripe;for(let i=0;i<8;i++)x.fillRect(i*16+4,0,8,32);
+ return c;
+}
+function makeChip(kind){
+ if(!chipMats[kind]){
+  const base=kind==='gold'?'#8a6420':'#5c1420',strip=kind==='gold'?'#f2dcae':'#e9b45b';
+  const edge=new THREE.MeshStandardMaterial({map:tex(chipEdgeCanvas(base,strip)),roughness:.5});
+  const top=new THREE.MeshStandardMaterial({color:kind==='gold'?0xd9a94e:0xa12739,roughness:.5});
+  chipMats[kind]=[edge,top,top];
+ }
+ const m=new THREE.Mesh(chipGeo,chipMats[kind]);m.castShadow=true;m.userData.isChip=true;return m;
+}
+function flyChip(from,to,dur,kind,delay=0){
+ return new Promise(res=>{
+  setTimeout(()=>{
+   const ch=makeChip(kind);
+   ch.position.copy(from);scene.add(ch);
+   const p={from:from.clone(),to:to.clone(),ctrl:from.clone().lerp(to,.5),h:rand(.25,.45)};
+   const rot=rand(0,3),vx=rand(4,7),baseY=to.y;
+   tween({dur,update:t=>{
+     const a=1-t;
+     ch.position.set(
+      a*a*p.from.x+2*a*t*p.ctrl.x+t*t*p.to.x,
+      a*a*p.from.y+2*a*t*p.ctrl.y+t*t*p.to.y+Math.sin(t*Math.PI)*p.h,
+      a*a*p.from.z+2*a*t*p.ctrl.z+t*t*p.to.z);
+     ch.rotation.y=rot+t*vx;ch.rotation.z=Math.sin(t*Math.PI)*.3;
+   },onDone:()=>{Snd.chip();
+     tween({dur:180,update:t=>{ch.position.y=baseY-Math.sin(t*Math.PI)*.02}})
+   }}).then(res);
+  },delay);
+ });
+}
+async function sendChips(kind,amount,from,to,fast){
+ if(amount<=0)return;
+ const count=Math.min(Math.ceil(amount/30),8);
+ const jobs=[];
+ for(let i=0;i<count;i++)
+  jobs.push(flyChip(from.clone().add(new THREE.Vector3(rand(-.03,.03),i*.024,rand(-.03,.03))),
+   to.clone().add(new THREE.Vector3(rand(-.02,.02),0,rand(-.02,.02))),
+   fast?420:680,kind,i*(fast?60:110)));
+ await Promise.all(jobs);
+}
+/* ---- dealer character ---- */
+let D=null;
+function faceCanvas(mouth,blink){
+ const c=canvas(256,256),x=c.getContext('2d');
+ x.clearRect(0,0,256,256);
+ const eye=(cx,cy,open)=>{
+  if(!open){x.strokeStyle='#3a241c';x.lineWidth=7;x.lineCap='round';
+   x.beginPath();x.arc(cx,cy+4,16,Math.PI*1.15,Math.PI*1.85);x.stroke();return}
+  x.fillStyle='#fff';x.beginPath();x.ellipse(cx,cy,17,19,0,0,Math.PI*2);x.fill();
+  const g=x.createRadialGradient(cx,cy+4,2,cx,cy+4,15);
+  g.addColorStop(0,'#6b4226');g.addColorStop(1,'#2a160c');
+  x.fillStyle=g;x.beginPath();x.ellipse(cx,cy+3,13,15,0,0,Math.PI*2);x.fill();
+  x.fillStyle='#fff';x.beginPath();x.arc(cx-5,cy-4,4.5,0,Math.PI*2);x.arc(cx+6,cy+8,2.4,0,Math.PI*2);x.fill();
+  x.strokeStyle='#241309';x.lineWidth=6;x.lineCap='round';
+  x.beginPath();x.moveTo(cx-17,cy-12);x.quadraticCurveTo(cx,cy-20,cx+17,cy-11);x.stroke();
+ };
+ const my=152;
+ if(mouth==='smile'){x.strokeStyle='#a14a52';x.lineWidth=5;x.lineCap='round';
+  x.beginPath();x.arc(128,my,10,.3,Math.PI-.3);x.stroke()}
+ else if(mouth==='open'){x.fillStyle='#7c2a30';x.beginPath();x.ellipse(128,my+4,10,11,0,0,Math.PI*2);x.fill();
+  x.fillStyle='#e08a8f';x.beginPath();x.ellipse(128,my+9,6,4.5,0,0,Math.PI*2);x.fill()}
+ else if(mouth==='happy'){x.fillStyle='#7c2a30';x.beginPath();x.arc(128,my+2,13,0,Math.PI);x.closePath();x.fill();
+  x.fillStyle='#e08a8f';x.beginPath();x.ellipse(128,my+9,7,4,0,0,Math.PI*2);x.fill()}
+ else{
+  x.strokeStyle='#a14a52';x.lineWidth=5;x.lineCap='round';
+  x.beginPath();x.arc(128,my+14,9,Math.PI+.4,-.4);x.stroke()}
+ eye(88,128,blink!==true);eye(168,128,blink!==true);
+ if(blink!==true){x.strokeStyle='#4a2f22';x.lineWidth=4;x.lineCap='round';
+  x.beginPath();x.moveTo(72,100);x.quadraticCurveTo(88,94,102,99);x.stroke();
+  x.beginPath();x.moveTo(154,99);x.quadraticCurveTo(168,94,184,100);x.stroke()}
+ x.fillStyle='rgba(240,130,130,.4)';
+ x.beginPath();x.ellipse(70,150,14,8,0,0,Math.PI*2);x.fill();
+ x.beginPath();x.ellipse(186,150,14,8,0,0,Math.PI*2);x.fill();
+ return c;
+}
+function buildDealer(){
+ const skin=new THREE.MeshStandardMaterial({color:0xf5d3bd,roughness:.85});
+ const hairM=new THREE.MeshStandardMaterial({color:0x4a2c1c,roughness:.85});
+ const hairM2=new THREE.MeshStandardMaterial({color:0x63402a,roughness:.85});
+ const dress=new THREE.MeshStandardMaterial({color:0x6e1f33,roughness:.65});
+ const Dg=new THREE.Group();Dg.position.set(0,0.62,-1.42);scene.add(Dg);
+ D={g:Dg,mats:{},blinkT:rand(2,4),mouthT:0};
+ const pts=[[0.13,0],[0.185,.06],[0.205,.2],[0.175,.33],[0.115,.4],[0.055,.44],[0.045,.5]]
+  .map(p=>new THREE.Vector2(p[0],p[1]));
+ const body=new THREE.Mesh(new THREE.LatheGeometry(pts,26),dress);
+ body.castShadow=true;Dg.add(body);
+ const trim=new THREE.Mesh(new THREE.TorusGeometry(.118,.006,6,32),new THREE.MeshStandardMaterial({color:0xd9a94e,metalness:.8,roughness:.35}));
+ trim.rotation.x=Math.PI/2;trim.position.y=.4;Dg.add(trim);
+ for(let i=0;i<3;i++){const b=new THREE.Mesh(new THREE.SphereGeometry(.012,8,6),new THREE.MeshStandardMaterial({color:0xe9b45b,metalness:.9,roughness:.3}));
+  b.position.set(0,.28+i*.07,.185);Dg.add(b)}
+ const neck=new THREE.Mesh(new THREE.CylinderGeometry(.045,.055,.08,12),skin);neck.position.y=.5;Dg.add(neck);
+ const headG=new THREE.Group();headG.position.y=.56;Dg.add(headG);D.headG=headG;
+ const head=new THREE.Mesh(new THREE.SphereGeometry(.155,26,20),skin);
+ head.scale.set(1,1.05,.98);head.position.y=.13;head.castShadow=true;headG.add(head);
+ const faceMats={};
+ ['smile','open','happy','pout'].forEach(m=>{
+  faceMats[m]=new THREE.MeshBasicMaterial({map:tex(faceCanvas(m,false)),transparent:true});
+  faceMats[m+'_b']=new THREE.MeshBasicMaterial({map:tex(faceCanvas(m,true)),transparent:true});});
+ D.mats=faceMats;
+ const face=new THREE.Mesh(new THREE.CircleGeometry(.128,24),faceMats.smile);
+ face.position.set(0,.135,.128);headG.add(face);D.face=face;
+ const back=new THREE.Mesh(new THREE.SphereGeometry(.18,22,18),hairM);
+ back.scale.set(1.05,1.12,1);back.position.set(0,.16,-.02);back.castShadow=true;headG.add(back);
+ [[-.145,.03,.01],[.145,.03,.01]].forEach(p=>{
+  const s=new THREE.Mesh(new THREE.SphereGeometry(.1,16,12),hairM);
+  s.scale.set(.55,2.1,.8);s.position.set(p[0],p[1]-.1,p[2]);s.castShadow=true;headG.add(s)});
+ [[-.09,.285,.1],[-.03,.3,.125],[.03,.3,.125],[.09,.285,.1]].forEach(p=>{
+  const b=new THREE.Mesh(new THREE.SphereGeometry(.05,12,10),hairM2);
+  b.scale.set(1,.62,.55);b.position.set(p[0],p[1],p[2]);headG.add(b)});
+ function arm(side){
+  const piv=new THREE.Group();piv.position.set(.175*side,.36,.03);Dg.add(piv);
+  const sleeve=new THREE.Mesh(new THREE.CylinderGeometry(.052,.06,.34,10),dress);
+  sleeve.position.y=-.17;piv.add(sleeve);
+  const hand=new THREE.Mesh(new THREE.SphereGeometry(.045,12,10),skin);
+  hand.position.y=-.36;piv.add(hand);
+  piv.rotation.x=-.42;piv.rotation.z=-.12*side;
+  return piv;
+ }
+ D.armR=arm(1);D.armL=arm(-1);
+ const sp=new THREE.Object3D();sp.position.set(0,.46,0);headG.add(sp);D.sp=sp;
+}
+function setFace(m){if(D)D.face.material=D.mats[m]}
+function handWorld(piv,v){v.set(0,-.36,0);piv.localToWorld(v);return v}
+function armTo(piv,targetWorld,dur=450){
+ piv.updateWorldMatrix(true,false);
+ const local=targetWorld.clone().applyMatrix4(new THREE.Matrix4().copy(piv.matrixWorld).invert());
+ const L=.36;
+ const b=Math.asin(clamp(local.x/L,-1,1));
+ const a=Math.atan2(-local.z,-local.y);
+ const f={x:piv.rotation.x,z:piv.rotation.z};
+ return tween({dur,update:t=>{
+  piv.rotation.x=f.x+(a-f.x)*t;
+  piv.rotation.z=f.z+(b-f.z)*t;
+ }});
+}
+/* ============================================================
+   GAME
+   ============================================================ */
+const P={stack:1000},Dchips={stack:1000};
+let deck=[],myCards=[],herCards=[],community=[],pot=0,streetIdx=0,roundNo=0;
+let myStreet=0,herStreet=0;
+let myCardMeshes=[],herCardMeshes=[],commMeshes=[];
+const streetNames=['プリフロップ','フロップ','ターン','リバー'];
+const subNames=['PRE-FLOP','FLOP','TURN','RIVER'];
+function newDeck(){
+ const d=[];
+ for(let s=0;s<4;s++)for(let r=2;r<=14;r++)d.push({r,s});
+ for(let i=d.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[d[i],d[j]]=[d[j],d[i]]}
+ return d;
+}
+function drawCard(){return deck.pop()}
+/* ---- HUD ---- */
+function setNum(el,v){if(el.textContent!=String(v)){el.textContent=v;el.classList.remove('pulse');void el.offsetWidth;el.classList.add('pulse')}}
+function hud(){setNum($('#pStack'),P.stack);setNum($('#dStack'),Dchips.stack);setNum($('#potnum'),pot)}
+function streetBanner(i){
+ const s=$('#street');s.querySelector('.big').textContent=streetNames[i];
+ s.querySelector('.sub').textContent=subNames[i];
+ s.classList.remove('show');void s.offsetWidth;s.classList.add('show');
+}
+/* ---- 手評価(1〜5枚対応) ---- */
+function eval5(cs){
+ if(!cs||cs.length===0)return{sc:0,cat:0,k:[]};
+ const ranks=cs.map(c=>c.r).sort((a,b)=>b-a);
+ const n=ranks.length;
+ const flush=n===5&&cs.every(c=>c.s===cs[0].s);
+ const uniq=[...new Set(ranks)].sort((a,b)=>b-a);
+ let sh=null;
+ if(n===5&&uniq.length===5){
+  if(uniq[0]-uniq[4]===4)sh=uniq[0];
+  else if(uniq[0]===14&&uniq[1]===5&&uniq[4]===2)sh=5;
+ }
+ const cnt={};ranks.forEach(r=>cnt[r]=(cnt[r]||0)+1);
+ const gr=Object.entries(cnt).map(([r,c])=>[+r,c]).sort((a,b)=>b[1]-a[1]||b[0]-a[0]);
+ const rest=gr.slice(1).map(g=>g[0]);
+ let cat=0,k;
+ if(flush&&sh!==null){cat=8;k=[sh]}
+ else if(gr[0][1]===4){cat=7;k=[gr[0][0],...rest]}
+ else if(gr[0][1]===3&&gr[1]&&gr[1][1]===2){cat=6;k=[gr[0][0],gr[1][0]]}
+ else if(flush){cat=5;k=ranks.slice()}
+ else if(sh!==null){cat=4;k=[sh]}
+ else if(gr[0][1]===3){cat=3;k=[gr[0][0],...rest]}
+ else if(gr[0][1]===2&&gr[1]&&gr[1][1]===2){cat=2;k=[gr[0][0],gr[1][0],...rest]}
+ else if(gr[0][1]===2){cat=1;k=[gr[0][0],...rest]}
+ else{cat=0;k=ranks.slice()}
+ let sc=cat;k.forEach(x=>sc=sc*15+x);
+ return{sc,cat,k};
+}
+const CATNAME=['高カード','ワンペア','ツーペア','スリーカード','ストレート','フラッシュ','フルハウス','フォーカード','ストレートフラッシュ'];
+function bestOf(cards){
+ if(cards.length<=5)return eval5(cards);
+ let best=null;const n=cards.length;
+ for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){
+  const c=cards.filter((_,k)=>k!==i&&k!==j);
+  const e=eval5(c);if(!best||e.sc>best.sc)best=e;}
+ return best;
+}
+function herStrength(){
+ const ev=bestOf([...herCards,...community]);
+ let s=ev.cat/9*.9+(ev.k[0]||0)/14*.12;
+ if(community.length===0){
+  const[a,b]=herCards;
+  if(a.r===b.r)s=.8+a.r/14*.2;
+  else s=Math.max(s,.22+(a.r+b.r)/28*.4+(a.s===b.s?.08:0));
+ }else if(ev.cat>=3)s+=.1;
+ return clamp(s+rand(-.05,.05),0,1);
+}
+/* ---- 吹き出し ---- */
+const speechState={t:null};
+const LINES={
+ deal:['さあ、今日はどこまで持っていくつもり?','ふふ、この手札、お姉ちゃんが選んだのよ…','ドキドキしちゃう? 慣れてなさい'],
+ open:['さあ、オープンよ。20ね','見てなさい、これがプロの立ち上がり','今日は強めにいくわよ'],
+ pFold:['ふふ、惜しいね。次はもっと強く来な','流すの、早いのねえ…','また次の手で。覚悟してて'],
+ pCall:['あら、ついてくる? かわいい','うん、それでいい。その勢いで','分かってるわね、いいわ'],
+ pRaise:['あらら、本気? 面白いじゃない','お、火がついた? ふふ','その心意気、嫌いじゃない'],
+ hCall:['まあいっか、乗っとくわ','見てなさい、こっちにも夢があるの','いいわ、どうぞ'],
+ hFold:['ええ、これは譲るわよ。次こそは','惜しい…! ねえ、悔しいのよ?','ふん、今日は甘かったみたい'],
+ hBet:['ねえ、ここは少し強めにいくわ','20ね。見せてもらおうか'],
+ hRaise:['この手、負ける気がしないの','面白い、面白い!'],
+ win:['お姉ちゃんの勝ち〜。チップ、ありがとね','ふふ、実力差は仕方がないわ','おねむ? まだまだ戦えるでしょ?'],
+ winBig:['わっ! いきなりそんな手?! …うむ、お前の勝ちよ','ねえ、ちょっと裏があるんじゃない?','…次は絶対取り返すから'],
+ lose:['ええっ? 負けてる?! …ごめんなさい、強かった','うう、見せてもらいました','あーあ、チップが溶けていくのが見えてる…'],
+ loseBig:['そんな手、いつから持ってたのよ?!','ねえ、もう一回やり直して','…今日は私のミスだった。ご褒美にチップどうぞ'],
+ bust:['…ご、ごめんなさい。全負けた…','もう、お姉ちゃん、引退するわ…'],
+ start:['ようこそ、私のテーブルへ','今日のお茶は、チップね','じゃあ始めましょうか']
+};
+function say(key,custom){
+ if(!D)return;
+ const text=custom||((LINES[key]||['ふふ'])[Math.floor(Math.random()*(LINES[key]||['ふふ']).length)]);
+ const b=$('#bubble');
+ clearTimeout(speechState.t);
+ setFace('open');
+ b.textContent='';b.classList.add('in');
+ let i=0;
+ (function type(){if(i<text.length){b.textContent+=text[i++];setTimeout(type,34)}
+  else speechState.t=setTimeout(()=>{b.classList.remove('in');setFace('smile')},2600+text.length*30)})();
+ D.mouthT=performance.now()+2600+text.length*30;
+}
+/* ---- カード処理 ---- */
+const communitySlots=[-2,-1,0,1,2].map(i=>new THREE.Vector3(i*.31,COMM_Y,.12));
+const mySlots=[new THREE.Vector3(-.19,HAND_Y,.98),new THREE.Vector3(.19,HAND_Y,.98)];
+const herSlots=[new THREE.Vector3(-.15,DEAL_Y,-.62),new THREE.Vector3(.15,DEAL_Y,-.62)];
+function faceUpTexture(card,cd){
+ /* ★ 表は+Y面(インデックス2) */
+ card.material[2].map=tex(cardFaceCanvas(cd.r-2,cd.s));
+ card.material[2].needsUpdate=true;
+}
+/* 平置きカード: rotation.z で 0=表 / π=裏 を切替(面内スピンで裏返る) */
+function dealCardTo(card,to,faceToPlayer,delay=0){
+ return new Promise(res=>{
+  setTimeout(async()=>{
+   try{
+    handWorld(D.armR,card._from);
+    card.position.copy(card._from);
+    const endY=faceToPlayer?0:Math.PI;
+    const endZ=faceToPlayer?0:Math.PI;
+    /* あなたの手札は裏から表へ半回転しながら着地(途中は顔が見えない) */
+    const startZ=faceToPlayer?Math.PI:Math.PI;
+    card.rotation.set(0,endY,startZ);
+    scene.add(card);
+    const toV=to.clone();
+    card._from.copy(card.position);
+    card._ctrl=card._from.clone().lerp(toV,.5);card._ctrl.y+=rand(.35,.5);
+    const h=rand(.3,.45),dur=rand(620,800);
+    await tween({dur,update:t=>{
+     const a=1-t;
+     card.position.set(
+      a*a*card._from.x+2*a*t*card._ctrl.x+t*t*toV.x,
+      a*a*card._from.y+2*a*t*card._ctrl.y+t*t*toV.y+Math.sin(t*Math.PI)*h,
+      a*a*card._from.z+2*a*t*card._ctrl.z+t*t*toV.z);
+     card.rotation.z=THREE.MathUtils.lerp(startZ,endZ,t);
+     card.rotation.y=endY+Math.sin(t*Math.PI)*.25;
+     card.rotation.x=Math.sin(t*Math.PI)*.12;
+    }});
+    card.rotation.set(0,endY,endZ);
+    Snd.card();
+    res();
+   }catch(err){console.error(err);res()}
+  },delay);
+ });
+}
+function flipCard(card,fromZ,toZ){
+ return tween({dur:520,update:t=>{card.rotation.z=THREE.MathUtils.lerp(fromZ,toZ,t)}});
+}
+async function dealHand(){
+ myCards=[];herCards=[];myCardMeshes=[];herCardMeshes=[];
+ for(let i=0;i<2;i++){
+  const pm=makeCard();
+  myCards.push(drawCard());
+  faceUpTexture(pm,myCards[i]);
+  myCardMeshes.push(pm);
+  await dealCardTo(pm,mySlots[i],true);
+  const hm=makeCard();
+  herCards.push(drawCard());
+  herCardMeshes.push(hm);
+  await dealCardTo(hm,herSlots[i],false);
+  await wait(160);
+ }
+}
+async function dealCommunity(n){
+ for(let i=0;i<n;i++){
+  const c=makeCard();
+  community.push(drawCard());
+  faceUpTexture(c,community[community.length-1]);
+  commMeshes.push(c);
+  await dealCardTo(c,communitySlots[community.length-1],true);
+ }
+ for(let i=commMeshes.length-n;i<commMeshes.length;i++){
+  Snd.card();
+  flipCard(commMeshes[i],Math.PI,Math.PI*2);
+  await wait(240);
+ }
+}
+/* ---- 安全な掃除 ---- */
+function clearPieces(){
+ const toRemove=[];
+ scene.traverse(o=>{if(o.isMesh&&(o.userData.isCard||o.userData.isChip)) toRemove.push(o)});
+ toRemove.forEach(o=>{if(o.parent)o.parent.remove(o)});
+ myCardMeshes=[];herCardMeshes=[];commMeshes=[];
+ myCards=[];herCards=[];community=[];
+}
+/* ---- ポット分配 ---- */
+async function awardPot(winner){
+ const amt=pot;pot=0;hud();
+ if(winner==='p'){P.stack+=amt;hud();await sendChips('gold',amt,scene2.pot,scene2.pStack,true);}
+ else{Dchips.stack+=amt;hud();await sendChips('red',amt,scene2.pot,scene2.dPot,true);}
+ hud();
+}
+/* ============================================================
+   FLOW
+   ============================================================ */
+let acting=false,roundDone=false;
+const bar=$('#bar'),rPanel=$('#raisePanel');
+function raiseMin(){return herStreet===0?20:herStreet+20}
+function showBar(mode){
+ acting=true;bar.classList.add('on');rPanel.classList.remove('on');
+ $('#btnFold').disabled=false;
+ $('#btnCall').textContent=mode==='open'?'チェック':'コール';
+ $('#btnCall').disabled=P.stack<=0;
+ $('#btnRaise').disabled=P.stack<raiseMin();
+}
+function hideBar(){acting=false;bar.classList.remove('on');rPanel.classList.remove('on')}
+function openRaisePanel(min){
+ const max=Math.max(min,P.stack);
+ const sl=$('#raiseSlider');sl.min=min;sl.max=max;sl.value=min;
+ $('#raiseVal').textContent=min;
+ rPanel.classList.add('on');
+}
+$('#raiseSlider').addEventListener('input',e=>$('#raiseVal').textContent=e.target.value);
+$('#rHalf').onclick=()=>{Snd.click();
+ const m=clamp(Math.max(raiseMin(),Math.ceil((pot+20)/20)*20),+$('#raiseSlider').min,+$('#raiseSlider').max);
+ $('#raiseSlider').value=m;$('#raiseVal').textContent=m};
+$('#rAll').onclick=()=>{Snd.click();$('#raiseSlider').value=$('#raiseSlider').max;$('#raiseVal').textContent=$('#raiseSlider').max};
+$('#btnFold').onclick=()=>{if(!acting)return;Snd.click();hideBar();
+ try{onFold()}catch(e){console.error(e);hideBar();forceNext()}};
+$('#btnCall').onclick=()=>{if(!acting)return;Snd.click();hideBar();
+ try{if(herStreet===0&&streetIdx>0)onCheck();else onCall()}catch(e){console.error(e);forceNext()}};
+$('#btnRaise').onclick=()=>{if(!acting)return;Snd.click();openRaisePanel(raiseMin())};
+$('#rOk').onclick=()=>{if(!acting)return;Snd.click();hideBar();
+ try{onRaise(+$('#raiseVal').textContent)}catch(e){console.error(e);forceNext()}};
+function forceNext(){
+ setTimeout(()=>{
+  if(!acting&&!$('#result').classList.contains('on')){
+   if(streetIdx<3)nextStreet();else showdown();
+  }
+ },900);
+}
+
+async function onFold(){say('pFold');setFace('happy');await awardPot('d');await wait(500);endRound(false,'fold')}
+async function onCheck(){myStreet=0;herRespond()}
+async function onCall(){
+ const amt=Math.min(herStreet-myStreet,P.stack);
+ myStreet+=amt;P.stack-=amt;pot+=amt;hud();say('pCall');
+ if(amt>0)await sendChips('gold',amt,scene2.pStack,scene2.pot,false);
+ await wait(500);if(streetIdx<3)nextStreet();else showdown();
+}
+async function onRaise(total){
+ total=Math.min(total,P.stack);const add=Math.max(0,total-myStreet);
+ myStreet=total;P.stack-=add;pot+=add;hud();say('pRaise');
+ if(add>0)await sendChips('gold',add,scene2.pStack,scene2.pot,false);
+ await wait(500);
+ const s=herStrength(),bluff=Math.random()<.12;
+ if((s>.72||bluff)&&Dchips.stack>0){
+  const amt=Math.min(total-herStreet,Dchips.stack);
+  herStreet+=amt;Dchips.stack-=amt;pot+=amt;hud();
+  say(s>.72?'hRaise':'hCall');setFace(s>.72?'happy':'open');
+  if(amt>0)await sendChips('red',amt,scene2.dPot,scene2.pot,false);
+  await wait(600);if(streetIdx<3)nextStreet();else showdown();
+ }else{
+  say('hFold');setFace('pout');await wait(500);await awardPot('p');await wait(500);endRound(true,'fold');
+ }
+}
+function herRespond(){
+ const s=herStrength();
+ if(s>.55&&Dchips.stack>0){
+  const bet=Math.min(20,Dchips.stack);
+  herStreet+=bet;Dchips.stack-=bet;pot+=bet;hud();say('hBet');setFace('happy');
+  sendChips('red',bet,scene2.dPot,scene2.pot,false).then(()=>{
+   setTimeout(()=>{if(P.stack<=0)onCall();else showBar('respond')},500)});
+ }else{if(streetIdx<3)setTimeout(nextStreet,400);else showdown();}
+}
+function nextStreet(){
+ streetIdx++;myStreet=0;herStreet=0;
+ streetBanner(streetIdx);const n=streetIdx===1?3:1;
+ dealCommunity(n).then(()=>{
+  if(community.length>=3){const ev=bestOf([...myCards,...community]);
+   $('#handtag').textContent='あなたのベスト: '+CATNAME[ev.cat];$('#handtag').classList.add('in');}
+  setTimeout(()=>{if(P.stack<=0){onCall();return}showBar('open')},700);
+ });
+}
+async function showdown(){
+ hideBar();
+ for(let i=0;i<herCardMeshes.length;i++){await flipCard(herCardMeshes[i],Math.PI,Math.PI*2);await wait(150)}
+ await wait(300);
+ const me=bestOf([...myCards,...community]),he=bestOf([...herCards,...community]);
+ const iWon=me.sc>he.sc,tie=me.sc===he.sc;
+ showResultPanel(iWon,tie,me,he);
+ say(iWon?(me.cat>=5?'loseBig':'lose'):(tie?'win':'winBig'),tie?'あいこね。半分に分けましょう':'');
+ if(tie){
+  const total=pot,half=Math.floor(total/2),rest=total-half;
+  pot=0;P.stack+=half;Dchips.stack+=rest;hud();
+  await Promise.all([sendChips('gold',half,scene2.pot,scene2.pStack,true),sendChips('red',rest,scene2.pot,scene2.dPot,true)]);
+ }else if(iWon){setFace(me.cat>=5?'pout':'smile');await awardPot('p');}
+ else{setFace('happy');await awardPot('d');}
+ await wait(600);endRound(iWon||tie,'showdown',me,he);
+}
+function showResultPanel(iWon,tie,me,he){
+ const t=$('#resTitle');
+ t.textContent=tie?'引き分け!':(iWon?'あなたの勝ち!':'お姉ちゃんの勝ち');t.className=iWon||tie?'win':'lose';
+ const mk=cs=>cs.map(c=>`<div class="mini ${c.s===1||c.s===2?'red':'blk'}"><span>${RANKS[c.r-2]}</span><span class="s">${SUITS[c.s]}</span></div>`).join('');
+ $('#resHands').innerHTML=
+  `<div class="hcol"><div class="hn">あなた</div><div class="cards">${mk(myCards)}</div></div>
+   <div class="hcol"><div class="hn">お姉さん</div><div class="cards">${mk(herCards)}</div></div>`;
+ $('#resHandName').textContent=tie?`あなたの ${CATNAME[me.cat]} / お姉さん ${CATNAME[he.cat]}`:
+  (iWon?`あなたの ${CATNAME[me.cat]} が ${CATNAME[he.cat]} を上回った`:`お姉さんの ${CATNAME[he.cat]} があなたの ${CATNAME[me.cat]} を上回った`);
+ $('#result').classList.add('on');
+}
+function endRound(playerWon,how,me){
+ roundDone=true;
+ if(how==='showdown'){
+  $('#handtag').textContent='あなたのベスト: '+CATNAME[me.cat];$('#handtag').classList.add('in');
+  setTimeout(()=>$('#handtag').classList.remove('in'),4000);
+ }else{
+  const t=$('#resTitle');t.textContent=playerWon?'お姉さんが折れた! 勝ち':'見切り — お姉ちゃんの勝ち';
+  t.className=playerWon?'win':'lose';$('#resHands').innerHTML='';
+  $('#resHandName').textContent=playerWon?'このポットはあなたのもの':'惜しい、次こそ';
+ }
+ if(P.stack<=0||Dchips.stack<=0){
+  setTimeout(()=>{
+   Snd.chime(false);$('#bust').classList.remove('hidden');
+   if(P.stack<=0){$('#bust .big').textContent='破産…';
+    $('#bustText').innerHTML='チップ、全部持っていかれた。<br>お姉ちゃん「ふふ、今日は私の勝ちね。次はもっと甘くする?」'}
+   else{$('#bust .big').textContent='全 勝';
+    $('#bustText').innerHTML='お姉ちゃんのテーブル、制圧完了。<br>お姉ちゃん「…引退するわ。おめでとう、チャンピオン」'}
+  },1600);
+ }else{$('#result').classList.add('on');setTimeout(()=>Snd.chime(playerWon),600)}
+}
+$('#nextBtn').onclick=()=>{Snd.click();$('#result').classList.remove('on');startRound()};
+$('#restartBtn').onclick=()=>{
+ Snd.click();$('#bust').classList.add('hidden');$('#result').classList.remove('on');
+ P.stack=1000;Dchips.stack=1000;hud();clearPieces();pot=0;roundNo=0;startRound();
+};
+async function startRound(){
+ clearPieces();pot=0;streetIdx=0;myStreet=0;herStreet=0;roundDone=false;roundNo++;
+ deck=newDeck();$('#handtag').classList.remove('in');hud();streetBanner(0);say('deal');await wait(500);
+ Dchips.stack-=20;herStreet=20;pot=20;hud();say('open');
+ await sendChips('red',20,scene2.dPot,scene2.pot,false);await wait(400);
+ await armTo(D.armR,scene2.boxHand,450);await wait(250);
+ await dealHand();
+ await armTo(D.armR,scene2.restHand,450);await wait(300);
+ if(P.stack<=0){onCall();return}showBar('respond');
+}
+/* ============================================================
+   SCENE ANIMATION
+   ============================================================ */
+let mx=0,myy=0;
+addEventListener('mousemove',e=>{mx=e.clientX/innerWidth*2-1;myy=e.clientY/innerHeight*2-1});
+function animateScene(now){
+ if(!D)return;const t=now/1000;
+ D.g.position.y=0.62+Math.sin(t*1.4)*.008;
+ D.headG.rotation.z=Math.sin(t*.7)*.03;D.headG.rotation.x=Math.sin(t*.5)*.02;
+ if(now<D.mouthT&&Math.sin(t*14)>0)setFace('open');
+ D.blinkT-=1/60;
+ if(D.blinkT<0){D.blinkT=rand(2.4,5);const m=now<D.mouthT?'open':'smile';
+  D.face.material=D.mats[m+'_b'];setTimeout(()=>setFace(now<D.mouthT?'open':'smile'),130)}
+ if(!acting){D.armR.rotation.x+=Math.sin(t*1.1)*.0008;D.armL.rotation.x+=Math.sin(t*1.1+1)*.0008}
+ if(scene2.dust){scene2.dust.rotation.y=t*.02;scene2.dust.position.y=Math.sin(t*.3)*.05}
+ if(scene2.neonL)scene2.neonL.intensity=.45+Math.sin(t*7)*.05+Math.sin(t*23)*.03;
+ camera.quaternion.copy(cameraBase.q);
+ camera.rotateY(-mx*.08);camera.rotateX(-myy*.05);
+ camera.position.y=cameraBase.y+Math.sin(t*1.1)*.006;
+ if(D.sp&&$('#bubble').classList.contains('in')){
+  const v=new THREE.Vector3();D.sp.getWorldPosition(v);v.project(camera);
+  const x=(v.x*.5+.5)*innerWidth,y=(-v.y*.5+.5)*innerHeight;
+  const b=$('#bubble');
+  b.style.left=clamp(x-b.offsetWidth/2,10,innerWidth-b.offsetWidth-10)+'px';
+  b.style.top=Math.max(8,y-b.offsetHeight-16)+'px';
+ }
+}
+/* ============================================================
+   BOOT
+   ============================================================ */
+document.fonts.ready.then(()=>{
+ initThree();hud();
+ $('#mute').onclick=()=>{Snd.on=!Snd.on;$('#mute').textContent=Snd.on?'🔊 効果音':'🔇 ミュート'};
+ $('#startBtn').onclick=async()=>{
+  Snd.init();Snd.click();const intro=$('#intro');intro.classList.add('off');
+  setTimeout(()=>intro.classList.add('done'),750);document.body.classList.add('playing');
+  await wait(700);say('start');await wait(1600);await startRound();
+ };
+});
+</script>
+</body>
+</html>

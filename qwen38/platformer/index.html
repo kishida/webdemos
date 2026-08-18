@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="緑の島 - 3Dプラットフォームゲーム">
+<meta property="og:description" content="緑の島 - 3Dプラットフォームゲーム by Qwen3.8-27B">
+<meta property="og:image" content="https://kishida.github.io/webdemos/qwen38/images/island.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/qwen38/platformer/index.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>緑の島 - 3Dプラットフォームゲーム</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="stats">
+      <div class="stat">フルーツ <b id="fruitCount">0 / 12</b></div>
+      <div class="stat"><span id="timer">0:00</span></div>
+    </div>
+    <div id="hint"></div>
+  </div>
+  <div id="toast" class="hidden"></div>
+
+  <!-- スタート画面 -->
+  <div id="start" class="overlay">
+    <div class="panel">
+      <h1>緑の島</h1>
+      <p class="sub">自然あふれる島を探索し、フルーツを集めて<br>島の頂上のクリスタルを目指そう！</p>
+      <div class="controls-list">
+        <div><b>WASD / 矢印キー</b> 移動</div>
+        <div><b>スペース</b> ジャンプ</div>
+        <div><b>Shift</b> ダッシュ</div>
+        <div><b>マウスドラッグ</b> カメラ回転</div>
+        <div><b>ホイール</b> ズーム</div>
+        <div class="wide">カメラは進行方向へ自動追従します</div>
+      </div>
+      <button id="startBtn">出発する</button>
+    </div>
+  </div>
+
+  <!-- クリア画面 -->
+  <div id="win" class="overlay hidden">
+    <div class="panel">
+      <h1>クリア！</h1>
+      <p id="winTime" class="sub"></p>
+      <p class="sub">島すべてのフルーツを收集し、頂のクリスタルに到達した。</p>
+      <button id="retryBtn">もう一度遊ぶ</button>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

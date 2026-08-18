@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="鉄の街道 IRON LANES — 市街戦">
+<meta property="og:description" content="鉄の街道 IRON LANES — 市街戦 by Qwen3.8-27B">
+<meta property="og:image" content="https://kishida.github.io/webdemos/qwen38/images/tank.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/qwen38/tank/tank.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>鉄の街道 IRON LANES — 市街戦</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Chakra+Petch:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --amber:#ffb454; --amber2:#ffd9a0; --red:#ff5340; --ink:#e9e4d4;
+  --dim:#9aa08c; --line:#5a6448; --panel:rgba(16,20,13,.68);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:#14161a}
+body{font-family:'DotGothic16',sans-serif;color:var(--ink);user-select:none}
+.num{font-family:'Chakra Petch',monospace}
+#wrap canvas{display:block;cursor:none}
+.hidden{display:none!important}
+
+/* ---------- HUD ---------- */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:5}
+.panel{position:absolute;background:var(--panel);border:1px solid var(--line);padding:10px 14px;
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px));
+  background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 3px)}
+.plabel{font-size:10px;letter-spacing:2px;color:var(--dim)}
+.phint{font-size:10px;color:var(--dim);letter-spacing:1px}
+#vign{position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.5) 100%)}
+#dmgf{position:absolute;inset:0;opacity:0;background:radial-gradient(ellipse at center,transparent 35%,rgba(255,40,20,.55) 100%)}
+#dmgf.on{animation:dmgA .45s ease-out}
+@keyframes dmgA{0%{opacity:.85}100%{opacity:0}}
+
+#mission{top:16px;left:16px;min-width:190px}
+#mission .plabel{margin-bottom:6px;color:var(--amber2)}
+.mrow{display:flex;justify-content:space-between;gap:14px;font-size:12px;line-height:1.75;color:var(--dim)}
+.mrow b{color:var(--amber);font-size:15px;font-weight:600}
+
+#compass{position:absolute;top:16px;left:50%;transform:translateX(-50%);width:340px;height:46px;overflow:hidden;
+  background:var(--panel);border:1px solid var(--line);
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px))}
+#ctape{position:absolute;top:0;left:0;height:100%;width:2160px}
+#ctape i{position:absolute;bottom:15px;width:1px;height:6px;background:#7f8870}
+#ctape i.mid{height:9px}
+#ctape i.maj{height:13px;background:#c9d0ae}
+#ctape b{position:absolute;bottom:29px;transform:translateX(-50%);font:600 10px 'Chakra Petch';color:var(--dim);letter-spacing:1px}
+#ctape b.cap{font-size:12px;color:var(--amber2)}
+#cmark{position:absolute;left:50%;top:6px;transform:translateX(-50%);width:0;height:0;
+  border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid var(--amber)}
+#chead{position:absolute;left:10px;top:5px;font-size:10px;color:var(--dim);letter-spacing:1px}
+
+#cambox{top:16px;right:16px;text-align:right}
+#camname{font-size:17px;color:var(--amber);margin:4px 0 2px;letter-spacing:2px}
+#lowarm{position:absolute;top:86px;left:50%;transform:translateX(-50%);color:var(--red);font-size:13px;letter-spacing:3px;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:.25}}
+
+#feed{position:absolute;top:110px;right:16px;width:230px;text-align:right}
+.fi{background:var(--panel);border-right:3px solid var(--amber);padding:6px 10px;margin-top:6px;font-size:12px;
+  animation:fiIn .3s ease-out;transition:opacity .5s}
+.fi b{color:var(--amber)}
+.fi.out{opacity:0}
+@keyframes fiIn{from{transform:translateX(30px);opacity:0}}
+
+#status{bottom:16px;left:16px;width:230px}
+#abar{height:11px;background:#22271c;border:1px solid var(--line);margin:5px 0 3px;position:relative;overflow:hidden}
+#afill{height:100%;width:100%;background:linear-gradient(90deg,#e8a844,#ffcf8a);transition:width .2s}
+#afill.warn{background:linear-gradient(90deg,#e87c3a,#ffb454)}
+#afill.crit{background:linear-gradient(90deg,#d43a2a,#ff7a5c);animation:blink .8s steps(2) infinite}
+#atxt{font-size:12px;color:var(--dim);margin-bottom:8px}
+.amrow{display:flex;justify-content:space-between;margin:8px 0 4px}
+.pill{display:inline-block;border:1px solid var(--line);padding:3px 12px;font-size:12px;margin-right:6px;color:var(--dim)}
+.pill.on{background:var(--amber);color:#1a1c12;border-color:var(--amber);font-weight:600}
+#rbar{height:5px;background:#22271c;margin-top:6px;overflow:hidden}
+#rfill{height:100%;width:0;background:var(--amber)}
+#rstat{font-size:11px;letter-spacing:1px;margin-top:3px}
+.rdy{color:var(--amber)} .rl{color:var(--red)}
+#mgst{font-size:11px;letter-spacing:1px}
+
+#radarbox{bottom:16px;right:16px;padding:10px}
+#radar{display:block;background:#0e120b;border:1px solid var(--line)}
+#radarbox .plabel{text-align:right;margin-top:6px}
+
+#hintbar{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:1px;
+  background:var(--panel);border:1px solid var(--line);padding:6px 16px;color:var(--dim);transition:opacity 1.5s}
+
+/* ---------- クロスヘア ---------- */
+#xh{position:fixed;left:50%;top:50%;width:0;height:0;pointer-events:none;z-index:6}
+#xhin{position:absolute;transform:translate(-50%,-50%)}
+#xhin.kick{transform:translate(-50%,-50%) scale(1.3)}
+#xh svg{position:absolute;left:-38px;top:-38px}
+#ring{transition:none}
+.xh-l{position:absolute;background:var(--amber);box-shadow:0 0 6px rgba(255,180,84,.7)}
+.xh-l.l{width:16px;height:2px;left:-28px;top:-1px}
+.xh-l.r{width:16px;height:2px;left:12px;top:-1px}
+.xh-l.t{width:2px;height:16px;left:-1px;top:-28px}
+.xh-l.b{width:2px;height:16px;left:-1px;top:12px}
+.xh-dot{position:absolute;width:4px;height:4px;left:-2px;top:-2px;background:var(--amber);border-radius:50%}
+.xh.hit .xh-l{background:#fff;box-shadow:0 0 8px #fff}
+#xh.he .xh-l{background:#ff7a5c} #xh.he #ring{stroke:#ff7a5c}
+
+/* ---------- バナー / 残線 ---------- */
+#banner{position:fixed;top:15%;left:0;right:0;text-align:center;pointer-events:none;z-index:7;opacity:0}
+#banner.show{animation:banA 2.8s ease forwards}
+@keyframes banA{0%{opacity:0;transform:translateY(-16px) scale(.97)}12%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
+#bmain{font-size:56px;letter-spacing:.25em;color:var(--amber);text-shadow:0 0 24px rgba(255,180,84,.45)}
+#bsub{font-size:15px;letter-spacing:.3em;color:var(--dim);margin-top:6px}
+#restline{position:fixed;bottom:17%;left:50%;transform:translateX(-50%);z-index:7;font-size:16px;letter-spacing:.2em;color:var(--amber2)}
+
+/* ---------- オーバーレイ ---------- */
+.ov{position:fixed;inset:0;z-index:10;display:flex;align-items:center}
+#brief{background:linear-gradient(90deg,rgba(10,12,8,.92) 0%,rgba(10,12,8,.72) 44%,rgba(10,12,8,.08) 100%);padding-left:5vw}
+#briefcard{width:min(560px,90vw)}
+.ov-kicker{font-size:12px;letter-spacing:.35em;color:var(--dim);border-left:3px solid var(--amber);padding-left:10px;margin-bottom:14px}
+#briefcard h1{font-size:clamp(52px,7vw,84px);letter-spacing:.12em;line-height:1;color:var(--ink);text-shadow:4px 4px 0 rgba(255,180,84,.25)}
+.ov-sub{margin:10px 0 18px;font-size:15px;letter-spacing:.2em;color:var(--amber)}
+.ov-text{font-size:14px;line-height:2;color:#cfd3bd;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 0;margin-bottom:18px}
+.ov-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;font-size:13px;color:#cfd3bd;margin-bottom:26px}
+kbd{font:600 11px 'Chakra Petch';border:1px solid #7c856a;background:#262b1f;padding:2px 7px;margin-right:4px;color:var(--amber2)}
+.btn{pointer-events:auto;cursor:pointer;font-family:'DotGothic16';font-size:20px;letter-spacing:.2em;color:#1a1c12;
+  background:linear-gradient(180deg,#ffcf8a,#ffb454);border:none;padding:14px 34px;
+  clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px));
+  transition:transform .15s,box-shadow .15s}
+.btn small{font:600 11px 'Chakra Petch';letter-spacing:3px;margin-left:10px}
+.btn:hover{transform:translateX(5px);box-shadow:0 0 26px rgba(255,180,84,.55)}
+.btn:active{transform:translateX(5px) scale(.97)}
+.btn.ghost{background:transparent;color:var(--amber2);border:1px solid var(--line);box-shadow:none}
+.ov-note{margin-top:16px;font-size:11px;color:var(--dim);letter-spacing:.1em}
+.center{justify-content:center;background:rgba(8,10,7,.66)}
+#pausecard,#overcard{text-align:center;width:min(460px,92vw);background:var(--panel);border:1px solid var(--line);padding:38px 30px;
+  clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px))}
+.ov-title{font-size:34px;letter-spacing:.3em;margin-bottom:8px}
+#overcard .ov-title{color:var(--red)}
+.stgrid{margin:22px 0;display:grid;grid-template-columns:auto auto;gap:6px 26px;font-size:14px;color:var(--dim);text-align:left}
+.stgrid b{color:var(--amber);font-size:17px;text-align:right}
+.rowbtn{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div id="wrap"></div>
+
+<div id="hud" class="hidden">
+  <div id="vign"></div><div id="dmgf"></div>
+  <div class="panel" id="mission">
+    <div class="plabel">MISSION 07 — 鉄の街道</div>
+    <div class="mrow"><span>波 WAVE</span><b id="uwave">-</b></div>
+    <div class="mrow"><span>撃破 KILLS</span><b id="ukills">0</b></div>
+    <div class="mrow"><span>スコア SCORE</span><b id="uscore">0</b></div>
+    <div class="mrow"><span>経過 TIME</span><b id="utime">00:00</b></div>
+  </div>
+  <div id="compass"><div id="ctape"></div><div id="cmark"></div><div id="chead" class="num">HDG 000°</div></div>
+  <div class="panel" id="cambox">
+    <div class="plabel">CAMERA 視点</div>
+    <div id="camname">一人称 FPV</div>
+    <div class="phint">[C] 追従 ⇄ 一人称</div>
+  </div>
+  <div id="lowarm" class="hidden">▲ 警告：装甲 30% 未満 ▲</div>
+  <div id="feed"></div>
+  <div class="panel" id="status">
+    <div class="plabel">装甲 ARMOR</div>
+    <div id="abar"><div id="afill"></div></div>
+    <div id="atxt" class="num">220 / 220</div>
+    <div class="amrow"><span class="plabel">主砲 MAIN GUN</span><span class="phint">[Q] 弾種</span></div>
+    <div><span id="apill" class="pill on">AP</span><span id="hepill" class="pill">HE ×<b id="henum" class="num">8</b></span></div>
+    <div id="rbar"><div id="rfill"></div></div>
+    <div id="rstat" class="num rdy">READY</div>
+    <div class="amrow"><span class="plabel">同軸機関銃 MG</span><span id="mgst" class="num rdy">READY</span></div>
+  </div>
+  <div class="panel" id="radarbox"><canvas id="radar" width="168" height="168"></canvas><div class="plabel">レーダー RADAR</div></div>
+  <div id="hintbar">W/S 移動 · A/D 旋回 · マウス 照準 · 左クリック 主砲 · 右クリック(長) 機関銃 · Q 弾種 · C 視点切替</div>
+</div>
+
+<div id="xh" class="hidden"><div id="xhin">
+  <svg width="76" height="76" viewBox="0 0 76 76"><circle id="ring" cx="38" cy="38" r="30" fill="none" stroke="#ffb454" stroke-width="2" stroke-dasharray="188.5" stroke-dashoffset="0" transform="rotate(-90 38 38)" opacity="0"/></svg>
+  <i class="xh-l l"></i><i class="xh-l r"></i><i class="xh-l t"></i><i class="xh-l b"></i><i class="xh-dot"></i>
+</div></div>
+
+<div id="banner"><div id="bmain"></div><div id="bsub"></div></div>
+<div id="restline" class="num hidden"></div>
+
+<div id="brief" class="ov">
+  <div id="briefcard">
+    <div class="ov-kicker">第7装甲連隊 · 出撃命令</div>
+    <h1>鉄の街道</h1>
+    <div class="ov-sub">IRON LANES — 都市決戦シミュレーション</div>
+    <p class="ov-text">敵装甲部隊が市街地を奪還した。交差点と路地を制し、波押し寄せ続ける敵戦車を撃破せよ。<br>一人称・追従の視点切替で戦況を把握し、波の合間には装甲が修復される。</p>
+    <div class="ov-grid">
+      <span><kbd>W</kbd><kbd>S</kbd> 前後移動</span>
+      <span><kbd>A</kbd><kbd>D</kbd> 車体旋回</span>
+      <span><kbd>マウス</kbd> タレット照準</span>
+      <span><kbd>左クリック</kbd> 主砲発射</span>
+      <span><kbd>右クリック</kbd> 機関銃(長押し)</span>
+      <span><kbd>Q</kbd> 弾種 AP / HE</span>
+      <span><kbd>C</kbd> 視点切替 FPV ⇄ 追従</span>
+      <span><kbd>ESC</kbd> 一時停止</span>
+    </div>
+    <button id="btnStart" class="btn">出撃する<small>LAUNCH</small></button>
+    <div class="ov-note">※ 効果音・エンジン音は WebAudio でリアルタイム生成されます</div>
+  </div>
+</div>
+
+<div id="pauseov" class="ov center hidden">
+  <div id="pausecard">
+    <div class="ov-title">一時停止</div>
+    <div class="phint" style="margin-bottom:24px">MISSION PAUSED</div>
+    <div class="rowbtn">
+      <button id="btnResume" class="btn">再開<small>RESUME</small></button>
+      <button id="btnRestart" class="btn ghost">最初から<small>RESTART</small></button>
+    </div>
+  </div>
+</div>
+
+<div id="overov" class="ov center hidden">
+  <div id="overcard">
+    <div class="ov-title">任務失敗</div>
+    <div class="phint" style="margin-bottom:6px">MISSION FAILED</div>
+    <div class="stgrid">
+      <span>撃破数</span><b id="stKills" class="num">0</b>
+      <span>到達波</span><b id="stWave" class="num">1</b>
+      <span>スコア</span><b id="stScore" class="num">0</b>
+      <span>生存時間</span><b id="stTime" class="num">00:00</b>
+      <span>命中率</span><b id="stAcc" class="num">0%</b>
+    </div>
+    <button id="btnRetry" class="btn">再出撃<small>RETRY</small></button>
+  </div>
+</div>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="./game.js"></script>
+<!--
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
+<script type="module" src="./game.js"></script>
+-->
+</body>
+</html>
