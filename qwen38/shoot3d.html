@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="峡谷ストライカー CANYON STRIKER">
+<meta property="og:description" content="峡谷ストライカー CANYON STRIKER by Qwen3.8-27B">
+<meta property="og:image" content="https://kishida.github.io/webdemos/qwen38/images/shoot3d.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/qwen38/shoot3d.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<meta charset="utf-8">
+<title>峡谷ストライカー CANYON STRIKER</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#04121c;font-family:"Courier New",monospace;user-select:none}
+  #game{position:fixed;inset:0}
+  .hud{position:fixed;z-index:5;pointer-events:none;color:#8dffb4;text-shadow:0 0 8px rgba(60,255,150,.8);letter-spacing:1px}
+  #tl{top:14px;left:16px;font-size:12px}
+  .bar{width:230px;height:13px;background:rgba(0,0,0,.5);border:1px solid rgba(120,255,170,.55);margin:5px 0;position:relative}
+  .bar>i{display:block;height:100%;width:100%;transition:width .1s}
+  #hull{background:linear-gradient(90deg,#ff5a1f,#ffb340)}
+  #shield{background:linear-gradient(90deg,#19c95a,#7dffab)}
+  #bl{bottom:16px;left:16px;font-size:12px}
+  #speed{background:linear-gradient(90deg,#1fc9ff,#7defff)}
+  #prog{background:linear-gradient(90deg,#d8c22a,#fff06a)}
+  #br{bottom:14px;right:18px;text-align:right;font-size:26px}
+  #br small{font-size:13px;display:block}
+  #tr{top:14px;right:16px;font-size:12px;text-align:right}
+  #reticle{left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border:1px solid rgba(140,255,180,.7);border-radius:50%}
+  #reticle:before{content:"";position:absolute;left:50%;top:50%;width:3px;height:3px;margin:-1.5px;background:#8dffb4}
+  #flash{position:fixed;inset:0;z-index:4;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,transparent 40%,rgba(255,30,0,.55))}
+  .overlay{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,12,20,.78);color:#8dffb4;text-align:center;backdrop-filter:blur(2px)}
+  .overlay h1{font-size:44px;margin:0 0 4px;text-shadow:0 0 18px #2f8}
+  .overlay h2{font-size:14px;margin:0 0 26px;color:#5fd09a;font-weight:normal;letter-spacing:6px}
+  .overlay .ctrl{font-size:15px;line-height:2;border:1px solid rgba(120,255,170,.4);padding:14px 30px;margin-bottom:26px;background:rgba(0,0,0,.3)}
+  .overlay .go{font-size:18px;animation:blink 1s infinite}
+  @keyframes blink{50%{opacity:.25}}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div id="game"></div>
+
+<div id="tl" class="hud">HULL<div class="bar"><i id="hull"></i></div>SHIELD<div class="bar"><i id="shield"></i></div></div>
+<div id="bl" class="hud">SPEED<div class="bar"><i id="speed"></i></div>EXIT<div class="bar"><i id="prog"></i></div></div>
+<div id="br" class="hud">SCORE <span id="score">0</span><small>ENEMIES DOWN <span id="edown">0</span></small></div>
+<div id="tr" class="hud">SOUND: <span id="snd">ON</span> [M]</div>
+<div id="reticle" class="hud"></div>
+<div id="flash"></div>
+
+<div id="menu" class="overlay">
+  <h1>峡谷ストライカー</h1><h2>CANYON STRIKER</h2>
+  <div class="ctrl">移動 &nbsp;: ← → ↑ ↓ / WASD<br>射撃 : SPACE (長押しで連射)<br>ミュート: M</div>
+  <div class="go">CLICK / SPACE でスタート</div>
+</div>
+<div id="over" class="overlay hidden">
+  <h1 id="ovT">撃墜された</h1><h2 id="ovS"></h2>
+  <div class="go">SPACE でリスタート</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+<script>
+// ---------- 基本 ----------
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+document.getElementById('game').appendChild(renderer.domElement);
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x58b6f2);          // 明るい青空
+scene.fog=new THREE.Fog(0xa8dcf8,300,1600);
+const camera=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.1,4000);
+scene.add(new THREE.HemisphereLight(0xeaf6ff,0x5a7d42,1.15));
+const sun=new THREE.DirectionalLight(0xfff2d8,1.35); sun.position.set(.4,1,.3); scene.add(sun);
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+
+// ---------- 峡谷地形 ----------
+const LEN=12000, HW=70, TAIL=600;
+const center=z=>Math.sin(z*.0016)*150+Math.sin(z*.0007+1.7)*100;
+function groundH(x,z){
+  const d=Math.abs(x-center(z));
+  if(d<14)return 2;
+  const t=THREE.MathUtils.smoothstep(d,HW,HW+70);
+  return 4+t*(85+Math.sin(x*.05+z*.02)*10+Math.sin(x*.11+3)*6)+(1-t)*Math.sin(x*.08+z*.05)*1.5;
+}
+(function buildTerrain(){
+  const step=12,stepX=14,span=600;
+  const cols=Math.round(span*2/stepX)+1;   // ★必ず整数に(ここが緑の幕の元凶)
+  const rows=Math.ceil((LEN+TAIL)/step)+1; // 整数
+  const pos=[],col=[],idx=[],tmp=new THREE.Color();
+  const water=new THREE.Color(0x2e9fd8),sand=new THREE.Color(0xb0a06a),grass=new THREE.Color(0x5cb050),rock=new THREE.Color(0x848a92);
+  for(let i=0;i<rows;i++){const z=TAIL-i*step,c=center(z);
+    for(let j=0;j<cols;j++){const x=-span+j*stepX,h=groundH(x,z),d=Math.abs(x-c);
+      const n=Math.abs(Math.sin(x*12.9898+z*78.233)*43758.5453%1);
+      if(d<14)tmp.copy(water);
+      else if(d<HW+6)tmp.copy(sand).lerp(grass,n*.7);
+      else tmp.copy(grass).lerp(rock,THREE.MathUtils.smoothstep(h,20,70)).multiplyScalar(.85+n*.35);
+      pos.push(x,h,z);col.push(tmp.r,tmp.g,tmp.b);
+    }}
+  for(let i=0;i<rows-1;i++)for(let j=0;j<cols-1;j++){
+    const a=i*cols+j,b=a+1,c=a+cols,d=c+1;idx.push(a,c,b,b,c,d);}
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+  g.setIndex(idx);g.computeVertexNormals();
+  scene.add(new THREE.Mesh(g,new THREE.MeshStandardMaterial({vertexColors:true,side:THREE.DoubleSide,roughness:1})));
+})();
+
+// ---------- 機体 ----------
+function glowTex(){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
+  const gr=g.createRadialGradient(32,32,0,32,32,32);
+  gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.4,'rgba(120,220,255,.7)');gr.addColorStop(1,'rgba(0,80,255,0)');
+  g.fillStyle=gr;g.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
+const GT=glowTex();
+function makeShip(accent,glow){
+  const g=new THREE.Group();
+  const hull=new THREE.MeshStandardMaterial({color:0x2a3038,metalness:.6,roughness:.4});
+  const acc=new THREE.MeshStandardMaterial({color:accent,emissive:accent,emissiveIntensity:.6});
+  const add=(geo,m,p)=>{const o=new THREE.Mesh(geo,m);o.position.set(...p);g.add(o);return o;};
+  add(new THREE.BoxGeometry(4,2.2,14),hull,[0,0,0]);
+  const nose=add(new THREE.ConeGeometry(2,5,4),hull,[0,0,-9.5]);nose.rotation.x=-Math.PI/2;
+  add(new THREE.BoxGeometry(16,.7,5),hull,[0,-.4,-2]);
+  add(new THREE.BoxGeometry(16.2,.25,1.3),acc,[0,-.4,-3.6]);
+  add(new THREE.BoxGeometry(.6,3,4),hull,[0,1.8,-5]);
+  add(new THREE.BoxGeometry(.75,1.4,1.3),acc,[0,1.8,-4]);
+  const eg=new THREE.SpriteMaterial({map:GT,color:glow,blending:THREE.AdditiveBlending,depthWrite:false});
+  g.userData.eng=[];
+  for(const s of[-1,1]){
+    const e=add(new THREE.CylinderGeometry(1.1,1.3,6,10),hull,[s*2.2,.4,4]);e.rotation.x=Math.PI/2;
+    const sp=new THREE.Sprite(eg);sp.position.set(s*2.2,.4,7.4);sp.scale.set(4,4,1);g.add(sp);g.userData.eng.push(sp);
+  }
+  return g;
+}
+const player=makeShip(0xff3b30,0x4db8ff);scene.add(player);
+
+// ---------- 状態 ----------
+const P={pos:new THREE.Vector3(center(0),25,0),vel:new THREE.Vector3(),hull:100,shield:100,hitT:0,speed:140,roll:0,pitch:0};
+let state='menu',score=0,edown=0,t=0,spawnT=2,shake=0,lastHurt=-9;
+const keys={},bullets=[],enemies=[],parts=[];
+const flashEl=document.getElementById('flash');
+
+// 爆発パーティクル(プール)
+for(let i=0;i<200;i++){const m=new THREE.Mesh(new THREE.BoxGeometry(1.6),new THREE.MeshBasicMaterial());m.visible=false;scene.add(m);parts.push({m,v:new THREE.Vector3(),life:0});}
+function explode(p,color,n=22){
+  for(const q of parts){if(q.life>0)continue;q.m.visible=true;q.m.position.copy(p);
+    q.v.set(Math.random()-.5,Math.random()-.5,Math.random()-.5).normalize().multiplyScalar(40+Math.random()*70);
+    q.m.material.color.setHex(color);q.m.scale.setScalar(1+Math.random()*2);q.life=.5+Math.random()*.4;break;}
+}
+function hitFlash(){flashEl.style.opacity=1;shake=.5;}
+
+// ---------- 音 ----------
+let AC=null,muted=false;
+const ac=()=>AC||(AC=new (window.AudioContext||window.webkitAudioContext)());
+function sfxLaser(){if(muted)return;const a=ac(),o=a.createOscillator(),g=a.createGain();
+  o.type='square';o.frequency.setValueAtTime(760,a.currentTime);o.frequency.exponentialRampToValueAtTime(150,a.currentTime+.12);
+  g.gain.setValueAtTime(.06,a.currentTime);g.gain.exponentialRampToValueAtTime(.001,a.currentTime+.15);
+  o.connect(g).connect(a.destination);o.start();o.stop(a.currentTime+.16);}
+function sfxBoom(){if(muted)return;const a=ac(),len=a.sampleRate*.4,b=a.createBuffer(1,len,a.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2);
+  const s=a.createBufferSource();s.buffer=b;const f=a.createBiquadFilter();f.type='lowpass';f.frequency.value=900;
+  const g=a.createGain();g.gain.value=.5;s.connect(f).connect(g).connect(a.destination);s.start();}
+
+// ---------- 敵・弾 ----------
+function spawnEnemy(){
+  if(enemies.length>8)return;
+  const z=P.pos.z-700-Math.random()*300,x=center(z)+(Math.random()*2-1)*45,y=20+Math.random()*45;
+  const m=makeShip(0x222,0xff4020);
+  m.scale.setScalar(.8);
+  m.position.set(x,y,z);
+  scene.add(m);
+  enemies.push({m,pos:new THREE.Vector3(x,y,z),vel:new THREE.Vector3(0,0,55),
+    speed:55+Math.random()*35+t*.3,hp:Math.random()<.3?1:2,cool:1+Math.random()*2,wob:Math.random()*7});
+}
+function fire(from,dir,color,speed,r){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(.6,r?2.2:1.4,r?5:6),new THREE.MeshBasicMaterial({color}));
+  m.position.copy(from);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,-1),dir.clone().normalize());
+  scene.add(m);bullets.push({m,v:dir.clone().normalize().multiplyScalar(speed),life:4,from});
+}
+
+// ---------- 更新 ----------
+const camPos=P.pos.clone().add(new THREE.Vector3(0,9,26)),camTgt=P.pos.clone().add(new THREE.Vector3(0,2,-40));
+function damage(n){if(state!=='play')return;
+  if(P.shield>0){P.shield=Math.max(0,P.shield-n);}else P.hull=Math.max(0,P.hull-n);
+  if(P.shield<=0)P.hull-=n*.5;
+  lastHurt=t;hitFlash();sfxBoom();
+  if(P.hull<=0)gameOver(false);
+}
+function gameOver(win){
+  state='over';
+  if(!win){explode(P.pos,0xff8030,40);player.visible=false;}
+  else score+=500;
+  document.getElementById('ovT').textContent=win?'峡谷脱出成功!':'撃墜された';
+  document.getElementById('ovS').textContent='SCORE '+score+'  /  ENEMIES '+edown;
+  document.getElementById('over').classList.remove('hidden');
+}
+function reset(){
+  for(const e of enemies)scene.remove(e.m);enemies.length=0;
+  for(const b of bullets)scene.remove(b.m);bullets.length=0;
+  for(const p of parts)p.m.visible=false;
+  Object.assign(P,{hull:100,shield:100,speed:140,roll:0,pitch:0});
+  P.pos.set(center(0),25,0);P.vel.set(0,0,0);
+  camPos.copy(P.pos).add(new THREE.Vector3(0,9,26));camTgt.copy(P.pos).add(new THREE.Vector3(0,2,-40));
+  score=0;edown=0;t=0;spawnT=1.5;player.visible=true;player.position.copy(P.pos);
+  document.getElementById('menu').classList.add('hidden');
+  document.getElementById('over').classList.add('hidden');
+  state='play';
+}
+function update(dt){
+  t+=dt;
+  const L=keys.ArrowLeft||keys.KeyA,R=keys.ArrowRight||keys.KeyD,U=keys.ArrowUp||keys.KeyW,D=keys.ArrowDown||keys.KeyS;
+  const tv=new THREE.Vector3((L?-1:0)+(R?1:0), (U?1:0)+(D?-1:0),0);
+  P.vel.lerp(tv.multiplyScalar(75),1-Math.pow(.002,dt));
+  P.speed=Math.min(220,140+t*.8);
+  P.pos.addScaledVector(P.vel,dt);P.pos.z-=P.speed*dt;
+  const gh=groundH(P.pos.x,P.pos.z);
+  if(P.pos.y<gh+5){P.pos.y=gh+5;P.vel.y=Math.abs(P.vel.y)*.4+15;damage(30);}
+  // 姿勢 (上昇=ノーズアップ, 下降=ノーズダウン)
+  P.roll+=((-P.vel.x*.02)-P.roll)*Math.min(1,dt*6);
+  P.pitch+=((P.vel.y*.015)-P.pitch)*Math.min(1,dt*6);
+  player.position.copy(P.pos);player.rotation.set(P.pitch,0,P.roll);
+  player.userData.eng.forEach((s,i)=>{const k=1+Math.sin(t*40+i)*.2;s.scale.set(4*k,4*k,1);});
+  // 射撃
+  if(keys.Space&&state==='play'&&!update.fireLock){update.fireLock=true;
+    fire(P.pos.clone().add(new THREE.Vector3(0,0,-8)),new THREE.Vector3(0,0,-1),0x66eaff,420);sfxLaser();}
+  if(!keys.Space)update.fireLock=false;
+  // 敵
+  spawnT-=dt;
+  if(spawnT<=0){spawnEnemy();spawnT=Math.max(.7,2.2-t*.015)*(.7+Math.random()*.6);}
+  for(let i=enemies.length-1;i>=0;i--){const e=enemies[i];e.wob+=dt*3;
+    const dir=P.pos.clone().sub(e.pos);dir.y*=.6;dir.normalize();
+    e.vel.lerp(dir.multiplyScalar(e.speed),1-Math.pow(.05,dt));
+    e.pos.addScaledVector(e.vel,dt);
+    if(e.pos.y<groundH(e.pos.x,e.pos.z)+3){explode(e.pos,0xff7030,14);sfxBoom();scene.remove(e.m);enemies.splice(i,1);continue;}
+    e.m.position.copy(e.pos);e.m.lookAt(P.pos);e.m.rotateY(Math.PI);
+    e.cool-=dt;
+    if(e.cool<=0&&e.pos.distanceTo(P.pos)<650){fire(e.pos.clone(),P.pos.clone().sub(e.pos),0xff4030,240);e.cool=1.2+Math.random()*1.5;}
+    if(e.pos.distanceTo(P.pos)<12){explode(e.pos,0xffa040,20);sfxBoom();scene.remove(e.m);enemies.splice(i,1);damage(25);score+=100;edown++;}
+  }
+  // 弾
+  for(let i=bullets.length-1;i>=0;i--){const b=bullets[i];b.life-=dt;
+    b.m.position.addScaledVector(b.v,dt);
+    if(b.life<=0){scene.remove(b.m);bullets.splice(i,1);continue;}
+    let dead=false;
+    if(b.from==='p'){for(let j=enemies.length-1;j>=0;j--){const e=enemies[j];
+      if(e.pos.distanceTo(b.m.position)<9){e.hp--;explode(b.m.position,0x66eaff,6);
+        if(e.hp<=0){explode(e.pos,0xffa040,20);sfxBoom();scene.remove(e.m);enemies.splice(j,1);score+=100;edown++;}
+        dead=true;break;}}}
+    else if(b.m.position.distanceTo(P.pos)<7){damage(12);dead=true;}
+    if(dead){scene.remove(b.m);bullets.splice(i,1);}
+  }
+  // パーティクル
+  for(const p of parts){if(p.life<=0)continue;p.life-=dt;p.m.position.addScaledVector(p.v,dt);
+    p.m.scale.multiplyScalar(1-dt*2);p.m.material.opacity=Math.max(0,p.life*2);p.m.material.transparent=true;
+    if(p.life<=0)p.m.visible=false;}
+  // カメラ
+  const want=P.pos.clone().add(new THREE.Vector3(-P.vel.x*.08,9,26));
+  camPos.lerp(want,1-Math.pow(.001,dt));
+  camTgt.lerp(P.pos.clone().add(new THREE.Vector3(0,2,-40)),1-Math.pow(.0005,dt));
+  shake=Math.max(0,shake-dt*1.5);
+  camera.position.copy(camPos).add(new THREE.Vector3((Math.random()-.5)*shake,(Math.random()-.5)*shake,0));
+  camera.lookAt(camTgt);
+  // 回復
+  if(t-lastHurt>3)P.shield=Math.min(100,P.shield+25*dt);
+  flashEl.style.opacity=Math.max(0,parseFloat(flashEl.style.opacity)-dt*3);
+  // HUD
+  document.getElementById('hull').style.width=P.hull+'%';
+  document.getElementById('shield').style.width=P.shield+'%';
+  document.getElementById('speed').style.width=(P.speed/220*100)+'%';
+  document.getElementById('prog').style.width=Math.min(100,-P.pos.z/(LEN-400)*100)+'%';
+  document.getElementById('score').textContent=score;
+  document.getElementById('edown').textContent=edown;
+  // ゴール
+  if(P.pos.z<-(LEN-300))gameOver(true);
+}
+
+// ---------- ループ ----------
+let last=performance.now();
+function loop(now){
+  requestAnimationFrame(loop);
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  if(state==='play')update(dt);
+  else if(state==='menu'){
+    P.pos.z-=30*dt;if(P.pos.z<-2000)P.pos.z=0;
+    P.pos.x=center(P.pos.z);
+    player.position.copy(P.pos);
+    camPos.lerp(P.pos.clone().add(new THREE.Vector3(0,9,26)),.05);
+    camera.position.copy(camPos);camera.lookAt(P.pos.clone().add(new THREE.Vector3(0,2,-40)));
+    player.userData.eng.forEach(s=>s.scale.set(4,4,1));
+  }
+  renderer.render(scene,camera);
+}
+requestAnimationFrame(loop);
+
+// ---------- 入力 ----------
+addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
+  if(e.code==='KeyM'){muted=!muted;document.getElementById('snd').textContent=muted?'OFF':'ON';}
+  if(state!=='play'&&(e.code==='Space'||e.code==='Enter')){ac();reset();}
+});
+addEventListener('keyup',e=>keys[e.code]=false);
+addEventListener('click',()=>{if(state!=='play'){ac();reset();}});
+</script>
+</body>
+</html>

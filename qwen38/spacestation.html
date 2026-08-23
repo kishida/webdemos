@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="軌道修理ドローン ORBITAL REPAIR DRONE">
+<meta property="og:description" content="軌道修理ドローン ORBITAL REPAIR DRONE by Qwen3.8-27B">
+<meta property="og:image" content="https://kishida.github.io/webdemos/qwen38/images/spacestation.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/qwen38/spacestation.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<meta charset="UTF-8">
+<title>軌道修理ドローン ORBITAL REPAIR DRONE</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Consolas','Courier New',monospace;}
+  canvas{display:block;}
+  #hud{position:fixed;inset:0;pointer-events:none;color:#cfefff;z-index:5;}
+  .panel{position:absolute;background:rgba(4,18,38,.55);border:1px solid rgba(90,200,255,.35);
+    padding:10px 14px;border-radius:6px;backdrop-filter:blur(2px);}
+  #stats{top:14px;left:14px;font-size:14px;line-height:1.7;}
+  #stats b{color:#7fe3ff;}
+  #healthBox{top:14px;right:14px;width:230px;font-size:13px;}
+  #healthBar{width:100%;height:12px;background:#0a1626;border:1px solid rgba(90,200,255,.4);margin-top:6px;border-radius:3px;overflow:hidden;}
+  #healthFill{height:100%;width:100%;background:linear-gradient(90deg,#37e08d,#7fe3ff);transition:width .2s;}
+  #msg{bottom:64px;left:50%;transform:translateX(-50%);text-align:center;font-size:15px;min-width:340px;}
+  #repairBar{width:100%;height:8px;background:#0a1626;border:1px solid rgba(90,200,255,.4);margin-top:6px;border-radius:3px;overflow:hidden;display:none;}
+  #repairFill{height:100%;width:0%;background:#ffd23f;}
+  #help{bottom:14px;left:50%;transform:translateX(-50%);font-size:11px;color:#8fb8d8;background:none;border:none;white-space:nowrap;}
+  #overlay{position:fixed;inset:0;background:radial-gradient(ellipse at center,rgba(5,15,35,.85),rgba(0,0,5,.95));
+    display:flex;align-items:center;justify-content:center;z-index:10;color:#cfefff;text-align:center;}
+  #overlay .card{max-width:560px;padding:34px 44px;border:1px solid rgba(90,200,255,.4);background:rgba(4,16,34,.7);border-radius:10px;}
+  #overlay h1{font-size:26px;margin:0 0 6px;color:#7fe3ff;letter-spacing:2px;}
+  #overlay h2{font-size:13px;color:#8fb8d8;margin:0 0 22px;font-weight:normal;letter-spacing:4px;}
+  #overlay p{font-size:13px;line-height:1.9;color:#bcdcff;}
+  #overlay button{margin-top:24px;font-family:inherit;font-size:16px;letter-spacing:3px;cursor:pointer;
+    padding:12px 34px;color:#04121f;background:linear-gradient(90deg,#37e08d,#7fe3ff);border:none;border-radius:5px;}
+  #overlay button:hover{filter:brightness(1.15);}
+  .hidden{display:none!important;}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div id="stats" class="panel">
+    スコア <b id="score">0</b><br>
+    修理 <b id="repairs">0</b> 件<br>
+    経過 <b id="time">0:00</b>
+  </div>
+  <div id="healthBox" class="panel">
+    ステーション稼働率 <span id="healthPct">100</span>% <span id="healTag" style="color:#37e08d;font-weight:bold"></span>
+    <div id="healthBar"><div id="healthFill"></div></div>
+    未修理の故障 <span id="faults" style="color:#ff6b6b">0</span> 箇所
+  </div>
+  <div id="msg" class="panel">
+    <span id="msgText">故障箇所を検出…</span>
+    <div id="repairBar"><div id="repairFill"></div></div>
+  </div>
+  <div id="help" class="panel">A/D:旋回　W/S:推進(慣性浮遊)　Space:上昇　Shift:下降　故障箇所に到着すると自動修理</div>
+</div>
+
+<div id="overlay">
+  <div class="card">
+    <h1>軌道修理ドローン</h1>
+    <h2>ORBITAL REPAIR DRONE</h2>
+    <p>
+      宇宙ステーションに故障が発生した。<br>
+      <b>A / D で旋回</b>して赤いビームを画面中央に合わせ、<br>
+      <b>W / S で推進後退、Shift / Spaceで下降上昇</b>。<br>
+      到着すると<b>自動で修理</b>が開始される。<br>
+      修理1件で稼働率 <b style="color:#37e08d">+10%</b> 回復。<br>
+      旋回はゆっくり、精密に。修理を怠ると稼働率が低下する。
+    </p>
+    <button id="startBtn">START</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+/* ================= 基本セットアップ ================= */
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 3000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+addEventListener('resize', () => { camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+
+scene.add(new THREE.AmbientLight(0x8899bb, .55));
+const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+sun.position.set(60, 40, 30); scene.add(sun);
+
+/* ================= 星空 ================= */
+{
+  const n=1600, pos=new Float32Array(n*3);
+  for(let i=0;i<n;i++){
+    const r=900, t=Math.random()*Math.PI*2, p=Math.acos(2*Math.random()-1);
+    pos[i*3]=r*Math.sin(p)*Math.cos(t); pos[i*3+1]=r*Math.cos(p); pos[i*3+2]=r*Math.sin(p)*Math.sin(t);
+  }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({color:0xffffff,size:1.6,sizeAttenuation:false,transparent:true,opacity:.8})));
+}
+
+/* ================= 地球 ================= */
+function makeEarthTexture(){
+  const c=document.createElement('canvas'); c.width=1024; c.height=512;
+  const g=c.getContext('2d');
+  const grad=g.createLinearGradient(0,0,0,512);
+  grad.addColorStop(0,'#3f9be8'); grad.addColorStop(.55,'#1552b0'); grad.addColorStop(1,'#0a2a66');
+  g.fillStyle=grad; g.fillRect(0,0,1024,512);
+  for(let i=0;i<420;i++){
+    g.globalAlpha=.12+Math.random()*.5; g.fillStyle='#ffffff';
+    g.beginPath();
+    g.ellipse(Math.random()*1024, Math.random()*512, 6+Math.random()*34, 3+Math.random()*10, Math.random()*Math.PI, 0, Math.PI*2);
+    g.fill();
+  }
+  g.globalAlpha=1; return new THREE.CanvasTexture(c);
+}
+const earth = new THREE.Mesh(
+  new THREE.SphereGeometry(420, 48, 48),
+  new THREE.MeshLambertMaterial({map:makeEarthTexture()})
+);
+earth.position.set(0,-445,0); scene.add(earth);
+const haze = new THREE.Mesh(
+  new THREE.SphereGeometry(424, 48, 48),
+  new THREE.MeshBasicMaterial({color:0x66aaff, transparent:true, opacity:.18, side:THREE.BackSide})
+);
+haze.position.copy(earth.position); scene.add(haze);
+
+/* ================= 宇宙ステーション風テクスチャ群 ================= */
+function makeModuleTexture(){
+  const c=document.createElement('canvas'); c.width=512; c.height=256;
+  const g=c.getContext('2d');
+  g.fillStyle='#e6e9ee'; g.fillRect(0,0,512,256);
+  const gr=g.createLinearGradient(0,0,0,256);
+  gr.addColorStop(0,'rgba(255,255,255,.3)'); gr.addColorStop(.5,'rgba(0,0,0,0)'); gr.addColorStop(1,'rgba(0,0,0,.2)');
+  g.fillStyle=gr; g.fillRect(0,0,512,256);
+  g.strokeStyle='rgba(90,100,115,.5)'; g.lineWidth=2;
+  for(let x=0;x<=512;x+=64){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,256); g.stroke(); }
+  [64,192].forEach(y=>{ g.beginPath(); g.moveTo(0,y); g.lineTo(512,y); g.stroke(); });
+  g.fillStyle='#1c2733';
+  for(let x=48;x<512;x+=64){ g.beginPath(); g.arc(x,128,11,0,Math.PI*2); g.fill(); }
+  g.strokeStyle='rgba(160,190,220,.6)'; g.lineWidth=2;
+  for(let x=48;x<512;x+=64){ g.beginPath(); g.arc(x,128,13,0,Math.PI*2); g.stroke(); }
+  g.fillStyle='#1f4f9c'; g.fillRect(0,204,512,28);
+  g.fillStyle='#ffffff'; g.font='bold 19px Consolas, monospace';
+  g.fillText('ORBITAL STATION 07', 18, 224);
+  g.font='bold 16px monospace'; g.fillText('SEC-4', 430, 223);
+  g.fillStyle='#c0392b'; g.fillRect(0,232,512,6);
+  g.fillStyle='#9aa3ad'; g.fillRect(18,18,44,36); g.fillRect(430,18,44,36);
+  g.fillStyle='#6b7280'; g.fillRect(26,26,28,20);
+  g.fillStyle='rgba(70,80,95,.85)';
+  for(let x=32;x<512;x+=64){
+    g.beginPath(); g.arc(x,10,3,0,7); g.fill();
+    g.beginPath(); g.arc(x,246,3,0,7); g.fill();
+  }
+  return new THREE.CanvasTexture(c);
+}
+function makeNodeTexture(){
+  const c=document.createElement('canvas'); c.width=512; c.height=256;
+  const g=c.getContext('2d');
+  g.fillStyle='#eef0f4'; g.fillRect(0,0,512,256);
+  g.strokeStyle='rgba(90,100,115,.45)'; g.lineWidth=2;
+  for(let x=0;x<=512;x+=64){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,256); g.stroke(); }
+  for(let y=0;y<=256;y+=64){ g.beginPath(); g.moveTo(0,y); g.lineTo(512,y); g.stroke(); }
+  g.fillStyle='#39424e';
+  [[96,84],[300,84]].forEach(([x,y])=>{
+    g.beginPath();
+    if(g.roundRect) g.roundRect(x,y,60,72,10); else g.rect(x,y,60,72);
+    g.fill();
+  });
+  g.strokeStyle='#8b95a2'; g.lineWidth=3;
+  [[96,84],[300,84]].forEach(([x,y])=>{ g.strokeRect(x+6,y+6,48,60); });
+  g.fillStyle='#16202b';
+  for(let x=64;x<512;x+=64){ g.fillRect(x,188,26,14); }
+  g.fillStyle='#1f4f9c'; g.font='bold 24px Consolas, monospace';
+  g.fillText('NODE A', 396, 232);
+  g.fillStyle='#c0392b'; g.fillRect(0,240,512,8);
+  return new THREE.CanvasTexture(c);
+}
+function makeTrussTexture(){
+  const c=document.createElement('canvas'); c.width=256; c.height=128;
+  const g=c.getContext('2d');
+  g.fillStyle='#8d97a3'; g.fillRect(0,0,256,128);
+  g.strokeStyle='#59636e'; g.lineWidth=6;
+  for(let x=-128;x<256;x+=32){
+    g.beginPath(); g.moveTo(x,128); g.lineTo(x+128,0); g.stroke();
+    g.beginPath(); g.moveTo(x+128,128); g.lineTo(x,0); g.stroke();
+  }
+  g.fillStyle='#454e58'; g.fillRect(0,0,256,10); g.fillRect(0,118,256,10);
+  g.fillStyle='rgba(255,255,255,.15)'; g.fillRect(0,10,256,4);
+  const t=new THREE.CanvasTexture(c);
+  t.wrapS=THREE.RepeatWrapping; t.wrapT=THREE.RepeatWrapping;
+  t.repeat.set(4,1);
+  return t;
+}
+function makeMLITexture(){
+  const c=document.createElement('canvas'); c.width=128; c.height=128;
+  const g=c.getContext('2d');
+  g.fillStyle='#c9971f'; g.fillRect(0,0,128,128);
+  for(let i=0;i<70;i++){
+    g.strokeStyle=`rgba(${(205+Math.random()*50)|0},${(140+Math.random()*70)|0},30,.5)`;
+    g.lineWidth=1+Math.random()*2;
+    g.beginPath();
+    let x=Math.random()*128, y=Math.random()*128;
+    g.moveTo(x,y);
+    for(let j=0;j<4;j++){ x+=(Math.random()-.5)*64; y+=(Math.random()-.5)*64; g.lineTo(x,y); }
+    g.stroke();
+  }
+  return new THREE.CanvasTexture(c);
+}
+function makeGlowTexture(inner, outer){
+  const c=document.createElement('canvas'); c.width=c.height=64;
+  const g=c.getContext('2d');
+  const rg=g.createRadialGradient(32,32,0,32,32,32);
+  rg.addColorStop(0,inner); rg.addColorStop(1,outer);
+  g.fillStyle=rg; g.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c);
+}
+function makePanelTexture(){
+  const c=document.createElement('canvas'); c.width=256; c.height=128;
+  const g=c.getContext('2d');
+  g.fillStyle='#0c1f63'; g.fillRect(0,0,256,128);
+  const v=g.createLinearGradient(0,0,256,128);
+  v.addColorStop(0,'rgba(255,255,255,.14)'); v.addColorStop(1,'rgba(0,0,0,.25)');
+  g.fillStyle=v; g.fillRect(0,0,256,128);
+  g.strokeStyle='rgba(212,175,55,.95)'; g.lineWidth=3;
+  for(let x=0;x<=256;x+=32){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,128); g.stroke(); }
+  for(let y=0;y<=128;y+=32){ g.beginPath(); g.moveTo(0,y); g.lineTo(256,y); g.stroke(); }
+  g.strokeStyle='rgba(212,175,55,.8)'; g.lineWidth=5; g.strokeRect(2,2,252,124);
+  return new THREE.CanvasTexture(c);
+}
+// 修理ポッド本体
+function makeDroneTexture(){
+  const c=document.createElement('canvas'); c.width=512; c.height=256;
+  const g=c.getContext('2d');
+  g.fillStyle='#eef1f5'; g.fillRect(0,0,512,256);
+  const gr=g.createLinearGradient(0,0,0,256);
+  gr.addColorStop(0,'rgba(255,255,255,.35)');
+  gr.addColorStop(.55,'rgba(0,0,0,0)');
+  gr.addColorStop(1,'rgba(0,0,0,.28)');
+  g.fillStyle=gr; g.fillRect(0,0,512,256);
+  g.strokeStyle='rgba(110,120,135,.55)'; g.lineWidth=2;
+  for(let x=0;x<=512;x+=64){ g.beginPath(); g.moveTo(x,8); g.lineTo(x,248); g.stroke(); }
+  g.beginPath(); g.moveTo(0,64);  g.lineTo(512,64);  g.stroke();
+  g.beginPath(); g.moveTo(0,176); g.lineTo(512,176); g.stroke();
+  g.fillStyle='#1f4f9c'; g.fillRect(0,88,512,40);
+  g.fillStyle='#ffffff';
+  g.textAlign='center';
+  g.font='bold 20px Consolas, monospace';
+  g.fillText('REPAIR UNIT', 128, 115);
+  g.font='bold 30px Consolas, monospace';
+  g.fillText('R-07', 384, 118);
+  g.textAlign='left';
+  g.fillStyle='#c0392b'; g.fillRect(0,128,512,6);
+  g.beginPath(); g.arc(384,52,12,0,7); g.fill();
+  g.fillStyle='#ffffff'; g.font='bold 14px monospace'; g.textAlign='center';
+  g.fillText('07', 384,57); g.textAlign='left';
+  g.fillStyle='#39424e';
+  g.beginPath(); g.arc(256,182,9,0,7); g.fill();
+  g.beginPath(); g.arc(0,182,9,0,7); g.fill();
+  g.beginPath(); g.arc(512,182,9,0,7); g.fill();
+  g.strokeStyle='rgba(150,170,190,.7)'; g.lineWidth=2;
+  g.beginPath(); g.arc(256,182,11,0,7); g.stroke();
+  g.save();
+  g.beginPath(); g.rect(0,210,512,22); g.clip();
+  for(let x=-32;x<544;x+=32){
+    g.fillStyle='#23272e';
+    g.beginPath();
+    g.moveTo(x,232); g.lineTo(x+16,232); g.lineTo(x+32,210); g.lineTo(x+16,210);
+    g.closePath(); g.fill();
+  }
+  g.fillStyle='rgba(242,197,61,.9)';
+  for(let x=-16;x<544;x+=32){
+    g.beginPath();
+    g.moveTo(x,232); g.lineTo(x+16,232); g.lineTo(x+32,210); g.lineTo(x+16,210);
+    g.closePath(); g.fill();
+  }
+  g.restore();
+  g.fillStyle='rgba(70,80,95,.85)';
+  for(let x=32;x<512;x+=64){
+    g.beginPath(); g.arc(x,20,3,0,7); g.fill();
+    g.beginPath(); g.arc(x,238,3,0,7); g.fill();
+  }
+  return new THREE.CanvasTexture(c);
+}
+// ハザードストライプ（コラー用）
+function makeHazardTexture(){
+  const c=document.createElement('canvas'); c.width=128; c.height=16;
+  const g=c.getContext('2d');
+  g.fillStyle='#f2c53d'; g.fillRect(0,0,128,16);
+  g.fillStyle='#23272e';
+  for(let x=-16;x<128;x+=32){
+    g.beginPath();
+    g.moveTo(x,16); g.lineTo(x+16,16); g.lineTo(x+32,0); g.lineTo(x+16,0);
+    g.closePath(); g.fill();
+  }
+  const t=new THREE.CanvasTexture(c);
+  t.wrapS=THREE.RepeatWrapping; t.repeat.set(6,1);
+  return t;
+}
+
+const matModule = new THREE.MeshPhongMaterial({map:makeModuleTexture()});
+const matNode   = new THREE.MeshPhongMaterial({map:makeNodeTexture()});
+const matTruss  = new THREE.MeshPhongMaterial({map:makeTrussTexture()});
+const matMLI    = new THREE.MeshPhongMaterial({map:makeMLITexture(), emissive:0x332200, emissiveIntensity:.25});
+const matPort   = new THREE.MeshPhongMaterial({color:0x2a3138, shininess:40});
+const matWhite  = new THREE.MeshPhongMaterial({color:0xe8e8e8, shininess:60});
+const matGray   = new THREE.MeshPhongMaterial({color:0x9aa4ad, shininess:30});
+const matPanel  = new THREE.MeshPhongMaterial({map:makePanelTexture(), emissive:0x101a44, emissiveIntensity:.6, side:THREE.DoubleSide});
+
+/* ================= ステーション構築 ================= */
+const station = new THREE.Group(); scene.add(station);
+const colliders = [];
+
+function addBox(cx,cy,cz, sx,sy,sz, mat, collidable=true){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz), mat);
+  m.position.set(cx,cy,cz); station.add(m);
+  if(collidable) colliders.push({c:m.position.clone(), h:new THREE.Vector3(sx/2+.4, sy/2+.4, sz/2+.4)});
+  return m;
+}
+// 中央ノード
+const node = new THREE.Mesh(new THREE.SphereGeometry(2.3, 32, 24), matNode);
+station.add(node); colliders.push({c:new THREE.Vector3(0,0,0), h:new THREE.Vector3(2.6,2.6,2.6)});
+
+[[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dz])=>{
+  const alongX = dx!==0;
+  const mod = new THREE.Mesh(new THREE.CylinderGeometry(1.15,1.15,5,20), matModule);
+  mod.position.set(dx*6.5, 0, dz*6.5);
+  if(alongX) mod.rotation.z = Math.PI/2; else mod.rotation.x = Math.PI/2;
+  station.add(mod);
+  colliders.push({c:mod.position.clone(), h: alongX? new THREE.Vector3(2.6,1.4,1.4): new THREE.Vector3(1.4,1.4,2.6)});
+  const port = new THREE.Mesh(new THREE.CylinderGeometry(.85,.85,.35,16), matPort);
+  port.position.set(dx*9.3, 0, dz*9.3);
+  if(alongX) port.rotation.z = Math.PI/2; else port.rotation.x = Math.PI/2;
+  station.add(port);
+  const truss = new THREE.Mesh(new THREE.BoxGeometry(alongX?8:0.5, 0.5, alongX?0.5:8), matTruss);
+  truss.position.set(dx*13, 0, dz*13); station.add(truss);
+  for(const s of [1,-1]){
+    const p = new THREE.Mesh(new THREE.BoxGeometry(alongX?6.5:2.1, 0.06, alongX?2.1:6.5), matPanel);
+    p.position.set(dx*13.5 + (alongX?0:s*2.3), 0, dz*13.5 + (alongX?s*2.3:0));
+    station.add(p);
+  }
+});
+// 上部モジュール
+const topMod = new THREE.Mesh(new THREE.CylinderGeometry(1.0,1.15,3,16), matModule);
+topMod.position.set(0,3.8,0); station.add(topMod);
+colliders.push({c:topMod.position.clone(), h:new THREE.Vector3(1.4,2,1.4)});
+addBox(0,5.6,0, 1.2,0.7,1.2, matGray);
+const dish = new THREE.Mesh(new THREE.ConeGeometry(0.7,0.35,16,1,true), matGray);
+dish.position.set(0,6.2,0); station.add(dish);
+for(const s of [1,-1]){
+  const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,1.6,6), matGray);
+  ant.position.set(s*0.5,6.4,0); station.add(ant);
+}
+// 金箔MLI断熱材
+addBox(1.5,4.4,0, 0.9,0.8,0.8, matMLI, false);
+addBox(-1.5,4.4,0, 0.9,0.8,0.8, matMLI, false);
+addBox(0,4.6,1.25, 0.8,0.6,0.6, matMLI, false);
+// ラジエーターパネル
+addBox(2.0,1.2,2.0, 0.08,2.4,1.6, matWhite, false);
+addBox(-2.0,1.2,-2.0, 0.08,2.4,1.6, matWhite, false);
+// 赤いビーコン灯
+const beacon = new THREE.Mesh(new THREE.SphereGeometry(.12,10,10), new THREE.MeshBasicMaterial({color:0xff3333}));
+beacon.position.set(0,6.05,0.55); station.add(beacon);
+// 下部ドッキング船
+addBox(0,-3.6,0, 1.6,1.4,2.0, matGray);
+addBox(0,-4.9,0, 0.9,0.8,1.2, matWhite);
+
+/* ================= 故障アンカー ================= */
+const anchors = [
+  [6.5,1.35,0],[-6.5,1.35,0],[6.5,-1.35,0],[-6.5,-1.35,0],
+  [0,1.35,6.5],[0,-1.35,6.5],[0,1.35,-6.5],[0,-1.35,-6.5],
+  [13.5,.25,2.3],[13.5,.25,-2.3],[-13.5,.25,2.3],[-13.5,.25,-2.3],
+  [2.3,.25,13.5],[-2.3,.25,13.5],[2.3,.25,-13.5],[-2.3,.25,-13.5],
+  [0,6.1,0],[2.45,.9,1.4]
+].map(a=>new THREE.Vector3(...a));
+
+/* ================= 小型球形修理ロボット ================= */
+const drone = new THREE.Group(); scene.add(drone);
+{
+  const body = new THREE.Mesh(new THREE.SphereGeometry(.5, 32, 24),
+    new THREE.MeshPhongMaterial({map:makeDroneTexture(), shininess:90, specular:0x99bbcc}));
+  drone.add(body);
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(.5,.055,10,40),
+    new THREE.MeshPhongMaterial({map:makeHazardTexture(), shininess:40}));
+  collar.rotation.x = Math.PI/2;
+  drone.add(collar);
+  const visor = new THREE.Mesh(new THREE.SphereGeometry(.3, 16, 16),
+    new THREE.MeshPhongMaterial({color:0x0d1f30, shininess:200, emissive:0x1a4a66}));
+  visor.scale.set(.8,.6,.5); visor.position.set(0,.08,.31); drone.add(visor);
+  const ant = new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.45,6), matGray);
+  ant.position.y=.62; drone.add(ant);
+  const antTip = new THREE.Mesh(new THREE.SphereGeometry(.06,8,8), new THREE.MeshBasicMaterial({color:0xff4444}));
+  antTip.position.y=.88; drone.add(antTip); drone.antTip = antTip;
+  const thr = new THREE.Mesh(new THREE.CylinderGeometry(.16,.24,.2,12), matGray);
+  thr.position.y=-.5; drone.add(thr);
+  const thrGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map:makeGlowTexture('rgba(170,225,255,.95)','rgba(120,190,255,0)'),
+    blending:THREE.AdditiveBlending, depthWrite:false, transparent:true}));
+  thrGlow.position.y=-.78; thrGlow.scale.setScalar(.7); drone.add(thrGlow);
+  drone.thrGlow = thrGlow;
+  const outerGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map:makeGlowTexture('rgba(160,230,255,.5)','rgba(160,230,255,0)'),
+    blending:THREE.AdditiveBlending, depthWrite:false, transparent:true}));
+  outerGlow.scale.set(2.4,2.4,1); drone.add(outerGlow);
+  drone.light = new THREE.PointLight(0x9fd4ff, .8, 12); drone.add(drone.light);
+}
+
+/* ---- 推進パーティクル ---- */
+const TRAIL_N = 140;
+const tPos = new Float32Array(TRAIL_N*3);
+const tCol = new Float32Array(TRAIL_N*3);
+const trail = [];
+for(let i=0;i<TRAIL_N;i++){ trail.push({x:0,y:-9999,z:0,vx:0,vy:0,vz:0,age:1,life:1}); tPos[i*3+1]=-9999; }
+let trailHead = 0;
+const tGeo = new THREE.BufferGeometry();
+tGeo.setAttribute('position', new THREE.BufferAttribute(tPos,3));
+tGeo.setAttribute('color', new THREE.BufferAttribute(tCol,3));
+scene.add(new THREE.Points(tGeo, new THREE.PointsMaterial({size:.24, vertexColors:true, blending:THREE.AdditiveBlending, depthWrite:false, transparent:true})));
+function emitTrail(x,y,z,vx,vy,vz){
+  const p = trail[trailHead]; trailHead=(trailHead+1)%TRAIL_N;
+  p.x=x; p.y=y; p.z=z;
+  p.vx=vx+(Math.random()-.5)*.5; p.vy=vy+(Math.random()-.5)*.5; p.vz=vz+(Math.random()-.5)*.5;
+  p.age=0; p.life=.5+Math.random()*.5;
+}
+function updateTrail(dt){
+  for(let i=0;i<TRAIL_N;i++){
+    const p=trail[i]; p.age+=dt;
+    if(p.age<p.life){
+      p.x+=p.vx*dt; p.y+=p.vy*dt; p.z+=p.vz*dt;
+      tPos[i*3]=p.x; tPos[i*3+1]=p.y; tPos[i*3+2]=p.z;
+      const k=1-p.age/p.life;
+      tCol[i*3]=.35*k; tCol[i*3+1]=.75*k; tCol[i*3+2]=k;
+    } else { tPos[i*3+1]=-9999; tCol[i*3]=tCol[i*3+1]=tCol[i*3+2]=0; }
+  }
+  tGeo.attributes.position.needsUpdate=true;
+  tGeo.attributes.color.needsUpdate=true;
+}
+
+/* ---- 修理ビーム線 ---- */
+const repLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+const repLine = new THREE.Line(repLineGeo, new THREE.LineBasicMaterial({color:0x7fe3ff, transparent:true, opacity:0}));
+repLine.visible=false; scene.add(repLine);
+
+/* ================= 故障マーカー ================= */
+const faults = [];
+function createFault(anchor){
+  const g = new THREE.Group();
+  const core = new THREE.Mesh(new THREE.SphereGeometry(.28,12,12), new THREE.MeshBasicMaterial({color:0xff2222}));
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,7,8,1,true),
+    new THREE.MeshBasicMaterial({color:0xff4444, transparent:true, opacity:.5, depthWrite:false}));
+  beam.position.y = 3.5;
+  const sparkPos = new Float32Array(24*3);
+  for(let i=0;i<24;i++){ sparkPos[i*3]=(Math.random()-.5)*.9; sparkPos[i*3+1]=(Math.random()-.5)*.9; sparkPos[i*3+2]=(Math.random()-.5)*.9; }
+  const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(sparkPos,3));
+  const sparks = new THREE.Points(sg, new THREE.PointsMaterial({color:0xffaa33, size:.18, transparent:true, opacity:.9, depthWrite:false}));
+  g.add(core, beam, sparks);
+  g.position.copy(anchor);
+  scene.add(g);
+  faults.push({group:g, core, beam, sparks, pos:anchor, progress:0, dead:false});
+  sfxFault();
+}
+function removeFault(f){
+  scene.remove(f.group);
+  f.group.traverse(o=>{ if(o.geometry)o.geometry.dispose(); if(o.material)o.material.dispose(); });
+}
+
+/* ================= 音声 ================= */
+let AC=null;
+function beep(f,d,type='sine',vol=.15,when=0){
+  if(!AC)return;
+  const o=AC.createOscillator(), g=AC.createGain();
+  o.type=type; o.frequency.value=f;
+  g.gain.setValueAtTime(vol, AC.currentTime+when);
+  g.gain.exponentialRampToValueAtTime(.001, AC.currentTime+when+d);
+  o.connect(g).connect(AC.destination);
+  o.start(AC.currentTime+when); o.stop(AC.currentTime+when+d);
+}
+function sfxFault(){ beep(220,.14,'square',.1); beep(170,.2,'square',.1,.14); }
+function sfxDock(){ beep(440,.08,'sine',.12); }
+function sfxDone(){ beep(660,.1,'sine',.18); beep(990,.2,'sine',.18,.1); }
+function sfxOver(){ beep(330,.3,'sawtooth',.15); beep(220,.3,'sawtooth',.15,.3); beep(140,.5,'sawtooth',.15,.6); }
+
+/* ================= ゲーム状態 ================= */
+let state='menu', score=0, repairs=0, elapsed=0, health=100, spawnTimer=0;
+const REPAIR_TIME = 2.0, RANGE = 2.8, REPAIR_HEAL = 10;
+const used = new Set();
+let healFlash = 0;
+
+function pickAnchor(){
+  const free = anchors.filter((a,i)=>!used.has(i));
+  if(!free.length) return null;
+  const a = free[Math.floor(Math.random()*free.length)];
+  used.add(anchors.indexOf(a));
+  return a;
+}
+function spawnLoop(){
+  const target = Math.min(2 + Math.floor(elapsed/25), 5);
+  if(faults.filter(f=>!f.dead).length < target && spawnTimer<=0){
+    const a = pickAnchor();
+    if(a) createFault(a);
+    spawnTimer = 2;
+  }
+}
+
+const dronePos = new THREE.Vector3(0,3,16);
+const droneVel = new THREE.Vector3();
+const thrustS  = new THREE.Vector3();
+const flightDir = new THREE.Vector3(0,0,-1);
+
+let turnS = 0;
+let wasRepairing = false;
+let thrust = 0;   // ブロック外から参照するためここに宣言
+
+function reset(){
+  faults.forEach(f=>removeFault(f)); faults.length=0; used.clear();
+  score=0; repairs=0; elapsed=0; health=100; spawnTimer=0;
+  dronePos.set(0,3,16); droneVel.set(0,0,0); thrustS.set(0,0,0);
+  flightDir.set(0,0,-1); turnS=0; thrust=0;
+  createFault(pickAnchor()); createFault(pickAnchor());
+}
+
+/* ================= 入力 ================= */
+const keys={};
+addEventListener('keydown', e=>{
+  keys[e.code]=true;
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  if(state!=='play' && (e.code==='Enter'||e.code==='Space')) startGame();
+});
+addEventListener('keyup', e=>keys[e.code]=false);
+
+function startGame(){
+  if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)();
+  reset(); state='play';
+  document.getElementById('overlay').classList.add('hidden');
+}
+document.getElementById('startBtn').onclick = startGame;
+
+/* ================= HUD ================= */
+const $=id=>document.getElementById(id);
+function updateHUD(target, repairing, dist){
+  $('score').textContent = score;
+  $('repairs').textContent = repairs;
+  $('healTag').textContent = healFlash>0 ? '+'+REPAIR_HEAL : '';
+  const m=Math.floor(elapsed/60), s=Math.floor(elapsed%60);
+  $('time').textContent = m+':'+String(s).padStart(2,'0');
+  $('healthPct').textContent = Math.max(0,Math.round(health));
+  const hf=$('healthFill');
+  hf.style.width = Math.max(0,health)+'%';
+  hf.style.background = health>50 ? 'linear-gradient(90deg,#37e08d,#7fe3ff)' : health>25 ? '#ffd23f' : '#ff4444';
+  $('faults').textContent = faults.filter(f=>!f.dead).length;
+  if(repairing){
+    $('msgText').innerHTML = '🔧 <b>修理中…</b> '+(Math.min(100,target.progress*100)|0)+'%';
+    $('repairBar').style.display='block';
+    $('repairFill').style.width=(Math.min(1,target.progress)*100)+'%';
+    $('repairFill').style.background = target.progress>0.66 ? '#37e08d' : '#ffd23f';
+  }else if(target){
+    $('msgText').innerHTML = '⚠ 故障箇所まで <b>'+dist.toFixed(1)+'</b> m';
+    $('repairBar').style.display='none';
+  }else{
+    $('msgText').textContent = '故障箇所を検出中…';
+    $('repairBar').style.display='none';
+  }
+}
+
+/* ================= 衝突 ================= */
+function pushOut(p, r){
+  for(const b of colliders){
+    const dx=p.x-b.c.x, dy=p.y-b.c.y, dz=p.z-b.c.z;
+    if(Math.abs(dx)<b.h.x+r && Math.abs(dy)<b.h.y+r && Math.abs(dz)<b.h.z+r){
+      const px=b.h.x+r-Math.abs(dx), py=b.h.y+r-Math.abs(dy), pz=b.h.z+r-Math.abs(dz);
+      if(px<py && px<pz) p.x = b.c.x + Math.sign(dx)*(b.h.x+r);
+      else if(pz<py)     p.z = b.c.z + Math.sign(dz)*(b.h.z+r);
+      else               p.y = b.c.y + Math.sign(dy)*(b.h.y+r);
+    }
+  }
+}
+function collide(p){
+  pushOut(p,.5);
+  p.x=Math.max(-26,Math.min(26,p.x)); p.z=Math.max(-26,Math.min(26,p.z));
+  p.y=Math.max(-7,Math.min(20,p.y));
+}
+
+/* ================= メインループ ================= */
+const clock = new THREE.Clock();
+const camPos  = new THREE.Vector3(0, 26, 42);
+const camLook = new THREE.Vector3(0, 0, 0);
+const camDesired  = new THREE.Vector3();
+const lookDesired = new THREE.Vector3();
+const UP = new THREE.Vector3(0,1,0);
+const TURNSPEED = 1.4; // 旋回速度(rad/s) — 精密操縦の心臓部
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), .05);
+  const t = clock.elapsedTime;
+
+  if(state==='play'){
+    /* --- 旋回（A/D） --- */
+    let turnInput = 0;
+    if(keys.KeyA||keys.ArrowLeft)  turnInput = 1;
+    if(keys.KeyD||keys.ArrowRight) turnInput = -1;
+    turnS += (turnInput - turnS) * (1 - Math.exp(-9*dt));
+    const yaw = turnS * TURNSPEED * dt;
+    if(Math.abs(yaw) > 1e-6){
+      const c=Math.cos(yaw), s=Math.sin(yaw);
+      const nx =  flightDir.x*c + flightDir.z*s;
+      const nz = -flightDir.x*s + flightDir.z*c;
+      flightDir.set(nx, 0, nz).normalize();
+    }
+
+    /* --- 推進（W/S/Space/Shift） --- */
+    const acc=new THREE.Vector3();
+    if(keys.KeyW||keys.ArrowUp)    acc.add(flightDir);
+    if(keys.KeyS||keys.ArrowDown)  acc.sub(flightDir);
+    if(keys.Space) acc.y+=1;
+    if(keys.ShiftLeft||keys.ShiftRight) acc.y-=1;
+    if(acc.lengthSq()>0) acc.normalize();
+    thrustS.lerp(acc, 1-Math.exp(-5*dt));
+    thrust = thrustS.length();
+
+    let target=null, best=1e9, repairing=false;
+    for(const f of faults){
+      if(f.dead) continue;
+      const d = dronePos.distanceTo(f.pos);
+      if(d<best){ best=d; target=f; }
+    }
+    const inRange = target && best < RANGE;
+    if(inRange && !wasRepairing) sfxDock();
+    wasRepairing = inRange;
+
+    const damp = inRange ? 3.4 : 0.85;
+    droneVel.addScaledVector(thrustS, 30*dt);
+    droneVel.multiplyScalar(Math.exp(-damp*dt));
+    droneVel.clampLength(0, 12);
+    dronePos.addScaledVector(droneVel, dt);
+    collide(dronePos);
+
+    /* --- 垂直オートアライメント: 水平方向に近づくと高さを自動で故障箇所へ --- */
+    if(target){
+      const hd = Math.hypot(dronePos.x-target.pos.x, dronePos.z-target.pos.z);
+      if(hd < 4){
+        dronePos.y += (target.pos.y - dronePos.y) * (1 - Math.exp(-3.5*dt));
+      }
+    }
+
+    for(const f of faults){
+      if(f.dead) continue;
+      const d = dronePos.distanceTo(f.pos);
+      if(f===target && d<RANGE){
+        repairing=true;
+        f.progress += dt/REPAIR_TIME;
+        if(f.progress>=1){
+          f.dead=true;
+          f.core.material.color.set(0x37ff8d);
+          f.beam.material.color.set(0x37ff8d);
+          score += 100 + Math.max(0, 50 - Math.floor(best*2));
+          repairs++; sfxDone();
+          health = Math.min(100, health + REPAIR_HEAL); 
+          healFlash = 1;
+          used.delete(anchors.indexOf(f.pos));
+          setTimeout(()=>removeFault(f), 350);
+          repairing=false; wasRepairing=false;
+        }
+      } else if(f.progress>0){
+        f.progress = Math.max(0, f.progress - dt/1.5);
+      }
+    }
+
+    elapsed += dt;
+    spawnTimer -= dt;
+    spawnLoop();
+    health -= faults.filter(f=>!f.dead).length * .6 * dt;
+    healFlash = Math.max(0, healFlash - dt*1.5);
+    if(health<=0){ health=0; state='over'; sfxOver(); showGameOver(); }
+    updateHUD(target, repairing, best);
+
+    if(repairing && target){
+      repLine.visible=true;
+      const pa=repLineGeo.attributes.position;
+      pa.setXYZ(0, dronePos.x, dronePos.y, dronePos.z);
+      pa.setXYZ(1, target.pos.x, target.pos.y, target.pos.z);
+      pa.needsUpdate=true;
+      repLine.material.opacity=.5+Math.sin(t*25)*.3;
+    } else repLine.visible=false;
+
+    if(thrust>0.12 || droneVel.lengthSq()>1){
+      emitTrail(dronePos.x, dronePos.y-.55, dronePos.z, -droneVel.x*.22, -.35, -droneVel.z*.22);
+    }
+
+    /* --- 後方俯瞰カメラ --- */
+    camDesired.copy(dronePos).addScaledVector(flightDir, -6.5);
+    camDesired.y += 5.5 + Math.sin(t*1.7)*.15;
+    pushOut(camDesired, 1.2);
+    lookDesired.copy(dronePos).addScaledVector(flightDir, 5);
+    lookDesired.y -= 1.2;
+  } else {
+    const a = t*0.08;
+    camDesired.set(Math.sin(a)*42, 26, Math.cos(a)*42);
+    lookDesired.set(0,0,0);
+  }
+
+  updateTrail(dt);
+
+  /* --- ロボット外観 --- */
+  const sway = new THREE.Vector3(Math.sin(t*1.1)*.06, Math.sin(t*1.7)*.1, Math.cos(t*.9)*.06);
+  drone.position.copy(dronePos).add(sway);
+  drone.lookAt(drone.position.x + flightDir.x, drone.position.y, drone.position.z + flightDir.z);
+  drone.rotateZ(-turnS * 0.35);
+  drone.rotateX(-droneVel.y * 0.05);
+  drone.antTip.material.color.setHex(Math.sin(t*4)>0 ? 0xff4444 : 0x551111);
+  const glowI = state==='play' ? .25 + thrust*1.3 + (repLine.visible ? .5+Math.sin(t*30)*.2 : 0) : .3+Math.sin(t*2)*.15;
+  drone.thrGlow.material.opacity = Math.min(1, Math.max(0, glowI));
+  drone.thrGlow.scale.setScalar(.5 + glowI*.7);
+  drone.light.intensity = .7 + thrust*.8;
+
+  /* --- カメラ追従 --- */
+  camPos.lerp(camDesired, 1-Math.exp(-4*dt));
+  camLook.lerp(lookDesired, 1-Math.exp(-6*dt));
+  camera.position.copy(camPos);
+  camera.lookAt(camLook);
+
+  renderer.render(scene, camera);
+}
+animate();
+
+/* ================= ゲームオーバー ================= */
+function showGameOver(){
+  const o=document.getElementById('overlay');
+  o.querySelector('h1').textContent='MISSION OVER';
+  o.querySelector('h2').textContent='ステーション稼働率 0%';
+  o.querySelector('p').innerHTML =
+    '修理完了 <b style="color:#7fe3ff">'+repairs+'</b> 件<br>最終スコア <b style="color:#7fe3ff">'+score+'</b><br>生存時間 '+Math.floor(elapsed/60)+':'+String(Math.floor(elapsed%60)).padStart(2,'0');
+  document.getElementById('startBtn').textContent='RETRY';
+  o.classList.remove('hidden');
+}
+})();
+</script>
+</body>
+</html>
