@@ -1,0 +1,331 @@
+<!doctype html>
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="Late Layer KV Approximation for Qwen3-8B">
+<meta property="og:description" content="Late Layer KV Approximation for Qwen3-8B, same as DeepSeek-V4.1-Flash Encoder-Decoder">
+<meta property="og:image" content="https://kishida.github.io/webdemos/assets/llkvapprox.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/llkvapprox/index.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CED WebGPU Demo</title>
+<style>
+  :root { --bg: #f6f5f1; --fg: #1d1d1b; --muted: #6b6a65; --card: #fff; --line: #e2e0d8; --acc: #2f5d8a; --acc2: #b5562c; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #161615; --fg: #ecebe6; --muted: #9a9890; --card: #1f1f1d; --line: #33322e; --acc: #7fb0de; --acc2: #e0915f; } }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-serif; margin: 0; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 20px; margin: 0 0 4px; } .sub { color: var(--muted); margin: 0 0 20px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  h2 { font-size: 15px; margin: 0 0 12px; }
+  label { display: block; color: var(--muted); font-size: 12px; margin: 8px 0 4px; }
+  input, textarea { width: 100%; box-sizing: border-box; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .opts { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+  .opts > div { flex: 1 1 200px; }
+  button { background: var(--acc); color: #fff; border: 0; border-radius: 6px; padding: 7px 14px; font: inherit; cursor: pointer; margin: 10px 8px 0 0; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.sec { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  progress { width: 100%; margin-top: 10px; }
+  #log { color: var(--muted); font-size: 12px; max-height: 120px; overflow: auto; }
+  .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+  .hint a { color: var(--acc); }
+  .tbl { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--line); } th:first-child, td:first-child { text-align: left; }
+  .bar { height: 10px; border-radius: 3px; background: var(--acc); display: inline-block; vertical-align: middle; }
+  .bar.ced { background: var(--acc2); }
+  .chat { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px) { .chat { grid-template-columns: 1fr; } }
+  .colh { font-size: 12px; font-weight: 600; color: var(--acc); margin-bottom: 6px; }
+  .colh.ced { color: var(--acc2); }
+  .msgs { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; height: 440px; overflow-y: auto; }
+  .msg { max-width: 92%; margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { margin-left: auto; background: var(--card); border: 1px solid var(--line); }
+  .msg.assistant { background: color-mix(in srgb, var(--acc) 10%, var(--card)); }
+  .ced .msg.assistant { background: color-mix(in srgb, var(--acc2) 10%, var(--card)); }
+  .meta { color: var(--muted); font-size: 11px; margin: -6px 0 10px; }
+  .meta.user { text-align: right; }
+  .empty { color: var(--muted); font-size: 12px; }
+  #prompt { margin-top: 10px; min-height: 70px; }
+</style>
+<main>
+  <h1 data-i18n="title"></h1>
+  <p class="sub" data-i18n="intro"></p>
+
+  <section>
+    <h2 data-i18n="h_load"></h2>
+    <div class="row">
+      <div><label data-i18n="l_model"></label><input type="file" id="modelFile" accept=".gguf">
+        <p class="hint" data-i18n-html="hint_model"></p>
+        <div id="modelUrlRow" hidden><label data-i18n="l_model_local"></label><input id="model" list="modelList"><datalist id="modelList"></datalist></div></div>
+      <div><label data-i18n="l_proj"></label><input type="file" id="projFile" accept=".safetensors">
+        <p class="hint" data-i18n-html="hint_proj"></p>
+        <div id="projUrlRow" hidden><label data-i18n="l_proj_local"></label><input id="proj" list="projList"><datalist id="projList"></datalist></div></div>
+    </div>
+    <div class="opts">
+      <div><label data-i18n="l_ctx"></label><input id="maxCtx" type="number" value="4096" min="256" step="256"></div>
+      <div><button id="load" data-i18n="b_load"></button></div>
+    </div>
+    <p class="hint" data-i18n="hint_ctx"></p>
+    <progress id="prog" value="0" max="1"></progress>
+    <div id="log"></div>
+  </section>
+
+  <section>
+    <h2 data-i18n="h_chat"></h2>
+    <div class="opts">
+      <div><label data-i18n="l_ntok"></label><input id="ntok" type="number" value="256"></div>
+      <div><label data-i18n="l_system"></label><input id="system" data-i18n-ph="ph_system"></div>
+    </div>
+    <div class="chat" style="margin-top:12px">
+      <div><div class="colh" data-i18n="col_full"></div><div id="msgsFull" class="msgs"><div class="empty" data-i18n="empty_full"></div></div></div>
+      <div class="ced"><div class="colh ced" data-i18n="col_ced"></div><div id="msgsCed" class="msgs"><div class="empty" data-i18n="empty_ced"></div></div></div>
+    </div>
+    <label data-i18n="turn_caption"></label>
+    <div class="tbl"><table id="turnT"><thead><tr><th data-i18n="th_tokens"></th><th>normal</th><th>CED</th><th>CED / normal</th><th></th></tr></thead>
+      <tbody><tr><td colspan="5" class="empty" data-i18n="turn_none"></td></tr></tbody></table></div>
+    <textarea id="prompt" data-i18n-ph="ph_prompt"></textarea>
+    <button id="send" disabled data-i18n="b_send"></button><button id="stop" class="sec" disabled data-i18n="b_stop"></button><button id="clear" class="sec" data-i18n="b_clear"></button>
+    <p class="sub" style="margin:8px 0 0;font-size:12px" data-i18n="chat_note"></p>
+  </section>
+</main>
+<script type="module">
+import { Engine } from './engine.js';
+import { fileSource, urlSource } from './gguf.js';
+import { Tokenizer } from './tokenizer.js';
+
+// ---------- UI language: Japanese if the browser's preferred language is Japanese, English otherwise ----------
+// (?lang=ja / ?lang=en overrides it)
+const LANG = (new URLSearchParams(location.search).get('lang') || navigator.languages?.[0] || navigator.language || 'en')
+  .toLowerCase().startsWith('ja') ? 'ja' : 'en';
+const I18N = {
+  ja: {
+    title: 'Qwen3 への CED 後付け — WebGPU',
+    intro: '通常の prefill はプロンプトの全トークンについて全層を計算します。CED の prefill は encoder(下半分の層)だけを計算し、decoder の KV を小さな projector で作って、decoder は最後の位置だけ計算します。同じ会話を normal と CED で並べて比べられます。',
+    h_load: '1. 読み込み', h_chat: '2. チャット',
+    l_model: 'Model GGUF ファイル',
+    hint_model: '先にダウンロードしておいたファイルを選んでください(ページが勝手にダウンロード・キャッシュすることはありません)。例: <a href="https://huggingface.co/Qwen/Qwen3-8B-GGUF" target="_blank" rel="noopener">Qwen/Qwen3-8B-GGUF</a> の Qwen3-8B-Q4_K_M.gguf(約 5 GB)。Qwen3 系の GGUF(Q2_K〜Q8_0)なら動きます。',
+    l_model_local: '…またはローカルサーバーのモデル',
+    l_proj: 'Projector ファイル(safetensors)',
+    hint_proj: 'モデルに合わせて学習した projector。Qwen3-8B 用は <a href="https://huggingface.co/kishida/Q3-8B-KVA-Projector" target="_blank" rel="noopener">kishida/Q3-8B-KVA-Projector</a> の kva_projector.safetensors をダウンロードして選んでください。無しで読み込むと normal だけ使えます。',
+    l_proj_local: '…またはローカルサーバーの projector',
+    l_ctx: '最大コンテキスト長(トークン)',
+    hint_ctx: '会話全体(履歴+生成)の上限です。大きくするほど GPU メモリを使います。',
+    b_load: 'モデルと projector を読み込む',
+    th_tokens: 'トークン',
+    l_ntok: '最大生成トークン', l_system: 'system プロンプト(任意)', ph_system: '例: あなたは簡潔に日本語で答えるアシスタントです。',
+    col_full: 'normal(全層で prefill)', col_ced: 'CED(encoder + projector で prefill)',
+    empty_full: 'モデルを読み込んでからメッセージを送ってください。',
+    empty_ced: '毎ターン会話全体を prefill します。会話が長くなるほど CED の prefill 短縮が効きます。',
+    empty_chat: '会話は空です。',
+    ced_needs_proj: 'CED には projector が必要です(normal だけで会話します)。',
+    turn_caption: '直前のターンの prefill(CED / normal は 1 トークンあたりの時間の比)', turn_none: 'まだ推論していません',
+    ph_prompt: 'メッセージを入力(Ctrl+Enter で送信)',
+    b_send: '送信', b_stop: '停止', b_clear: '会話をクリア',
+    chat_note: 'Qwen3 のチャット形式(thinking なし)。normal と CED はそれぞれ自分の返答を履歴として会話を続けるので、2 ターン目以降はプロンプトの長さが違うことがあります。生成トークンは CED でも本物の decoder で計算します。',
+    e_need_file: 'GGUF ファイルを選んでください',
+    no_proj: 'projector なし: normal のみ使えます(CED には projector が必要)',
+    e_too_long: (n, max) => `会話が ${n} トークンになり、最大コンテキスト長(${max})に達しました。会話をクリアするか、値を上げて読み込み直してください。`,
+    generating: '生成中…', stopped: '停止', empty_reply: '(空の応答)',
+  },
+  en: {
+    title: 'CED retrofit on Qwen3 — WebGPU',
+    intro: 'Normal prefill runs all layers over every prompt token. CED prefill runs only the encoder (the lower half of the layers), builds the decoder KV with a small projector, and runs the decoder for the last position only. The same conversation runs side by side with normal and CED.',
+    h_load: '1. Load', h_chat: '2. Chat',
+    l_model: 'Model GGUF file',
+    hint_model: 'Pick a file you downloaded beforehand (the page never downloads or caches models by itself). For example Qwen3-8B-Q4_K_M.gguf (about 5 GB) from <a href="https://huggingface.co/Qwen/Qwen3-8B-GGUF" target="_blank" rel="noopener">Qwen/Qwen3-8B-GGUF</a>. Qwen3 GGUF files (Q2_K–Q8_0) work.',
+    l_model_local: '…or a model on the local server',
+    l_proj: 'Projector file (safetensors)',
+    hint_proj: 'A projector trained for the model. For Qwen3-8B, download kva_projector.safetensors from <a href="https://huggingface.co/kishida/Q3-8B-KVA-Projector" target="_blank" rel="noopener">kishida/Q3-8B-KVA-Projector</a> and pick it here. Without a projector only “normal” is available.',
+    l_proj_local: '…or a projector on the local server',
+    l_ctx: 'max context (tokens)',
+    hint_ctx: 'Upper limit for the whole conversation (history + generated tokens). Larger values use more GPU memory.',
+    b_load: 'Load model + projector',
+    th_tokens: 'tokens',
+    l_ntok: 'max new tokens', l_system: 'system prompt (optional)', ph_system: 'e.g. You are a concise assistant.',
+    col_full: 'normal (prefill with all layers)', col_ced: 'CED (prefill with encoder + projector)',
+    empty_full: 'Load a model, then send a message.',
+    empty_ced: 'The whole conversation is prefilled every turn, so CED’s prefill saving grows with the conversation.',
+    empty_chat: 'The conversation is empty.',
+    ced_needs_proj: 'CED needs a projector (chatting with normal only).',
+    turn_caption: 'Prefill of the last turn (CED / normal = ratio of time per token)', turn_none: 'No turn yet',
+    ph_prompt: 'Type a message (Ctrl+Enter to send)',
+    b_send: 'Send', b_stop: 'Stop', b_clear: 'Clear chat',
+    chat_note: 'Qwen3 chat format (thinking off). normal and CED each keep their own replies as history, so from the second turn on their prompts can differ in length. Generated tokens run through the real decoder in CED mode as well.',
+    e_need_file: 'Please pick a GGUF file',
+    no_proj: 'no projector: only normal is available (CED needs a projector)',
+    e_too_long: (n, max) => `The conversation is ${n} tokens and reached the max context (${max}). Clear the chat, or raise the value and load again.`,
+    generating: 'generating…', stopped: 'stopped', empty_reply: '(empty reply)',
+  },
+};
+const t = (k, ...a) => { const v = I18N[LANG][k] ?? I18N.en[k] ?? k; return typeof v === 'function' ? v(...a) : v; };
+document.documentElement.lang = LANG;
+for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+for (const el of document.querySelectorAll('[data-i18n-html]')) el.innerHTML = t(el.dataset.i18nHtml); // fixed strings from I18N only
+for (const el of document.querySelectorAll('[data-i18n-ph]')) el.placeholder = t(el.dataset.i18nPh);
+
+const $ = (id) => document.getElementById(id);
+const log = (m) => { const d = document.createElement('div'); d.textContent = m; $('log').prepend(d); console.log(m); };
+let eng, tok;
+
+// When served by scripts/serve.ts on this machine, also offer the local models / projectors by path. On a public static
+// host (GitHub Pages) only picked files are used: the user downloads the model deliberately, nothing is cached behind
+// their back.
+if (['localhost', '127.0.0.1'].includes(location.hostname)) fetch('models/').then((r) => (r.ok ? r.json() : [])).then((ms) => {
+  if (!ms.length) return;
+  $('modelUrlRow').hidden = false; $('projUrlRow').hidden = false;
+  for (const m of ms) $('modelList').append(new Option(m, 'models/' + m));
+  if (ms.includes('Qwen3-8B-Q4_K_M.gguf')) $('model').value = 'models/Qwen3-8B-Q4_K_M.gguf';
+  for (const p of ['phase2_ctx/proj_final_fp16.safetensors', 'phase2_linear/proj_final_fp16.safetensors', 'phase1_own/proj_final_fp16.safetensors'])
+    $('projList').append(new Option(p, 'proj/' + p));
+  $('proj').value = 'proj/phase2_ctx/proj_final_fp16.safetensors';
+}).catch(() => {});
+
+$('load').onclick = async () => {
+  try {
+    // validate before touching the loaded model, so a stray click keeps the current one
+    const localPath = !$('modelUrlRow').hidden && $('model').value.trim();
+    if (!$('modelFile').files[0] && !localPath) throw new Error(t('e_need_file'));
+    $('load').disabled = true;
+    $('send').disabled = true;
+    if (eng && !eng.lost) eng.device.destroy(); // a new load always starts from a fresh device (frees the previous model)
+    eng = await Engine.create(log);
+    log('adapter: ' + eng.info.adapter + `, maxStorageBinding ${(eng.info.maxBinding / 2 ** 20) | 0} MiB`);
+    const msrc = $('modelFile').files[0] ? fileSource($('modelFile').files[0]) : urlSource(localPath);
+    const ctx = Math.max(256, Number($('maxCtx').value) || 4096);
+    const t0 = performance.now();
+    await eng.loadModel(msrc, ctx, ctx, (f) => ($('prog').value = f)); // prompt buffers sized to the full context
+    tok = new Tokenizer(eng.g.meta);
+    log(`model ${msrc.name}: ${eng.cfg.L} layers, D=${eng.cfg.D}, loaded in ${((performance.now() - t0) / 1000).toFixed(1)}s`);
+    const projPath = !$('projUrlRow').hidden && $('proj').value.trim();
+    if ($('projFile').files[0] || projPath) {
+      const psrc = $('projFile').files[0] ? fileSource($('projFile').files[0]) : urlSource(projPath);
+      const P = await eng.loadProjector(psrc);
+      log(`projector ${psrc.name}: type=${P.type}, encoder layers=${P.enc}, decoder layers ${P.layers[0]}..${P.layers.at(-1)}`);
+    } else {
+      log(t('no_proj'));
+    }
+    // warm-up: compile the GPU pipelines now (>= 16 tokens, so the tiled prefill kernels too),
+    // so the first chat turn's prefill times are not inflated
+    const w = tok.encode('Hello, this is a warm-up prompt for compiling the GPU pipelines. '.repeat(3)).slice(0, 32);
+    await eng.step(await eng.prefill(w, 'full', true), true);
+    if (eng.P) await eng.prefill(w, 'ced', true);
+    $('send').disabled = false;
+    resetChat();
+  } catch (e) { log('ERROR ' + e.message); console.error(e); } finally { $('load').disabled = false; }
+};
+
+// ---------- chat (normal and CED side by side) ----------
+const EOS = [151645, 151643]; // <|im_end|>, <|endoftext|>
+const hist = { full: [], ced: [] };
+let stopReq = false, busy = false;
+const box = (mode) => $(mode === 'full' ? 'msgsFull' : 'msgsCed');
+
+// Qwen3 chat template with thinking disabled (same string as tokenizer.apply_chat_template(..., enable_thinking=False))
+function chatPrompt(msgs) {
+  const sys = $('system').value.trim();
+  let s = sys ? `<|im_start|>system\n${sys}<|im_end|>\n` : '';
+  for (const m of msgs) s += `<|im_start|>${m.role}\n${m.content}<|im_end|>\n`;
+  return s + '<|im_start|>assistant\n<think>\n\n</think>\n\n';
+}
+function addMsg(mode, role, text, meta) {
+  const b = box(mode);
+  b.querySelector('.empty')?.remove();
+  const d = document.createElement('div'); d.className = 'msg ' + role; d.textContent = text; b.append(d);
+  const m = document.createElement('div'); m.className = 'meta ' + role; m.textContent = meta ?? ''; b.append(m);
+  b.scrollTop = b.scrollHeight;
+  return { d, m };
+}
+function setEmpty(mode, key) {
+  const e = document.createElement('div'); e.className = 'empty'; e.textContent = t(key);
+  box(mode).replaceChildren(e);
+}
+function resetChat() {
+  hist.full = []; hist.ced = [];
+  setEmpty('full', 'empty_chat');
+  setEmpty('ced', eng?.P ? 'empty_chat' : 'ced_needs_proj');
+  showTurn(null);
+}
+// prefill of the last turn. The two histories can differ in length, so CED / normal compares time per token
+// (equal to the plain time ratio when both prompts have the same length). r.full / r.ced = { prompt, prefill_ms }
+function showTurn(r) {
+  const tr = document.createElement('tr');
+  const cell = (text) => { const td = document.createElement('td'); td.textContent = text; tr.append(td); return td; };
+  if (!r || (!r.full && !r.ced)) {
+    const td = cell(t('turn_none')); td.colSpan = 5; td.className = 'empty';
+  } else {
+    const { full, ced } = r;
+    const fmt = (x) => (x ? `${x.prefill_ms.toFixed(0)} ms (${((x.prompt / x.prefill_ms) * 1000).toFixed(0)} tok/s)` : '–');
+    cell(full && ced && full.prompt !== ced.prompt ? `${full.prompt} / ${ced.prompt}` : String((full ?? ced).prompt));
+    cell(fmt(full));
+    cell(fmt(ced));
+    const ratio = full && ced ? (ced.prefill_ms / ced.prompt) / (full.prefill_ms / full.prompt) : null;
+    cell(ratio === null ? '–' : ratio.toFixed(2));
+    const g = cell(''); g.style.minWidth = '140px';
+    if (ratio !== null) {
+      const b1 = document.createElement('span'); b1.className = 'bar'; b1.style.width = '100px';
+      const b2 = document.createElement('span'); b2.className = 'bar ced'; b2.style.width = `${Math.min(140, 100 * ratio).toFixed(0)}px`;
+      g.append(b1, document.createElement('br'), b2);
+    }
+  }
+  $('turnT').tBodies[0].replaceChildren(tr);
+}
+
+async function chatTurn(mode, n) {
+  const ids = tok.encode(chatPrompt(hist[mode]));
+  if (ids.length + 1 > eng.maxCtx) throw new Error(t('e_too_long', ids.length, eng.maxCtx));
+  n = Math.min(n, eng.maxCtx - ids.length);
+  const { d, m } = addMsg(mode, 'assistant', '…');
+  const t0 = performance.now();
+  let nx = await eng.prefill(ids, mode, true); // greedy: the engine returns the argmax token id
+  const pf = performance.now() - t0;
+  m.textContent = `prompt ${ids.length} tok · prefill ${pf.toFixed(0)} ms · ${t('generating')}`;
+  const out = [], t1 = performance.now();
+  for (let i = 0; i < n && !stopReq; i++) {
+    if (EOS.includes(nx)) break;
+    out.push(nx);
+    if (i % 2 === 0) { d.textContent = tok.decode(out); box(mode).scrollTop = box(mode).scrollHeight; }
+    nx = await eng.step(nx, true);
+  }
+  const dt = (performance.now() - t1) / 1000;
+  const text = tok.decode(out).trim();
+  d.textContent = text || t('empty_reply');
+  m.textContent = `prompt ${ids.length} tok · prefill ${pf.toFixed(0)} ms · ${out.length} tok ${(out.length / Math.max(dt, 1e-3)).toFixed(1)} tok/s${stopReq ? ' · ' + t('stopped') : ''}`;
+  hist[mode].push({ role: 'assistant', content: text });
+  return { prompt: ids.length, prefill_ms: pf };
+}
+
+async function send() {
+  const text = $('prompt').value.trim();
+  if (!text || busy || !eng) return;
+  const modes = eng.P ? ['full', 'ced'] : ['full'];
+  busy = true; stopReq = false;
+  $('send').disabled = true; $('stop').disabled = false; $('prompt').value = '';
+  try {
+    const n = Number($('ntok').value);
+    for (const mode of modes) { hist[mode].push({ role: 'user', content: text }); addMsg(mode, 'user', text); }
+    const r = {};
+    for (const mode of modes) { if (!stopReq) r[mode] = await chatTurn(mode, n); }
+    showTurn(r);
+  } catch (e) { log('ERROR ' + e.message); console.error(e); }
+  finally { busy = false; $('send').disabled = false; $('stop').disabled = true; }
+}
+$('send').onclick = send;
+$('stop').onclick = () => { stopReq = true; };
+$('clear').onclick = () => { if (!busy) resetChat(); };
+$('prompt').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
+window.cedChat = { hist, chatPrompt, send, showTurn };
+window.cedEngine = () => ({ eng, tok });
+window.cedLang = LANG;
+</script>
