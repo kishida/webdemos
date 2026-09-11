@@ -10,8 +10,8 @@
   gtag('config', 'G-2YMCH5GKYT');
 </script>
 
-<meta property="og:title" content="Late Layer KV Approximation for Qwen3-8B">
-<meta property="og:description" content="Late Layer KV Approximation for Qwen3-8B, same as DeepSeek-V4.1-Flash Encoder-Decoder">
+<meta property="og:title" content="Late Layer KV Approximation(LLKVApprox) for Qwen3">
+<meta property="og:description" content="Late Layer KV Approximation for Qwen3, same as DeepSeek-V4.1-Flash Encoder-Decoder">
 <meta property="og:image" content="https://kishida.github.io/webdemos/assets/llkvapprox.png">
 <meta property="og:url" content="https://kishida.github.io/webdemos/llkvapprox/index.html"/>
 <meta name="twitter:card" content="summary_large_image"/>
@@ -19,7 +19,7 @@
 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CED WebGPU Demo</title>
+<title>Late Layer KV Approximation(LLKVApprox) for Qwen3</title>
 <style>
   :root { --bg: #f6f5f1; --fg: #1d1d1b; --muted: #6b6a65; --card: #fff; --line: #e2e0d8; --acc: #2f5d8a; --acc2: #b5562c; }
   @media (prefers-color-scheme: dark) { :root { --bg: #161615; --fg: #ecebe6; --muted: #9a9890; --card: #1f1f1d; --line: #33322e; --acc: #7fb0de; --acc2: #e0915f; } }
@@ -111,14 +111,14 @@ const LANG = (new URLSearchParams(location.search).get('lang') || navigator.lang
   .toLowerCase().startsWith('ja') ? 'ja' : 'en';
 const I18N = {
   ja: {
-    title: 'Qwen3 への CED 後付け — WebGPU',
+    title: '後半層KV近似(Late Layer KV Approx) for Qwen3',
     intro: '通常の prefill はプロンプトの全トークンについて全層を計算します。CED の prefill は encoder(下半分の層)だけを計算し、decoder の KV を小さな projector で作って、decoder は最後の位置だけ計算します。同じ会話を normal と CED で並べて比べられます。',
     h_load: '1. 読み込み', h_chat: '2. チャット',
     l_model: 'Model GGUF ファイル',
-    hint_model: '先にダウンロードしておいたファイルを選んでください(ページが勝手にダウンロード・キャッシュすることはありません)。例: <a href="https://huggingface.co/Unsloth/Qwen3-8B-GGUF" target="_blank" rel="noopener">Qwen/Qwen3-8B-GGUF</a> の Qwen3-8B-Q4_K_M.gguf(約 5 GB)。Qwen3 系の GGUF(Q2_K〜Q8_0)なら動きます。',
+    hint_model: '先にダウンロードしておいたファイルを選んでください(ページが勝手にダウンロード・キャッシュすることはありません)。例: <a href="https://huggingface.co/Unsloth/Qwen3-8B-GGUF" target="_blank" rel="noopener">Unsloth/Qwen3-8B-GGUF</a> の Qwen3-8B-Q4_K_M.gguf(約 5 GB)。Qwen3 系の GGUF(Q2_K〜Q8_0)なら動きます。',
     l_model_local: '…またはローカルサーバーのモデル',
-    l_proj: 'Projector ファイル(safetensors)',
-    hint_proj: 'モデルに合わせて学習した projector。Qwen3-8B 用は <a href="https://huggingface.co/kishida/Q3-8B-KVA-Projector" target="_blank" rel="noopener">kishida/Q3-8B-KVA-Projector</a> の kva_projector.safetensors をダウンロードして選んでください。無しで読み込むと normal だけ使えます。',
+    l_proj: '近似Projector ファイル(safetensors)',
+    hint_proj: 'モデルに合わせて学習した 近似projector。Qwen3-8B 用は <a href="https://huggingface.co/kishida/Q3-8B-KVA-Projector" target="_blank" rel="noopener">kishida/Q3-8B-KVA-Projector</a> の kva_projector.safetensors をダウンロードして選んでください。無しで読み込むと normal だけ使えます。',
     l_proj_local: '…またはローカルサーバーの projector',
     l_ctx: '最大コンテキスト長(トークン)',
     hint_ctx: '会話全体(履歴+生成)の上限です。大きくするほど GPU メモリを使います。',
@@ -140,14 +140,14 @@ const I18N = {
     generating: '生成中…', stopped: '停止', empty_reply: '(空の応答)',
   },
   en: {
-    title: 'CED retrofit on Qwen3 — WebGPU',
+    title: 'Late Layer KV Approximation on Qwen3',
     intro: 'Normal prefill runs all layers over every prompt token. CED prefill runs only the encoder (the lower half of the layers), builds the decoder KV with a small projector, and runs the decoder for the last position only. The same conversation runs side by side with normal and CED.',
     h_load: '1. Load', h_chat: '2. Chat',
     l_model: 'Model GGUF file',
-    hint_model: 'Pick a file you downloaded beforehand (the page never downloads or caches models by itself). For example Qwen3-8B-Q4_K_M.gguf (about 5 GB) from <a href="https://huggingface.co/Unsloth/Qwen3-8B-GGUF" target="_blank" rel="noopener">Qwen/Qwen3-8B-GGUF</a>. Qwen3 GGUF files (Q2_K–Q8_0) work.',
+    hint_model: 'Pick a file you downloaded beforehand (the page never downloads or caches models by itself). For example Qwen3-8B-Q4_K_M.gguf (about 5 GB) from <a href="https://huggingface.co/Unsloth/Qwen3-8B-GGUF" target="_blank" rel="noopener">Unsloth/Qwen3-8B-GGUF</a>. Qwen3 GGUF files (Q2_K–Q8_0) work.',
     l_model_local: '…or a model on the local server',
-    l_proj: 'Projector file (safetensors)',
-    hint_proj: 'A projector trained for the model. For Qwen3-8B, download kva_projector.safetensors from <a href="https://huggingface.co/kishida/Q3-8B-KVA-Projector" target="_blank" rel="noopener">kishida/Q3-8B-KVA-Projector</a> and pick it here. Without a projector only “normal” is available.',
+    l_proj: 'Approximation Projector file (safetensors)',
+    hint_proj: 'A approximation projector trained for the model. For Qwen3-8B, download kva_projector.safetensors from <a href="https://huggingface.co/kishida/Q3-8B-KVA-Projector" target="_blank" rel="noopener">kishida/Q3-8B-KVA-Projector</a> and pick it here. Without a projector only “normal” is available.',
     l_proj_local: '…or a projector on the local server',
     l_ctx: 'max context (tokens)',
     hint_ctx: 'Upper limit for the whole conversation (history + generated tokens). Larger values use more GPU memory.',
