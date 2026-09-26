@@ -82,6 +82,8 @@
   .pop.pts { color: var(--point); text-shadow: 0 0 10px rgba(51,226,143,.6); }
   .pop.dmg { color: var(--danger); font-family: var(--jp); font-size: 20px; text-shadow: 0 0 10px rgba(255,59,59,.6); }
   @keyframes rise { from { opacity: 1; margin-top: 0; } to { opacity: 0; margin-top: -60px; } }
+  .fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .6s; }
+  .fade.on { opacity: 1; }
   .vignette { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .5s;
     background: radial-gradient(ellipse at center, transparent 55%, rgba(255,40,40,.55) 100%); }
   .vignette.on { opacity: 1; transition: none; }
@@ -184,6 +186,7 @@
     <div class="pops" id="pops"></div>
   </div>
   <div class="vignette" id="vig"></div>
+  <div class="fade" id="fade"></div>
 
   <div class="touch" id="touch">
     <div class="grp"><button class="tbtn" id="tL" aria-label="左へ">◀</button><button class="tbtn" id="tR" aria-label="右へ">▶</button></div>
@@ -918,20 +921,31 @@ async function init() {
 const carRoot = new THREE.Group();
 carRoot.rotation.order = 'YXZ';
 scene.add(carRoot);
-let car = null, parts = {}, wheels = {};
+let car = null, parts = {}, wheels = {}, carNodes = {};
+const workLights = [
+  Object.assign(new THREE.SpotLight(0xfff4e6, 0, 26, .75, .65, 1.2), { base: 28 }),
+  Object.assign(new THREE.PointLight(0xdfe8ff, 0, 14, 1.4), { base: 3 }),
+  Object.assign(new THREE.PointLight(0xfff0dc, 0, 14, 1.4), { base: 3 }),
+];
+workLights[0].position.set(1.5, 7.5, 2.5);
+workLights[0].target.position.set(0, 0, 0);
+workLights[1].position.set(4.2, 2.6, 1.5);
+workLights[2].position.set(-4.2, 2.6, -1.5);
+function setWorkLight(k) { for (const L of workLights) L.intensity = L.base * k; }
 const headLight = new THREE.SpotLight(0xfff0d8, 70, 70, .42, .7, 1.6);
 headLight.position.set(0, .62, 2.35);   // just ahead of the front bumper (nose is at z = 2.19), never inside the engine bay
 headLight.target.position.set(0, 0, 30);
-carRoot.add(headLight, headLight.target);
+carRoot.add(headLight, headLight.target, ...workLights, workLights[0].target);
 
 function spawnPlayerCar() {
   if (car) carRoot.remove(car);
   car = carTemplate.clone(true);
   car.position.z = WB_MID;          // model origin is the front axle; centre the wheelbase
   carRoot.add(car);
-  parts = {}; wheels = {};
+  parts = {}; wheels = {}; carNodes = {};
   car.traverse(o => {   // parents come first; glTF keeps the original node name in userData
     const nm = o.userData.name || o.name;
+    if (!carNodes[nm] && o !== car) { carNodes[nm] = o; o.userData.rest = { p: o.position.clone(), q: o.quaternion.clone() }; }
     if (PART_NAMES.includes(nm) && !parts[nm]) parts[nm] = o;
     if (/^wheel_[FR][LR]$/.test(nm) && !wheels[nm]) { wheels[nm] = o; o.rotation.order = 'YXZ'; }
   });
@@ -1258,19 +1272,94 @@ $('mute').onclick = () => { muted = !muted; $('mute').textContent = muted ? '音
 $('start').onclick = startGame;
 $('again').onclick = startGame;
 
-function ready() {
+/* ---- title screen: assembly animation and an expressway run, alternating ---- */
+const easeOutBounce = x => {
+  const n = 7.5625, d = 2.75;
+  if (x < 1 / d) return n * x * x;
+  if (x < 2 / d) return n * (x -= 1.5 / d) * x + .75;
+  if (x < 2.5 / d) return n * (x -= 2.25 / d) * x + .9375;
+  return n * (x -= 2.625 / d) * x + .984375;
+};
+const easeOutBack = x => 1 + 2.70158 * Math.pow(x - 1, 3) + 1.70158 * Math.pow(x - 1, 2);
+const ASM_END = 6.4, ASM_HOLD = 1.2, RUN_TIME = 12;
+// model space: +Y up, +Z nose, +X the car's left
+const FLY_FROM = { front_bumper: [0, .5, 7], hood: [0, 1.5, 7], door_L: [7, .6, 0], door_R: [-7, .6, 0], trunk: [0, 1.5, -7], rear_bumper: [0, .5, -7] };
+
+function startAssembly() {
   resetRun();
+  S.v = 0;
+  const sched = [];
+  const add = (name, t0, dur, from, ease, spin = 0) => {
+    const o = carNodes[name];
+    if (!o || !o.userData.rest) return;
+    const q0 = o.userData.rest.q.clone().multiply(new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(rand(-spin, spin), rand(-spin, spin), rand(-spin, spin))));
+    sched.push({ o, t0, dur, from: new THREE.Vector3(...from), ease, q0 });
+  };
+  // 1) wheels, then the chassis (structure + engine + drivetrain) drop and bounce
+  ['wheel_RL', 'wheel_RR', 'wheel_FL', 'wheel_FR'].forEach((n, i) => add(n, .1 + i * .18, .9, [0, 5, 0], easeOutBounce, .4));
+  add('chassis', 1.0, 1.1, [0, 6, 0], easeOutBounce);
+  // 2) the body shell drops on
+  add('body', 2.3, 1.1, [0, 6.5, 0], easeOutBounce);
+  // 3) panels fly in from front / back / sides and snap into place
+  const order = Object.keys(FLY_FROM).sort(() => Math.random() - .5);
+  order.forEach((n, i) => add(n, 3.6 + i * .32, .8, FLY_FROM[n], easeOutBack, .9));
+  S.attract = { phase: 'assemble', t: 0, sched };
+  stepAssembly(0);
+}
+function stepAssembly(t) {
+  for (const a of S.attract.sched) {
+    const k = clamp((t - a.t0) / a.dur, 0, 1), e = a.ease(k), rest = a.o.userData.rest;
+    a.o.visible = t >= a.t0;
+    a.o.position.copy(rest.p).addScaledVector(a.from, 1 - e);
+    a.o.quaternion.slerpQuaternions(a.q0, rest.q, clamp(e, 0, 1));
+  }
+}
+function assemblyCamera(t) {
+  // circle from the rear-left to a front-left three-quarter as the car comes together
+  const k = clamp(t / (ASM_END + ASM_HOLD), 0, 1), a = 2.5 - 1.75 * (1 - Math.pow(1 - k, 2));
+  const th = carRoot.rotation.y, lx = Math.sin(a) * 7.4, lz = Math.cos(a) * 7.4;
+  const base = carRoot.position;
+  camera.position.set(base.x + lx * Math.cos(th) + lz * Math.sin(th), 2.3, base.z - lx * Math.sin(th) + lz * Math.cos(th));
+  camera.lookAt(base.x, .75, base.z);
+  camera.fov = camera.aspect < 1 ? 70 : 52;
+  camera.updateProjectionMatrix();
+}
+function stepAttract(rdt) {
+  const A = S.attract;
+  A.t += rdt;
+  if (A.phase === 'assemble') {
+    stepAssembly(A.t);
+    if (A.t > ASM_END + ASM_HOLD) {                 // hand over to the chase camera smoothly
+      A.phase = 'run'; A.t = 0;
+      S.camOff = camera.position.clone().sub(carRoot.position);
+      return false;                                 // (returning true here re-posed the car at t=0 and hid it)
+    }
+    return true;                                    // car stays parked while it is built
+  }
+  if (A.t > RUN_TIME && !A.fading) {
+    A.fading = true;
+    $('fade').classList.add('on');
+    setTimeout(() => { if (S.mode === 'title') startAssembly(); $('fade').classList.remove('on'); }, 650);
+  }
+  return false;
+}
+
+function ready() {
   S.mode = 'title';
+  startAssembly();
   $('start').disabled = false; $('start').textContent = '走り出す';
 }
 function toTitle() {
-  resetRun();
   S.mode = 'title';
+  startAssembly();
   $('hud').hidden = true; $('over').hidden = true; $('title').hidden = false; $('mute').hidden = true;
   $('start').focus();
 }
 function startGame() {
   initAudio(); if (AC?.state === 'suspended') AC.resume();
+  S.attract = null;
+  $('fade').classList.remove('on');
   resetRun();
   S.mode = 'play';
   $('title').hidden = true; $('over').hidden = true; $('hud').hidden = false; $('mute').hidden = false; $('touch').hidden = false;
@@ -1454,7 +1543,7 @@ function orbitCamera(rdt) {
 // during a close-up or the wreck orbit, hide traffic near the car so a truck
 // never blocks the shot; it reappears as soon as normal play resumes
 function occluders() {
-  const hide = !!S.cine || S.mode === 'crash' || S.mode === 'over';
+  const hide = !!S.cine || S.mode === 'crash' || S.mode === 'over' || S.attract?.phase === 'assemble';
   for (const t of traffic) t.g.visible = !(hide && t.state === 'drive' && Math.abs(t.s - S.s) < 30);
 }
 
@@ -1471,6 +1560,7 @@ let last = performance.now(), distScore = 0;
 function loop(now) {
   requestAnimationFrame(loop);
   const rdt = Math.min(.05, (now - last) / 1000);
+  const wall = Math.min(.25, (now - last) / 1000);   // title sequence keeps real time even at low fps
   let dt = rdt;
   last = now;
   if (S.mode === 'loading') { composer.render(); return; }
@@ -1479,6 +1569,17 @@ function loop(now) {
     stepDebris(rdt); updateSparks(rdt); stepTraffic(rdt, false, true);
     orbitCamera(rdt); occluders(); updateEngine(0, false); composer.render(); return;
   }
+
+  if (S.mode === 'title' && S.attract && stepAttract(wall)) {
+    S.v = 0;
+    placePlayer(rdt, false);
+    stepAssembly(S.attract.t);                     // re-apply the pose placePlayer's wheel steer overwrote
+    stepTraffic(rdt, false, true); updateSparks(rdt); updateChunks(S.s);
+    setWorkLight(Math.min(1, S.attract.t / .6));
+    assemblyCamera(S.attract.t); occluders(); composer.render(); return;
+  }
+
+  setWorkLight(S.mode === 'title' && S.attract?.phase === 'run' ? Math.max(0, 1 - S.attract.t / 1.5) : 0);
 
   if (S.cine) {                                  // slow motion while the close-up runs
     S.cine.t += rdt;
@@ -1513,7 +1614,7 @@ function loop(now) {
   composer.render();
 }
 requestAnimationFrame(loop);
-if (location.hostname === 'localhost') window.__r32 = { S, traffic, parts: () => parts, hitHazard, hitPoint, camera, carRoot };
+if (location.hostname === 'localhost') window.__r32 = { S, traffic, parts: () => parts, nodes: () => carNodes, hitHazard, hitPoint, camera, carRoot };
 
 init();
 
