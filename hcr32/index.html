@@ -134,11 +134,27 @@
   .screen.dock .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .screen.dock .stats dd { font-size: 22px; }
   @media (max-width: 480px) { .screen.dock .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  /* ---------- garage ---------- */
+  .garage-ui { position: absolute; left: 0; top: 0; padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px 16px; pointer-events: none; max-width: 100%; }
+  .gcard { pointer-events: auto; width: min(340px, calc(100vw - 32px)); padding: 16px 18px; gap: 12px; }
+  .gcard h2 { margin: 0; font: 900 20px/1.2 var(--jp); letter-spacing: .02em; }
+  .layers { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { font: 700 13px/1 var(--jp); letter-spacing: .06em; padding: 9px 12px; border-radius: 999px; border: 2px solid rgba(255,255,255,.55);
+    background: transparent; color: #fff; }
+  .chip[aria-pressed="true"] { background: #fff; color: var(--sign); border-color: #fff; }
+  .chip:focus-visible { outline: 3px solid var(--sodium); outline-offset: 2px; }
+  .spec { display: grid; gap: 6px; margin: 0; font: 500 12.5px/1.4 var(--jp); }
+  .spec div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid rgba(255,255,255,.18); padding-bottom: 5px; }
+  .spec dt { opacity: .8; }
+  .spec dd { margin: 0; font-family: var(--num); font-variant-numeric: tabular-nums; text-align: right; }
+  .ghint { margin: 0; font: 500 12px/1.5 var(--jp); color: #d6e6dc; }
+  @media (max-width: 480px) { .spec { display: none; } }
   .mute { position: absolute; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); pointer-events: auto; }
 
   /* ---------- touch controls ---------- */
   .touch { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); display: none; justify-content: space-between; padding: 0 12px; pointer-events: none; }
   .touch .grp { display: flex; gap: 10px; pointer-events: auto; }
+  .touch .dragHint { pointer-events: none; align-self: flex-end; font: 600 12px/1.3 var(--jp); color: rgba(255,255,255,.7); background: rgba(7,11,22,.45); padding: 6px 10px; border-radius: 8px; }
   .tbtn { width: 74px; height: 74px; border-radius: 50%; border: 2px solid rgba(255,255,255,.45); background: rgba(7,11,22,.55); color: #fff; font: 700 12px/1 var(--jp); white-space: nowrap; touch-action: none; }
   .tbtn.on { background: rgba(255,174,31,.35); border-color: var(--sodium); }
   @media (pointer: coarse) {
@@ -189,7 +205,7 @@
   <div class="fade" id="fade"></div>
 
   <div class="touch" id="touch">
-    <div class="grp"><button class="tbtn" id="tL" aria-label="左へ">◀</button><button class="tbtn" id="tR" aria-label="右へ">▶</button></div>
+    <div class="grp dragHint">左右ドラッグでハンドル</div>
     <div class="grp"><button class="tbtn" id="tB" aria-label="ブレーキ">ブレーキ</button><button class="tbtn" id="tN" aria-label="ブースト">ブースト</button></div>
   </div>
   <button class="ghost mute" id="mute" hidden>音：オン</button>
@@ -208,7 +224,7 @@
       <div class="keys"><span><kbd>←</kbd><kbd>→</kbd>車線移動</span><span><kbd>↓</kbd>ブレーキ</span><span><kbd>↑</kbd>ブースト</span><span><kbd>P</kbd>一時停止</span></div>
       <div class="row">
         <span class="best">ベスト<b id="bestT">0</b></span>
-        <button class="go" id="start" disabled>読み込み中…</button>
+        <span class="row" style="gap:10px"><button class="ghost" id="garageBtn" disabled>ガレージ</button><button class="go" id="start" disabled>読み込み中…</button></span>
       </div>
     </div>
   </div>
@@ -225,6 +241,28 @@
         <div><dt>最大コンボ</dt><dd id="rCombo">×1</dd></div>
       </dl>
       <div class="row"><span class="best">ベスト<b id="bestO">0</b></span><button class="go" id="again">もう一度走る</button></div>
+    </div>
+  </div>
+
+  <div class="garage-ui" id="garageUI" hidden>
+    <div class="card gcard">
+      <div class="route"><span class="shield">G</span>ガレージ</div>
+      <h2>HCR32 GTS-t タイプM</h2>
+      <div class="layers" role="group" aria-label="表示するパーツ">
+        <button class="chip" data-layer="drive" aria-pressed="true">駆動系</button>
+        <button class="chip" data-layer="frame" aria-pressed="true">フレーム</button>
+        <button class="chip" data-layer="mono" aria-pressed="true">モノコック</button>
+        <button class="chip" data-layer="ext" aria-pressed="true">外装</button>
+        <button class="chip" id="lightChip" aria-pressed="true">ライト</button>
+      </div>
+      <dl class="spec">
+        <div><dt>全長×全幅×全高</dt><dd>4530×1695×1325 mm</dd></div>
+        <div><dt>ホイールベース</dt><dd>2615 mm</dd></div>
+        <div><dt>エンジン</dt><dd>RB20DET 直6 2.0L ターボ</dd></div>
+        <div><dt>タイヤ</dt><dd>205/55R16</dd></div>
+      </dl>
+      <p class="ghint">ドラッグで回転・上下　ホイール／ピンチで拡大</p>
+      <div class="row"><button class="go" id="garageBack">タイトルへ</button></div>
     </div>
   </div>
 
@@ -250,6 +288,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const $ = id => document.getElementById(id);
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -276,6 +315,8 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPrefere
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;            // only the garage lights cast shadows
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const NIGHT = new THREE.Color(0x0a1022);
 scene.background = NIGHT;
@@ -284,7 +325,9 @@ const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 1200);
 const pmrem = new THREE.PMREMGenerator(renderer);
 // bloom budget: threshold above the room interiors (peak ~0.78), below lamp heads and tail lamps
 const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
+let garage = null;                               // garage mode (built on first visit)
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
 const bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), .34, .3, .92);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
@@ -300,6 +343,7 @@ function resize() {
   composer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
   composer.setSize(w, h);
   camera.aspect = w / h;
+  if (garage) { garage.cam.aspect = w / h; garage.cam.updateProjectionMatrix(); }
   camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize);
@@ -838,6 +882,11 @@ const PART_LABEL = { front_bumper: 'フロントバンパー', hood: 'ボンネ�
 const CAR_LEN = 4.53, CAR_WID = 1.70, WB_MID = 1.3075;
 let carTemplate = null;
 
+const CAR_LAMPS = { tail: null, stop: null };   // brake lights: tail lamps brighten, the wing's stop lamp comes on
+function setBrakeLights(on) {
+  if (CAR_LAMPS.tail) CAR_LAMPS.tail.emissiveIntensity = on ? 2.0 : 1.0;   // tails always lit while driving
+  if (CAR_LAMPS.stop) CAR_LAMPS.stop.emissiveIntensity = on ? 2.2 : 0;
+}
 function remapMaterials(root) {
   const cache = {};
   const make = name => {
@@ -847,10 +896,27 @@ function remapMaterials(root) {
     switch (n) {
       case 'paint': m = new THREE.MeshPhysicalMaterial({ color: 0xeeede7, roughness: .3, metalness: .05, clearcoat: 1, clearcoatRoughness: .08, envMapIntensity: .6 }); break;
       case 'glass': m = new THREE.MeshPhysicalMaterial({ color: 0x0b1318, roughness: .05, metalness: 0, transparent: true, opacity: .62, envMapIntensity: 1.2 }); break;
-      case 'lamp_red': m = new THREE.MeshStandardMaterial({ color: 0x3a0000, emissive: 0xff1a1a, emissiveIntensity: 1.0 }); break;
+      case 'lamp_red': m = new THREE.MeshStandardMaterial({ color: 0x3a0000, emissive: 0xff1a1a, emissiveIntensity: 1.0 }); CAR_LAMPS.tail = m; break;
+      case 'stop_lamp': m = new THREE.MeshStandardMaterial({ color: 0x2a0406, roughness: .3, emissive: 0xff1a1a, emissiveIntensity: 0 }); CAR_LAMPS.stop = m; break;   // lit only while braking
+      case 'lens_line': m = new THREE.MeshStandardMaterial({ color: 0xc9ced4, roughness: .4, emissive: 0x9aa3ad, emissiveIntensity: .25 }); break;   // lens moulding lines
       case 'reflector_red': m = new THREE.MeshStandardMaterial({ color: 0x5a0606, roughness: .35, metalness: .1 }); break;   // unlit lamp centre
-      case 'lamp_clear': m = new THREE.MeshStandardMaterial({ color: 0xbfc6cc, emissive: 0xfff1d0, emissiveIntensity: .75 }); break;
-      case 'lamp_amber': m = new THREE.MeshStandardMaterial({ color: 0x663300, emissive: 0xffa31a, emissiveIntensity: .9 }); break;
+      // clear lens: see-through, so the reflector, flutes and projector read; it only glows faintly when lit
+      case 'lamp_clear': m = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: .05, metalness: 0, transparent: true, opacity: .22, depthWrite: false, emissive: 0xfff1d0, emissiveIntensity: .12, envMapIntensity: 1.2 }); break;
+      case 'proj_glass': m = new THREE.MeshStandardMaterial({ color: 0x1a1d22, roughness: .1, metalness: .3, emissive: 0xfff4dc, emissiveIntensity: 1.4, name: 'lamp_proj' }); break;
+      case 'radiator': {   // intercooler / radiator core, ~12 rows: wide dark corrugated fins, thin bright tubes
+        m = new THREE.MeshStandardMaterial({ color: 0xa3a7ad, roughness: .45, metalness: .35 });
+        m.onBeforeCompile = sh => {
+          sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vFin;')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFin = position;');
+          sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vFin;')
+            .replace('#include <color_fragment>', '#include <color_fragment>\n  float tube = smoothstep(.40, .44, abs(fract(vFin.y * 48.0) - .5));\n  diffuseColor.rgb *= mix(.28, 1.05, tube);');
+        };
+        break;
+      }
+      case 'reflector': m = new THREE.MeshStandardMaterial({ color: 0x8e949c, roughness: .45, metalness: .7, envMapIntensity: .25 }); break;   // lamp reflector: satin, not a mirror
+      case 'flute': m = new THREE.MeshStandardMaterial({ color: 0xc9ced4, roughness: .35, metalness: .4 }); break;
+      case 'lamp_amber': m = new THREE.MeshPhysicalMaterial({ color: 0xd8741a, roughness: .12, metalness: 0, transmission: 0, clearcoat: 1, clearcoatRoughness: .05, envMapIntensity: .9 }); break;   // unlit amber lens (turn signal off)
+      case 'amber_step': m = new THREE.MeshStandardMaterial({ color: 0xb85e12, roughness: .3 }); break;
       case 'chrome': m = new THREE.MeshStandardMaterial({ color: 0xdfe3e8, roughness: .12, metalness: 1 }); break;
       case 'trim': m = new THREE.MeshStandardMaterial({ color: 0x0b0b0d, roughness: .55 }); break;
       case 'tire': m = new THREE.MeshStandardMaterial({ color: 0x121214, roughness: .95 }); break;
@@ -1118,6 +1184,7 @@ function clearWorldObjects() {
   traffic.length = 0;
   for (const d of debris) scene.remove(d.o);
   debris.length = 0;
+  swings.length = 0;
 }
 
 function resetRun() {
@@ -1175,17 +1242,45 @@ function pop(text, cls, worldPos) {
   setTimeout(() => el.remove(), 1000);
 }
 
+// hinged panels first swing open on their hinge (node origin = hinge line),
+// then the hinge lets go and they fly off with the swing's momentum
+const HINGE_SWING = {   // local axis, open angle (rad), time to open (s)
+  hood: { axis: new THREE.Vector3(1, 0, 0), ang: -1.3, dur: .16 },     // real seconds: a violent snap, not a normal opening
+  trunk: { axis: new THREE.Vector3(1, 0, 0), ang: 1.2, dur: .16 },
+  door_L: { axis: new THREE.Vector3(0, 1, 0), ang: -1.45, dur: .14 },
+  door_R: { axis: new THREE.Vector3(0, 1, 0), ang: 1.45, dur: .14 },
+};
+const swings = [];
 function detach(name, pushDir) {
   const o = parts[name];
   if (!o || o.userData.lost) return false;
   o.userData.lost = true;
+  const hs = HINGE_SWING[name];
+  if (hs) { swings.push({ o, name, hs, pushDir: pushDir.clone(), t: 0, q0: o.quaternion.clone() }); return true; }
+  release(o, pushDir);
+  return true;
+}
+function stepSwings(dt) {
+  for (let i = swings.length - 1; i >= 0; i--) {
+    const w = swings[i];
+    w.t += dt / Math.max(S.timeScale || 1, .05);   // real time: the snap ignores the slow motion
+    const k = Math.min(1, w.t / w.hs.dur), e = k * k;   // accelerating: the panel is thrown open
+    w.o.quaternion.copy(w.q0).multiply(new THREE.Quaternion().setFromAxisAngle(w.hs.axis, w.hs.ang * e));
+    if (k >= 1) {
+      swings.splice(i, 1);
+      const spin = w.hs.axis.clone().applyQuaternion(w.o.getWorldQuaternion(new THREE.Quaternion())).multiplyScalar(w.hs.ang / w.hs.dur * .35);
+      release(w.o, w.pushDir, spin);
+    }
+  }
+}
+function release(o, pushDir, spin) {
   scene.attach(o);                                 // keep its world transform
   const f = frame(S.s);
   const fwd = tmpV.set(f.tx, 0, f.tz).multiplyScalar(S.v * .75);
   const vel = new THREE.Vector3().copy(fwd).addScaledVector(pushDir, rand(4, 7));
   vel.y = rand(4.5, 8);
-  debris.push({ o, vel, ang: new THREE.Vector3(rand(-6, 6), rand(-5, 5), rand(-6, 6)), rest: false });
-  return true;
+  const ang = spin ? spin.add(new THREE.Vector3(rand(-2, 2), rand(-2, 2), rand(-2, 2))) : new THREE.Vector3(rand(-6, 6), rand(-5, 5), rand(-6, 6));
+  debris.push({ o, vel, ang, rest: false });
 }
 
 function hitHazard(t, side) {
@@ -1246,6 +1341,7 @@ function hitPoint(t) {
 
 /* ================= input ================= */
 addEventListener('keydown', e => {
+  if (S.mode === 'garage' && e.code === 'Escape') { leaveGarage(); return; }
   keys[e.code] = true;
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) e.preventDefault();
   if ((e.code === 'KeyP' || e.code === 'Escape') && (S.mode === 'play' || S.mode === 'pause')) togglePause();
@@ -1253,8 +1349,24 @@ addEventListener('keydown', e => {
   if (e.code === 'Enter' && S.mode === 'over') startGame();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
-const touch = { L: false, R: false, B: false, N: false };
-for (const [id, k] of [['tL', 'L'], ['tR', 'R'], ['tB', 'B'], ['tN', 'N']]) {
+const touch = { L: false, R: false, B: false, N: false, steer: 0 };
+// drag steering: put a finger (or the mouse) down anywhere on the road and
+// slide left / right; the steer is proportional to how far it has moved
+const drag = { id: null, x0: 0 };
+canvas.addEventListener('pointerdown', e => {
+  if (S.mode !== 'play' || drag.id !== null) return;
+  drag.id = e.pointerId; drag.x0 = e.clientX; touch.steer = 0;
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointermove', e => {
+  if (e.pointerId !== drag.id) return;
+  const span = Math.max(50, Math.min(innerWidth, innerHeight) * .16);   // full lock at ~16 % of the screen
+  touch.steer = clamp((drag.x0 - e.clientX) / span, -1, 1);           // +1 = screen-left
+});
+for (const ev of ['pointerup', 'pointercancel']) canvas.addEventListener(ev, e => {
+  if (e.pointerId === drag.id) { drag.id = null; touch.steer = 0; }
+});
+for (const [id, k] of [['tB', 'B'], ['tN', 'N']]) {
   const el = $(id);
   const on = v => e => { e.preventDefault(); touch[k] = v; el.classList.toggle('on', v); };
   el.addEventListener('pointerdown', on(true));
@@ -1281,7 +1393,7 @@ const easeOutBounce = x => {
   return n * (x -= 2.625 / d) * x + .984375;
 };
 const easeOutBack = x => 1 + 2.70158 * Math.pow(x - 1, 3) + 1.70158 * Math.pow(x - 1, 2);
-const ASM_END = 6.4, ASM_HOLD = 1.2, RUN_TIME = 12;
+const ASM_END = 7.2, ASM_HOLD = 1.2, RUN_TIME = 12;
 // model space: +Y up, +Z nose, +X the car's left
 const FLY_FROM = { front_bumper: [0, .5, 7], hood: [0, 1.5, 7], door_L: [7, .6, 0], door_R: [-7, .6, 0], trunk: [0, 1.5, -7], rear_bumper: [0, .5, -7] };
 
@@ -1298,12 +1410,14 @@ function startAssembly() {
   };
   // 1) wheels, then the chassis (structure + engine + drivetrain) drop and bounce
   ['wheel_RL', 'wheel_RR', 'wheel_FL', 'wheel_FR'].forEach((n, i) => add(n, .1 + i * .18, .9, [0, 5, 0], easeOutBounce, .4));
-  add('chassis', 1.0, 1.1, [0, 6, 0], easeOutBounce);
-  // 2) the body shell drops on
-  add('body', 2.3, 1.1, [0, 6.5, 0], easeOutBounce);
+  add('drivetrain', 1.0, 1.1, [0, 6, 0], easeOutBounce);   // engine, driveline, suspension
+  // 2) then the body: structure, then the outer shell
+  add('frame', 2.1, 1.1, [0, 6.5, 0], easeOutBounce);
+  add('monocoque', 2.25, 1.1, [0, 6.5, 0], easeOutBounce);
+  add('body', 3.1, 1.1, [0, 6.5, 0], easeOutBounce);
   // 3) panels fly in from front / back / sides and snap into place
   const order = Object.keys(FLY_FROM).sort(() => Math.random() - .5);
-  order.forEach((n, i) => add(n, 3.6 + i * .32, .8, FLY_FROM[n], easeOutBack, .9));
+  order.forEach((n, i) => add(n, 4.4 + i * .32, .8, FLY_FROM[n], easeOutBack, .9));
   S.attract = { phase: 'assemble', t: 0, sched };
   stepAssembly(0);
 }
@@ -1349,6 +1463,7 @@ function ready() {
   S.mode = 'title';
   startAssembly();
   $('start').disabled = false; $('start').textContent = '走り出す';
+  $('garageBtn').disabled = false;
 }
 function toTitle() {
   S.mode = 'title';
@@ -1382,7 +1497,7 @@ function gameOver() {
 /* ================= simulation ================= */
 function stepPlayer(dt, auto) {
   const steer = auto ? clamp((LANES[1] - S.d) * .4, -1, 1)
-    : ((keys.ArrowRight || keys.KeyD || touch.R) ? -1 : 0) + ((keys.ArrowLeft || keys.KeyA || touch.L) ? 1 : 0);
+    : clamp(((keys.ArrowRight || keys.KeyD) ? -1 : 0) + ((keys.ArrowLeft || keys.KeyA) ? 1 : 0) + touch.steer, -1, 1);
   // +d is the car's left (+X); screen-left key moves toward +d
   const brake = !auto && (keys.ArrowDown || keys.KeyS || keys.Space || touch.B);
   const boosting = !auto && (keys.ArrowUp || keys.KeyW || keys.ShiftLeft || touch.N) && S.boost > 0;
@@ -1415,6 +1530,7 @@ function placePlayer(dt, brake) {
   carRoot.rotation.y = f.th + S.yaw;
   carRoot.rotation.z += ((-S.vd * .012) - carRoot.rotation.z) * Math.min(1, 6 * dt);
   carRoot.rotation.x += ((brake ? .025 : -.004) - carRoot.rotation.x) * Math.min(1, 5 * dt);
+  setBrakeLights(!!brake);
   const spin = S.v * dt / .316;
   for (const [n, w] of Object.entries(wheels)) {
     w.rotation.x += spin;
@@ -1476,6 +1592,7 @@ function stepTraffic(dt, collide, freeze = false) {
 }
 
 function stepDebris(dt) {
+  stepSwings(dt);
   for (let i = debris.length - 1; i >= 0; i--) {
     const d = debris[i];
     if (!d.rest) {
@@ -1565,6 +1682,7 @@ function loop(now) {
   last = now;
   if (S.mode === 'loading') { composer.render(); return; }
   if (S.mode === 'pause') { updateEngine(0, false); composer.render(); return; }
+  if (S.mode === 'garage') { stepGarage(rdt); composer.render(); return; }
   if (S.mode === 'over') {                       // car stays in view, camera circles it
     stepDebris(rdt); updateSparks(rdt); stepTraffic(rdt, false, true);
     orbitCamera(rdt); occluders(); updateEngine(0, false); composer.render(); return;
@@ -1614,7 +1732,234 @@ function loop(now) {
   composer.render();
 }
 requestAnimationFrame(loop);
-if (location.hostname === 'localhost') window.__r32 = { S, traffic, parts: () => parts, nodes: () => carNodes, hitHazard, hitPoint, camera, carRoot };
+if (location.hostname === 'localhost') window.__r32 = { S, traffic, parts: () => parts, nodes: () => carNodes, hitHazard, hitPoint, camera, carRoot, garage: () => garage };
+
+/* ================= garage: look at the car, toggle its layers ================= */
+const GARAGE_LAYERS = {
+  drive: n => /^wheel_[FR][LR]$/.test(n) || n === 'drivetrain',
+  frame: n => n === 'frame',
+  mono: n => n === 'monocoque',
+  ext: n => n === 'body' || PART_NAMES.includes(n),
+};
+const layerOn = { drive: true, frame: true, mono: true, ext: true };
+
+function toolChest() {
+  // wide single roll cab (pict/snapon.jpg): 3 full-width drawers over a split
+  // lower bank, full-height chrome corner posts, long chrome pulls, big casters
+  const g = new THREE.Group();
+  const red = new THREE.MeshPhysicalMaterial({ color: 0xa8101a, roughness: .22, clearcoat: 1, clearcoatRoughness: .05 });
+  const gap = new THREE.MeshStandardMaterial({ color: 0x220609, roughness: .8 });
+  const chrome = new THREE.MeshStandardMaterial({ color: 0xe8ebee, roughness: .1, metalness: 1 });
+  const black = new THREE.MeshStandardMaterial({ color: 0x0e0e10, roughness: .55 });
+  const cube = (w, h, d, x, y, z, m) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; g.add(o); return o; };
+  const bar = (len, r, x, y, z, vertical, m = chrome) => {
+    const geo = new THREE.CylinderGeometry(r, r, len, 14);
+    if (!vertical) geo.rotateZ(Math.PI / 2);
+    const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; g.add(o); return o;
+  };
+  const W = 1.56, D = .64, H = 1.02, Y0 = .21, FZ = D / 2;
+  cube(W, H, D, 0, Y0 + H / 2, 0, red);
+  // chrome posts at the front corners (they double as push handles) and between the lower banks
+  for (const x of [-W / 2 + .012, W / 2 - .012]) bar(H + .06, .016, x, Y0 + H / 2 + .02, FZ + .02, true);
+  const split = -W / 2 + .42;
+  // drawer layout: [x0, x1, y_top, height]
+  const drawers = [];
+  let y = Y0 + H - .035;
+  for (const h of [.1, .1, .1]) { drawers.push([-W / 2 + .03, W / 2 - .03, y, h]); y -= h; }
+  const yLow = y;
+  let yl = yLow; for (const h of [.19, .23]) { drawers.push([-W / 2 + .03, split - .015, yl, h]); yl -= h; }
+  let yr = yLow; for (const h of [.1, .1, .1, .12]) { drawers.push([split + .015, W / 2 - .03, yr, h]); yr -= h; }
+  bar(yLow - Y0 + .02, .013, split, Y0 + (yLow - Y0) / 2 + .01, FZ + .02, true);
+  for (const [x0, x1, yt, h] of drawers) {
+    cube(x1 - x0, .007, .012, (x0 + x1) / 2, yt - h, FZ + .004, gap);                       // shut line
+    bar(x1 - x0 - .06, .0085, (x0 + x1) / 2, yt - .025, FZ + .03, false);                   // pull
+    for (const x of [x0 + .025, x1 - .025]) cube(.02, .02, .025, x, yt - .025, FZ + .016, chrome);   // pull mounts
+  }
+  cube(.03, .03, .01, 0, Y0 + H - .02, FZ + .006, chrome);                                   // lock
+  // casters: black wheels in swivel brackets
+  for (const x of [-W / 2 + .12, W / 2 - .12]) for (const z of [-D / 2 + .1, D / 2 - .1]) {
+    cube(.1, .03, .1, x, Y0 - .015, z, black);
+    cube(.03, .1, .06, x - .03, Y0 - .08, z, black);
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(.08, .08, .055, 20).rotateZ(Math.PI / 2), black);
+    wheel.position.set(x, .08, z + .03); wheel.castShadow = true; g.add(wheel);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(.03, .03, .06, 12).rotateZ(Math.PI / 2), gap);
+    hub.position.copy(wheel.position); g.add(hub);
+  }
+  return g;
+}
+
+function tireStack() {
+  // the car's own wheels: three lying in a stack, a fourth stood on top and
+  // leaned back against the wall
+  const g = new THREE.Group();
+  let src = null;
+  carTemplate?.traverse(o => { if (!src && (o.userData.name || o.name) === 'wheel_FL') src = o; });
+  const mk = () => {
+    let w;
+    if (src) { w = src.clone(true); w.position.set(0, 0, 0); w.quaternion.identity(); }
+    else w = new THREE.Mesh(new THREE.CylinderGeometry(.316, .316, .205, 24).rotateZ(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x141416, roughness: .9 }));
+    w.traverse(o => {
+      if (!o.isMesh) return;
+      o.castShadow = o.receiveShadow = true;
+      // spare wheels: tyre + rim only, no brake disc / hub
+      if ([].concat(o.material).some(m => /^(brake|susp|caliper)/.test(m.name || ''))) o.visible = false;
+    });
+    const holder = new THREE.Group(); holder.add(w); return holder;
+  };
+  const H = .21;                       // tyre width (205) + a little squash room
+  for (let i = 0; i < 3; i++) {
+    const t = mk();
+    t.rotation.set(0, rand(0, 6.28), Math.PI / 2);        // axle vertical: lying flat
+    t.position.set(rand(-.015, .015), H / 2 + i * H, rand(-.015, .015));
+    g.add(t);
+  }
+  const up = mk();                      // standing on the stack, top leaned onto the side wall (-X)
+  up.rotation.set(0, 0, .2);
+  up.position.set(-.07, 3 * H + .316 * Math.cos(.2), 0);
+  g.add(up);
+  return g;
+}
+
+function buildGarage() {
+  const g = { scene: new THREE.Scene(), cam: new THREE.PerspectiveCamera(36, camera.aspect, .05, 100),
+    az: .75, el: .2, dist: 8.6, idle: 99, drag: null, pts: new Map() };
+  const sc = g.scene;
+  sc.background = new THREE.Color(0x191b1f);
+  g.env = pmrem.fromScene(new RoomEnvironment(), .04).texture;
+  const floorTex = canvasTex(512, 512, (c, w, h) => {
+    c.fillStyle = '#595c60'; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 9000; i++) { const v = 95 + Math.random() * 40 | 0; c.fillStyle = `rgba(${v},${v},${v + 3},.25)`; c.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
+    c.strokeStyle = 'rgba(30,30,32,.55)'; c.lineWidth = 3; c.strokeRect(0, 0, w, h);
+  });
+  floorTex.repeat.set(10, 10);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30).rotateX(-Math.PI / 2),
+    new THREE.MeshStandardMaterial({ map: floorTex, roughness: .38, metalness: 0, envMap: g.env, envMapIntensity: .35 }));
+  floor.receiveShadow = true; sc.add(floor);
+  const wallM = new THREE.MeshStandardMaterial({ color: 0xcfd0cc, roughness: .9 });
+  const baseM = new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: .8 });
+  const lineM = new THREE.MeshStandardMaterial({ color: 0xe0b42c, roughness: .6 });
+  for (const [w, x, z, ry] of [[30, 0, -7, 0], [30, -8, 0, Math.PI / 2]]) {
+    const wall = new THREE.Mesh(new THREE.PlaneGeometry(w, 6), wallM); wall.position.set(x, 3, z); wall.rotation.y = ry; wall.receiveShadow = true; sc.add(wall);
+    const base = new THREE.Mesh(new THREE.PlaneGeometry(w, 1.1), baseM); base.position.set(x + (ry ? .01 : 0), .55, z + (ry ? 0 : .01)); base.rotation.y = ry; sc.add(base);
+  }
+  // yellow parking-bay lines on the floor
+  for (const x of [-1.6, 1.6]) { const l = new THREE.Mesh(new THREE.PlaneGeometry(.1, 6.5).rotateX(-Math.PI / 2), lineM); l.position.set(x, .002, -.2); sc.add(l); }
+  // ceiling tubes (visible fixtures) + the actual lights
+  const tubeM = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xf4f6ff).multiplyScalar(.95) });
+  for (const x of [-2.2, 0, 2.2]) { const t = new THREE.Mesh(new THREE.BoxGeometry(.12, .05, 3.2), tubeM); t.position.set(x, 4.6, 0); sc.add(t); }
+  sc.add(new THREE.HemisphereLight(0xe8ecf5, 0x3a3834, .42));
+  const key = new THREE.DirectionalLight(0xffffff, .95);
+  key.position.set(2.5, 7, 3.5); key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  Object.assign(key.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6, near: 1, far: 20 });
+  key.shadow.bias = -.0004; key.shadow.normalBias = .02;
+  sc.add(key);
+  const fill = new THREE.PointLight(0xfff1e0, 7, 16, 1.6); fill.position.set(-4, 3.2, 3); sc.add(fill);
+  const chest = toolChest(); chest.position.set(-4.2, 0, -6.35); chest.rotation.y = .1; sc.add(chest);
+  const tires = tireStack(); tires.position.set(-7.42, 0, -3.2); sc.add(tires);
+  // the car
+  const car = carTemplate.clone(true);
+  car.position.z = WB_MID;
+  car.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  sc.add(car);
+  g.car = car;
+  // headlamp beams (children of the car so they follow it); lamp_y at z 630 is model z = +0.82
+  g.beams = [];
+  for (const x of [-.56, .56]) {
+    const sp = new THREE.SpotLight(0xfff2dc, 0, 20, .38, .55, 1.4);
+    sp.position.set(x, .63, .82); sp.target.position.set(x * 1.6, .1, 9);
+    car.add(sp, sp.target); g.beams.push(sp);
+  }
+  const cv = canvas;
+  cv.addEventListener('pointerdown', e => { if (S.mode !== 'garage') return; g.pts.set(e.pointerId, [e.clientX, e.clientY]); cv.setPointerCapture(e.pointerId); g.idle = 0; });
+  cv.addEventListener('pointermove', e => {
+    if (S.mode !== 'garage' || !g.pts.has(e.pointerId)) return;
+    const [px, py] = g.pts.get(e.pointerId);
+    if (g.pts.size === 1) { g.az -= (e.clientX - px) * .006; g.el = clamp(g.el + (e.clientY - py) * .004, -.05, 1.35); }
+    else if (g.pts.size === 2) {
+      const others = [...g.pts.entries()].find(([id]) => id !== e.pointerId)[1];
+      const d0 = Math.hypot(px - others[0], py - others[1]), d1 = Math.hypot(e.clientX - others[0], e.clientY - others[1]);
+      g.dist = clamp(g.dist * d0 / Math.max(1, d1), 3.2, 11);
+    }
+    g.pts.set(e.pointerId, [e.clientX, e.clientY]); g.idle = 0;
+  });
+  const up = e => g.pts.delete(e.pointerId);
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => { if (S.mode !== 'garage') return; e.preventDefault(); g.dist = clamp(g.dist * (1 + Math.sign(e.deltaY) * .08), 3.2, 11); g.idle = 0; }, { passive: false });
+  return g;
+}
+
+function applyLayers() {
+  if (!garage) return;
+  for (const o of garage.car.children) {
+    const nm = o.userData.name || o.name;
+    const layer = Object.keys(GARAGE_LAYERS).find(k => GARAGE_LAYERS[k](nm));
+    if (layer) o.visible = layerOn[layer];
+  }
+}
+document.querySelectorAll('.chip[data-layer]').forEach(b => b.addEventListener('click', () => {
+  const k = b.dataset.layer;
+  layerOn[k] = !layerOn[k];
+  b.setAttribute('aria-pressed', String(layerOn[k]));
+  applyLayers();
+}));
+
+let carLightsOn = true;
+let lampMats = null;                                  // found once, while every lamp still glows
+function lampMaterials() {
+  if (lampMats) return lampMats;
+  const out = new Set();
+  carTemplate?.traverse(o => { if (o.isMesh) for (const m of [].concat(o.material)) if (/^(lamp_|lens_line)/.test(m.name || '') || m.emissiveIntensity > 0 && m.emissive && m.emissive.getHex() !== 0) out.add(m); });
+  return (lampMats = [...out]);
+}
+function setCarLights(on) {
+  for (const m of lampMaterials()) {
+    if (m.userData.baseE === undefined) m.userData.baseE = m.emissiveIntensity;
+    m.emissiveIntensity = on ? m.userData.baseE : 0;
+  }
+  if (garage) for (const b of garage.beams) b.intensity = on ? 38 : 0;
+}
+$('lightChip').addEventListener('click', () => {
+  carLightsOn = !carLightsOn;
+  $('lightChip').setAttribute('aria-pressed', String(carLightsOn));
+  setCarLights(carLightsOn);
+});
+
+function setCarEnv(env) {   // the shared car materials reflect the garage while we are in it
+  carTemplate?.traverse(o => { if (o.isMesh) for (const m of [].concat(o.material)) if ('envMap' in m) { m.envMap = env; m.needsUpdate = true; } });
+}
+function enterGarage() {
+  if (!carTemplate) return;
+  if (!garage) garage = buildGarage();
+  garage.cam.aspect = camera.aspect; garage.cam.updateProjectionMatrix();
+  S.mode = 'garage'; S.attract = null;
+  setCarEnv(garage.env);
+  renderPass.scene = garage.scene; renderPass.camera = garage.cam;
+  $('title').hidden = true; $('garageUI').hidden = false; $('fade').classList.remove('on');
+  applyLayers();
+  setCarLights(carLightsOn);
+}
+function leaveGarage() {
+  setCarEnv(SKY_ENV);
+  setCarLights(true);                                  // the road always runs with lights on
+  renderPass.scene = scene; renderPass.camera = camera;
+  $('garageUI').hidden = true;
+  toTitle();
+}
+function stepGarage(dt) {
+  const g = garage;
+  g.idle += dt;
+  if (g.idle > 4) g.az += dt * .18;                   // slow turntable when left alone
+  const tgt = new THREE.Vector3(0, .62, 0);
+  const r = g.dist * Math.cos(g.el);
+  g.cam.position.set(tgt.x + Math.sin(g.az) * r, Math.max(.25, tgt.y + Math.sin(g.el) * g.dist), tgt.z + Math.cos(g.az) * r);
+  g.cam.lookAt(tgt);
+  // on wide screens frame the car right of centre, clear of the info card
+  const W = innerWidth, H = innerHeight;
+  if (W / H > 1.2) g.cam.setViewOffset(W, H, -W * .14, 0, W, H); else g.cam.clearViewOffset();
+}
+$('garageBtn').onclick = enterGarage;
+$('garageBack').onclick = leaveGarage;
 
 init();
 
