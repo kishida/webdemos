@@ -240,7 +240,7 @@
         <div><dt>体当たり</dt><dd id="rHits">0</dd></div>
         <div><dt>最大コンボ</dt><dd id="rCombo">×1</dd></div>
       </dl>
-      <div class="row"><span class="best">ベスト<b id="bestO">0</b></span><button class="go" id="again">もう一度走る</button></div>
+      <div class="row"><span class="best">ベスト<b id="bestO">0</b></span><span class="row" style="gap:10px"><button class="ghost" id="overTitle">タイトルへ</button><button class="go" id="again">もう一度走る</button></span></div>
     </div>
   </div>
 
@@ -913,6 +913,26 @@ function remapMaterials(root) {
         };
         break;
       }
+      case 'filter': {   // open air filter: green foam under a dark honeycomb mesh (procedural, top-down projection)
+        m = new THREE.MeshStandardMaterial({ color: 0x3a9a55, roughness: .8, metalness: 0 });
+        m.onBeforeCompile = sh => {
+          sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vHex;')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHex = position;');
+          sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+varying vec3 vHex;
+float hexEdge(vec2 p) {            // distance to the nearest hexagon edge, cell radius 1
+  const vec2 k = vec2(1.0, 1.7320508);
+  vec2 a = mod(p, k) - k * .5, b = mod(p - k * .5, k) - k * .5;
+  vec2 g = dot(a, a) < dot(b, b) ? a : b;
+  g = abs(g);
+  return .5 - max(dot(g, normalize(k)), g.x);
+}`).replace('#include <color_fragment>', `#include <color_fragment>
+  float e = hexEdge(vHex.xz / .014);              // ~28 mm cells over the dome
+  float wire = 1.0 - smoothstep(.04, .09, e);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.05, .06, .05), wire);`);
+        };
+        break;
+      }
       case 'reflector': m = new THREE.MeshStandardMaterial({ color: 0x8e949c, roughness: .45, metalness: .7, envMapIntensity: .25 }); break;   // lamp reflector: satin, not a mirror
       case 'flute': m = new THREE.MeshStandardMaterial({ color: 0xc9ced4, roughness: .35, metalness: .4 }); break;
       case 'lamp_amber': m = new THREE.MeshPhysicalMaterial({ color: 0xd8741a, roughness: .12, metalness: 0, transmission: 0, clearcoat: 1, clearcoatRoughness: .05, envMapIntensity: .9 }); break;   // unlit amber lens (turn signal off)
@@ -1383,6 +1403,7 @@ $('quit').onclick = () => { $('pause').hidden = true; toTitle(); };
 $('mute').onclick = () => { muted = !muted; $('mute').textContent = muted ? '音：オフ' : '音：オン'; };
 $('start').onclick = startGame;
 $('again').onclick = startGame;
+$('overTitle').onclick = () => { $('over').hidden = true; toTitle(); };
 
 /* ---- title screen: assembly animation and an expressway run, alternating ---- */
 const easeOutBounce = x => {
