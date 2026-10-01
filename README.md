@@ -2,6 +2,12 @@
 Web Demos  
 https://kishida.github.io/webdemos/
 
+## あらくれ32環状クラッシュレース
+[あらくれ32環状クラッシュレース](hcr32/index.html)  
+![あらくれ32環状クラッシュレース](assets/hcr32.png)
+
+2026/09/28
+
 ## Amp Sim
 [Guitar Amp Simulator](ampsim/guitar-amp-sim.html)  
 ![Amp Sim](assets/ampsim.png)  
