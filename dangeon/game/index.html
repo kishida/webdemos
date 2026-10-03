@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="魔王の迷宮と囚われの姫">
+<meta property="og:description" content="魔王の迷宮と囚われの姫">
+<meta property="og:image" content="https://kishida.github.io/webdemos/dangeon/title.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/dangeon/game/index.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<title>魔王の迷宮と囚われの姫</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { width: min(100vw, calc(100vh * 16 / 9)); aspect-ratio: 16 / 9; display: block; image-rendering: auto; }
+</style>
+</head>
+<body>
+<canvas id="screen" width="960" height="540"></canvas>
+<script src="assets.js"></script>
+<script src="audio.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
