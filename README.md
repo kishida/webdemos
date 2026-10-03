@@ -2,6 +2,16 @@
 Web Demos  
 https://kishida.github.io/webdemos/
 
+## ギャルゲー
+
+[桜色メモリアル](galge/index.html)  
+![桜色メモリアル](assets/galge.png)
+
+[桜色メモリアル 実写版](galge/live.html)  
+![桜色メモリアル 実写版](assets/galge-live.png)
+
+2026/10/03
+
 ## あらくれ32環状クラッシュレース
 [あらくれ32環状クラッシュレース](hcr32/index.html)  
 ![あらくれ32環状クラッシュレース](assets/hcr32.png)
