@@ -263,6 +263,12 @@ const Sound = (() => {
       noise(t, 0.2, 0.35, o, { type: 'lowpass', f0: 2000, f1: 200, q: 1 });
       DRUM.k(t, 0.6, o);
     }),
+    chest: play((t, o) => {
+      noise(t, 0.35, 0.18, o, { f0: 900, f1: 300, q: 6, a: 0.05 });
+      fm({ m: [[1.41, 3, 0, 0.05]], a: 0.001, d: 0.12, s: 0, r: 0.1 }, 140, t + 0.3, 0.08, 0.3, o);
+      ['c6', 'e6', 'g6', 'c7'].forEach((n, i) => fm(P.bell, freqOf(n), t + 0.38 + i * 0.07, 0.2, 0.12, o));
+      fm(P.brass, freqOf('c5'), t + 0.66, 0.35, 0.12, o); fm(P.brass, freqOf('g5'), t + 0.66, 0.35, 0.1, o);
+    }),
     heal: play((t, o) => ['c6', 'e6', 'g6', 'c7', 'e7'].forEach((n, i) => fm(P.bell, freqOf(n), t + i * 0.06, 0.15, 0.1, o))),
     miss: play((t, o) => noise(t, 0.3, 0.25, o, { f0: 600, f1: 4000, q: 3, a: 0.12 })),
     charge: play((t, o) => {

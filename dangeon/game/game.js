@@ -97,7 +97,7 @@ async function loadAssets() {
   const sprites = {
     monster_slime: ['スライム', '#3a8a3a'], monster_bat: ['コウモリ', '#553355'], monster_goblin: ['ゴブリン', '#557722'],
     monster_skeleton: ['骸骨', '#999988'], monster_boss: ['魔王', '#882222'], monster_princess: ['姫', '#ddaacc'],
-    item_potion: ['薬', '#bb2233'], item_sword: ['剣', '#8899aa'], item_shield: ['盾', '#335599'], item_key: ['鍵', '#ccaa33'],
+    item_chest_closed: ['宝箱', '#7a5a2a'], item_potion: ['薬', '#bb2233'], item_sword: ['剣', '#8899aa'], item_shield: ['盾', '#335599'], item_key: ['鍵', '#ccaa33'],
   };
   for (const [k, [label, color]] of Object.entries(sprites)) {
     if (!IMG[k]) IMG[k] = fallbackSprite(label, color);
@@ -132,8 +132,9 @@ function newGame() {
     const def = kind === 'enemy' ? ENEMIES[type] : kind === 'item' ? ITEMS[type] : { img: 'monster_princess', scale: 0.8 };
     return {
       kind, type, x, y, alive: true,
-      img: def.img,
-      scale: kind === 'item' ? 0.3 : def.scale,
+      img: kind === 'item' ? 'item_chest_closed' : def.img,
+      scale: kind === 'item' ? 0.42 : def.scale,
+      opened: false,
       lift: def.lift || 0,
     };
   });
@@ -177,7 +178,12 @@ function move(rel) { // rel: 0 前 1 右 2 後 3 左
     else startBattle(e);
     return;
   }
-  if (e && e.kind === 'princess') { rescuePrincess(); return; }
+  if (e && e.kind === 'princess') {
+    const boss = S.entities.find(o => o.type === 'boss' && o.alive);
+    if (boss) { toast('魔王「姫に近づくことは許さぬ！」', null, 2500); startBattle(boss); }
+    else rescuePrincess();
+    return;
+  }
   const c = cellAt(nx, ny);
   if (c === '#') { SFX.bump(); return; }
   if (c === 'D') {
@@ -193,17 +199,35 @@ function move(rel) { // rel: 0 前 1 右 2 後 3 左
 function arrive() {
   markSeen();
   const e = entityAt(S.p.x, S.p.y);
-  if (e && e.kind === 'item') {
-    e.alive = false;
-    const it = ITEMS[e.type];
-    if (e.type === 'potion') S.p.potions++;
-    if (e.type === 'sword') { S.p.sword = true; S.p.atk += 6; }
-    if (e.type === 'shield') { S.p.shield = true; S.p.def += 3; }
-    if (e.type === 'key') S.p.key = true;
-    SFX.pickup();
-    toast(`${it.name}を手に入れた！（${it.desc}）`, it.img, 3200);
-  }
+  if (e && e.kind === 'item' && !e.opened) openChest(e);
   if (S.p.x === 6 && S.p.y === 11 && !S.bossSeen) { S.bossSeen = true; toast('玉座の間だ。魔王が姫の前に立ちはだかっている！', null, 3500); }
+}
+
+// 宝箱を開けて中身を受け取る（宝箱は消える）。表示を閉じるまで探索は止まる
+function openChest(e) {
+  e.opened = true; e.alive = false;
+  if (e.type === 'potion') S.p.potions++;
+  if (e.type === 'sword') { S.p.sword = true; S.p.atk += 6; }
+  if (e.type === 'shield') { S.p.shield = true; S.p.def += 3; }
+  if (e.type === 'key') S.p.key = true;
+  SFX.chest();
+  S.chest = { item: ITEMS[e.type], t0: performance.now() };
+  mode = 'chest';
+}
+function drawChest(now) {
+  const c = S.chest, t = (now - c.t0) / 1000;
+  drawView(now, 0.45); drawHUD(now);
+  const w = 460, h = 250, x = (W - w) / 2, y = (H - h) / 2 - 30;
+  panel(x, y, w, h, 0.9);
+  text('宝箱を開けた！', W / 2, y + 44, 22, '#f0d79a', 'center', FONT, 'bold');
+  const pop = Math.min(1, t / 0.35), s = 110 * (0.4 + 0.6 * easeOutBack(pop));
+  const glow = ctx.createRadialGradient(W / 2, y + 115, 5, W / 2, y + 115, 80);
+  glow.addColorStop(0, `rgba(255,210,120,${0.45 * pop})`); glow.addColorStop(1, 'rgba(255,210,120,0)');
+  ctx.fillStyle = glow; ctx.fillRect(W / 2 - 80, y + 35, 160, 160);
+  icon(c.item.img, W / 2 - s / 2, y + 115 - s / 2, s);
+  text(`${c.item.name}を手に入れた！`, W / 2, y + 200, 22, '#fff4dc', 'center', FONT, 'bold');
+  text(c.item.desc, W / 2, y + 228, 15, '#cdbf9f', 'center');
+  if (t > 0.5) { ctx.globalAlpha = 0.5 + 0.5 * Math.sin(now / 250); text('▼', x + w - 26, y + h - 14, 14, '#f0c060', 'center'); ctx.globalAlpha = 1; }
 }
 
 function updateAnim(now) {
@@ -287,8 +311,9 @@ function render3D(now) {
     const P = PIX[e.img]; if (!P) continue;
     const scx = (VW / 2) * (1 + tx / ty);
     const unit = VH / ty;
-    const bob = e.kind === 'item' ? Math.sin(now / 300 + e.x) * 0.02 : e.lift ? Math.sin(now / 200 + e.y) * 0.05 : 0;
-    const sh = unit * e.scale, sw = sh * P.w / P.h;
+    const bob = e.lift ? Math.sin(now / 200 + e.y) * 0.05 : 0;
+    const breathe = e.kind === 'enemy' ? 1 + 0.03 * Math.sin(now / 260 + e.x * 3) : 1;
+    const sh = unit * e.scale * breathe, sw = sh * P.w / P.h;
     const bottom = half + unit / 2 - (e.lift + bob) * unit;
     const top = bottom - sh;
     const x0 = Math.max(0, Math.floor(scx - sw / 2)), x1 = Math.min(VW, Math.ceil(scx + sw / 2));
@@ -398,7 +423,7 @@ function startBattle(entity) {
   const def = ENEMIES[entity.type];
   S.battle = {
     entity, def, hp: def.hp, menu: 0, busy: true, log: [], guard: false, charging: false,
-    t0: performance.now(), hitFx: 0, hurtFx: 0, dieFx: 0,
+    t0: performance.now(), hitFx: 0, hurtFx: 0, dieFx: 0, lunge: 0, lungeBig: false, slash: 0, slashCrit: false, shake: 0, shakeAmp: 0,
   };
   mode = 'battle';
   SFX.encounter();
@@ -423,13 +448,16 @@ async function command(i) {
   b.guard = false;
   let acted = true;
   if (i === 0) {
-    await say('あなたの攻撃！', 400);
+    await say('あなたの攻撃！', 300);
     if (b.def.evade && Math.random() < b.def.evade) { SFX.miss(); await say(`${b.def.name}はひらりとかわした！`); }
     else {
       const crit = Math.random() < 0.12;
       let d = calcDamage(p.atk, b.def.def); if (crit) d = Math.round(d * 1.8);
-      b.hp -= d; b.hitFx = performance.now();
+      b.slash = performance.now(); b.slashCrit = crit;
       crit ? SFX.crit() : SFX.hit();
+      await sleep(90);
+      b.hp -= d; b.hitFx = performance.now();
+      if (crit) { b.shake = b.hitFx; b.shakeAmp = 10; }
       await say(crit ? `会心の一撃！ ${b.def.name}に ${d} のダメージ！` : `${b.def.name}に ${d} のダメージ！`);
     }
   } else if (i === 1) {
@@ -464,10 +492,13 @@ async function enemyTurn() {
   }
   let atk = def.atk, label = `${def.name}の攻撃！`, big = b.charging;
   if (b.charging) { atk = Math.round(def.atk * 1.8); label = '魔王の灼熱斬り！'; b.charging = false; }
-  await say(label, 450);
+  await say(label, 250);
+  b.lunge = performance.now(); b.lungeBig = big;
+  await sleep(LUNGE_MS * LUNGE_HIT);
   let d = calcDamage(atk, p.def);
   if (b.guard) d = Math.max(1, Math.round(d / 2.5));
   p.hp = Math.max(0, p.hp - d); b.hurtFx = performance.now();
+  b.shake = b.hurtFx; b.shakeAmp = big ? 26 : b.guard ? 6 : 14;
   big ? SFX.bigHit() : SFX.hurt();
   await say(b.guard ? `守りで受け流した！ ${d} のダメージ。` : `あなたは ${d} のダメージを受けた！`);
 }
@@ -494,26 +525,85 @@ async function defeat() {
   S.battle = null; mode = 'gameover'; fadeT = performance.now();
 }
 
+// 敵の描画。登場で奥から飛び込み、待機中は息づき、攻撃では身を引いてから画面手前へ突進する
+const LUNGE_MS = 640, LUNGE_HIT = 0.5;
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+const easeIn = t => t * t * t;
+const easeOutBack = t => 1 + 2.7 * Math.pow(t - 1, 3) + 1.7 * Math.pow(t - 1, 2);
+function drawEnemy(now, b) {
+  const im = IMG[b.def.img]; if (!im) return;
+  const maxH = b.def.boss ? 320 : 270, maxW = 540;
+  const r = Math.min(maxH / im.height, maxW / im.width);
+  const w = im.width * r, h = im.height * r;
+  let sc = 1, ox = 0, oy = 0, alpha = 1, ghosts = 0;
+  // 登場
+  const ap = Math.min(1, (now - b.t0) / 450);
+  sc *= 0.15 + 0.85 * easeOutBack(ap); alpha *= Math.min(1, ap * 2.5);
+  if (ap < 1) ghosts = 2;
+  // 待機
+  const fly = b.def.lift ? 1 : 0;
+  sc *= 1 + 0.025 * Math.sin(now / 260);
+  ox += Math.sin(now / 640) * 10;
+  oy += Math.sin(now / (fly ? 110 : 260)) * (fly ? 9 : 4);
+  if (b.charging) { ox += (Math.random() - 0.5) * 6; oy += (Math.random() - 0.5) * 4; }
+  // 攻撃
+  const lt = (now - b.lunge) / LUNGE_MS;
+  if (b.lunge && lt < 1) {
+    const big = b.lungeBig ? 1.35 : 1;
+    if (lt < 0.38) { const k = easeOut(lt / 0.38); sc *= 1 - 0.14 * k; oy -= 18 * k; ox -= 12 * k; }
+    else if (lt < LUNGE_HIT) { const k = easeIn((lt - 0.38) / (LUNGE_HIT - 0.38)); sc *= 0.86 + 0.84 * big * k; oy += -18 + 110 * k; ghosts = 3; }
+    else if (lt < 0.68) { sc *= 0.86 + 0.84 * big; oy += 92; ox += (Math.random() - 0.5) * 10; }
+    else { const k = easeOut((lt - 0.68) / 0.32); sc *= (0.86 + 0.84 * big) * (1 - k) + k; oy += 92 * (1 - k); }
+  }
+  // 被弾
+  const ht = (now - b.hitFx) / 300;
+  if (ht < 1) { sc *= 1 - 0.07 * (1 - ht); ox += Math.sin(ht * 40) * 14 * (1 - ht); oy -= 8 * (1 - ht); }
+  // 撃破
+  if (b.dieFx) { const k = Math.min(1, (now - b.dieFx) / 900); alpha *= 1 - k; oy += 50 * k; sc *= 1 - 0.15 * k; }
+  const cx = W / 2 + ox, cy = 385 - h / 2 + oy;
+  const draw = (s, a) => {
+    ctx.globalAlpha = a;
+    ctx.drawImage(im, cx - w * s / 2, cy - h * s / 2, w * s, h * s);
+  };
+  for (let g = ghosts; g > 0; g--) draw(sc * (1 - g * 0.09), alpha * 0.18);
+  draw(sc, alpha);
+  ctx.globalCompositeOperation = 'lighter';
+  if (ht < 0.55) draw(sc, 0.55 * alpha * (1 - ht / 0.55));
+  if (b.charging) draw(sc, alpha * (0.2 + 0.14 * Math.sin(now / 70)));
+  if (b.lunge && lt > 0.38 && lt < 0.68 && b.lungeBig) draw(sc, 0.3 * alpha);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+}
+// プレイヤーの斬撃エフェクト
+function drawSlash(now, b) {
+  const t = (now - b.slash) / 300;
+  if (!b.slash || t >= 1) return;
+  const lines = b.slashCrit ? [[-1, -0.8, 1, 0.8], [1, -0.8, -1, 0.8], [-1, -0.3, 1, 0.3]] : [[-0.9, -0.75, 0.9, 0.75]];
+  const grow = Math.min(1, t / 0.3), fade = 1 - Math.max(0, (t - 0.3) / 0.7);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round';
+  lines.forEach(([x0, y0, x1, y1], i) => {
+    const sx = W / 2 + x0 * 170, sy = 240 + y0 * 170;
+    const ex = sx + (x1 - x0) * 170 * grow, ey = sy + (y1 - y0) * 170 * grow;
+    for (const [lw, col] of [[22, `rgba(255,170,80,${0.25 * fade})`], [9, `rgba(255,230,180,${0.6 * fade})`], [3, `rgba(255,255,255,${fade})`]]) {
+      ctx.strokeStyle = col; ctx.lineWidth = lw * (b.slashCrit ? 1.4 : 1);
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+    }
+  });
+  ctx.restore();
+}
+
 function drawBattle(now) {
   const b = S.battle;
+  const sk = Math.max(0, 1 - (now - b.shake) / 380) * b.shakeAmp;
+  ctx.save();
+  if (sk) ctx.translate((Math.random() - 0.5) * 2 * sk, (Math.random() - 0.5) * 2 * sk);
   drawView(now, 0.5);
-  // 敵
-  const im = IMG[b.def.img];
-  if (im) {
-    const maxH = b.def.boss ? 310 : 260, maxW = 520;
-    const r = Math.min(maxH / im.height, maxW / im.width);
-    const w = im.width * r, h = im.height * r;
-    const appear = Math.min(1, (now - b.t0) / 400);
-    let x = (W - w) / 2, y = 380 - h + (1 - appear) * 30 + Math.sin(now / 400) * 4;
-    if (now - b.hitFx < 300) x += Math.sin((now - b.hitFx) / 15) * 10;
-    let alpha = appear;
-    if (b.dieFx) alpha = Math.max(0, 1 - (now - b.dieFx) / 800);
-    ctx.globalAlpha = alpha;
-    ctx.drawImage(im, x, y, w, h);
-    if (now - b.hitFx < 160) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.5 * alpha; ctx.drawImage(im, x, y, w, h); ctx.globalCompositeOperation = 'source-over'; }
-    if (b.charging) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.18 + 0.12 * Math.sin(now / 80); ctx.drawImage(im, x, y, w, h); ctx.globalCompositeOperation = 'source-over'; }
-    ctx.globalAlpha = 1;
-  }
+  // 突進中は UI より手前に描いて、画面に飛び出してくるように見せる
+  const lt = (now - b.lunge) / LUNGE_MS, front = b.lunge && lt > 0.42 && lt < 0.85;
+  if (!front) drawEnemy(now, b);
+  drawSlash(now, b);
   // 敵の名前と HP
   text(b.def.name, W / 2, 40, b.def.boss ? 28 : 22, b.def.boss ? '#ff8a6a' : '#eadfc8', 'center', FONT, 'bold');
   bar(W / 2 - 140, 52, 280, 10, b.hp, b.def.hp, '#c23a2a');
@@ -535,6 +625,8 @@ function drawBattle(now) {
   panel(16, 16, 260, 56);
   text(`HP ${S.p.hp} / ${S.p.maxHp}`, 32, 40, 17);
   bar(32, 48, 228, 10, S.p.hp, S.p.maxHp, hpColor(S.p));
+  if (front) drawEnemy(now, b);
+  ctx.restore();
 }
 function battleHit(mx, my) {
   for (let i = 0; i < 4; i++) {
@@ -638,6 +730,7 @@ cv.addEventListener('click', ev => {
 function press(k) {
   if (k === 'mute') { toast(Sound.toggleMute() ? '音を消しました（M で戻す）' : '音を出しました', null, 1500); return; }
   if (mode === 'splash') { Sound.init(); mode = 'title'; return; }
+  if (mode === 'chest' && k === 'ok' && performance.now() - S.chest.t0 > 400) { S.chest = null; mode = 'explore'; return; }
   if (mode === 'title' && k === 'ok') { newGame(); mode = 'explore'; toast('魔王に囚われた姫を救い出せ！', null, 3500); return; }
   if ((mode === 'ending' && performance.now() - fadeT > 3000 || mode === 'gameover') && k === 'ok') { mode = 'title'; return; }
   if (mode === 'explore') {
@@ -671,6 +764,7 @@ function frame(now) {
     if (!S.anim) { if (held.has('up')) move(0); else if (held.has('down')) move(2); }
     if (mode === 'explore') { drawView(now); drawHUD(now); }
   } else if (mode === 'battle') { updateAnim(now); if (S.battle) drawBattle(now); else { drawView(now); drawHUD(now); } }
+  else if (mode === 'chest') drawChest(now);
   else if (mode === 'rescue') drawRescue(now);
   else if (mode === 'ending') drawEnding(now);
   else if (mode === 'gameover') drawGameOver(now);
