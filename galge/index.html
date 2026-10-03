@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="桜色メモリアル">
+<meta property="og:description" content="桜色メモリアル">
+<meta property="og:image" content="https://kishida.github.io/webdemos/galge/title.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/galge/index.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<title>桜色メモリアル</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css?v=7">
+</head>
+<body>
+<div id="stage">
+  <div id="bg" class="layer"></div>
+  <div id="bg2" class="layer"></div>
+  <div id="petals" class="layer"></div>
+  <div id="sprites" class="layer"></div>
+  <div id="fx" class="layer"></div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="date"><span id="date-main"></span><span id="date-slot"></span></div>
+    <div id="hearts"></div>
+  </div>
+  <div id="sysbtns" class="hidden">
+    <button data-act="log">LOG</button>
+    <button data-act="auto">AUTO</button>
+    <button data-act="skip">SKIP</button>
+    <button data-act="mute">♪</button>
+    <button data-act="title">TITLE</button>
+  </div>
+
+  <!-- テキストウィンドウ -->
+  <div id="msgwin" class="hidden">
+    <div id="namebox"></div>
+    <div id="msg"></div>
+    <div id="next">▼</div>
+  </div>
+
+  <!-- 選択肢 / マップ -->
+  <div id="choices" class="hidden"></div>
+  <div id="map" class="hidden">
+    <h2 id="map-title">どこへ行こう？</h2>
+    <div id="map-list"></div>
+  </div>
+
+  <!-- 日付カード -->
+  <div id="daycard" class="hidden"><div class="dc-inner"><div id="dc-date"></div><div id="dc-week"></div></div></div>
+
+  <!-- タイトル -->
+  <div id="title" class="screen hidden">
+    <div class="title-logo">
+      <div class="sub">Sakura-iro Memorial</div>
+      <h1>桜色<span>メモリアル</span></h1>
+      <div class="tag">〜 桜の丘で、きみと 〜</div>
+    </div>
+    <div class="title-menu">
+      <button id="btn-new">はじめから</button>
+      <button id="btn-load">つづきから</button>
+      <button id="btn-music">音楽室 (BGM)</button>
+    </div>
+    <div class="copy">FM SOUND SYNTHESIS · 4-OP STYLE</div>
+  </div>
+
+  <!-- 名前入力 -->
+  <div id="namein" class="screen hidden">
+    <div class="panel">
+      <h2>あなたの名前は？</h2>
+      <input id="name-input" maxlength="8" value="悠真">
+      <button id="name-ok">決定</button>
+    </div>
+  </div>
+
+  <!-- 音楽室 -->
+  <div id="music" class="screen hidden">
+    <div class="panel wide">
+      <h2>♪ 音楽室</h2>
+      <div id="music-list"></div>
+      <canvas id="scope" width="560" height="90"></canvas>
+      <button id="music-back">もどる</button>
+    </div>
+  </div>
+
+  <!-- バックログ -->
+  <div id="log" class="screen hidden">
+    <div class="panel wide"><h2>LOG</h2><div id="log-list"></div><button id="log-close">閉じる</button></div>
+  </div>
+
+  <!-- 起動 -->
+  <div id="boot" class="screen">
+    <div class="boot-inner">
+      <div class="boot-logo">桜色メモリアル</div>
+      <div class="blink">CLICK TO START</div>
+      <div class="boot-note">※音が出ます</div>
+    </div>
+  </div>
+</div>
+<script src="js/fm.js?v=7"></script>
+<script src="js/story.js?v=7"></script>
+<script src="js/game.js?v=7"></script>
+</body>
+</html>
