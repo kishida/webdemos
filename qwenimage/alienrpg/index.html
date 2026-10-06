@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DERELICT — 森の異星船</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;800&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root { --hud: #9dffb0; --hud-dim: rgba(157,255,176,.35); --warn: #ff5a4a; --bg: #000; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: #ddd;
+    font-family: 'Noto Sans JP', sans-serif; user-select: none; }
+  canvas#game { display: block; position: fixed; inset: 0; }
+  .hidden { display: none !important; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+  #vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.75) 100%); }
+  #dmg { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 40%, rgba(200,0,0,.7) 100%); opacity: 0; transition: opacity .25s; }
+  .panel { position: absolute; font-family: 'Orbitron', 'Noto Sans JP', sans-serif; color: var(--hud);
+    text-shadow: 0 0 6px rgba(80,255,120,.6); }
+  #stats { left: 24px; bottom: 24px; width: 300px; }
+  .bar { height: 12px; border: 1px solid var(--hud-dim); background: rgba(0,20,5,.5); margin: 4px 0 10px; position: relative; }
+  .bar > i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #2fd35a, #9dffb0); box-shadow: 0 0 8px #3f8; }
+  #hpbar.low > i { background: linear-gradient(90deg, #a01010, #ff5a4a); box-shadow: 0 0 8px #f33; }
+  #xpbar { height: 5px; } #xpbar > i { background: #6cf; box-shadow: 0 0 6px #6cf; }
+  .lbl { font-size: 12px; letter-spacing: 2px; display: flex; justify-content: space-between; }
+  #ammo { right: 28px; bottom: 24px; text-align: right; }
+  #ammo .big { font-size: 46px; font-weight: 800; line-height: 1; }
+  #ammo .small { font-size: 13px; letter-spacing: 2px; opacity: .8; }
+  #arts { right: 24px; top: 20px; display: flex; gap: 8px; }
+  #arts .slot { width: 56px; height: 56px; border: 1px solid var(--hud-dim); background: rgba(0,15,5,.5) center/80% no-repeat; opacity: .35; }
+  #arts .slot.got { opacity: 1; box-shadow: 0 0 12px rgba(160,255,200,.5); }
+  #log { left: 24px; top: 20px; font-size: 14px; font-family: 'Noto Sans JP', sans-serif; max-width: 520px; }
+  #log div { margin-bottom: 4px; transition: opacity 1s; }
+  #prompt { left: 50%; bottom: 120px; transform: translateX(-50%); font-family: 'Noto Sans JP'; font-size: 16px;
+    padding: 6px 16px; border: 1px solid var(--hud-dim); background: rgba(0,10,4,.6); }
+  #cross { left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; }
+  #cross::before, #cross::after { content: ''; position: absolute; background: var(--hud); opacity: .8; }
+  #cross::before { left: 10px; top: 0; width: 2px; height: 22px; clip-path: polygon(0 0,100% 0,100% 35%,0 35%,0 65%,100% 65%,100% 100%,0 100%); }
+  #cross::after { top: 10px; left: 0; height: 2px; width: 22px; clip-path: polygon(0 0,35% 0,35% 100%,0 100%,0 0,65% 0,100% 0,100% 100%,65% 100%); }
+  #cross.hit::before, #cross.hit::after { background: var(--warn); }
+  #minimap { position: absolute; right: 24px; top: 92px; width: 200px; height: 200px; border: 1px solid var(--hud-dim);
+    background: rgba(0,10,4,.55); border-radius: 50%; }
+  #area { left: 50%; top: 28%; transform: translateX(-50%); text-align: center; opacity: 0; transition: opacity 1.2s; }
+  #area h2 { margin: 0; font-size: 34px; letter-spacing: 8px; }
+  #area p { margin: 6px 0 0; font-family: 'Noto Sans JP'; letter-spacing: 3px; }
+
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  #title { background: #000 center/cover no-repeat; }
+  #title::before { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.2), rgba(0,0,0,.85)); }
+  #title > * { position: relative; }
+  #title h1 { font-family: 'Orbitron'; font-weight: 800; font-size: clamp(42px, 9vw, 110px); letter-spacing: .25em; margin: 0;
+    color: #cfe; text-shadow: 0 0 30px rgba(100,255,160,.5); }
+  #title .sub { letter-spacing: .6em; margin: 4px 0 40px; color: #9db; }
+  .btn { pointer-events: auto; font-family: 'Orbitron', 'Noto Sans JP'; font-size: 18px; letter-spacing: 4px; color: var(--hud);
+    background: rgba(0,30,10,.6); border: 1px solid var(--hud); padding: 12px 40px; cursor: pointer; }
+  .btn:hover { background: rgba(40,120,60,.5); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .help { margin-top: 30px; font-size: 13px; color: #9a9; line-height: 1.9; text-align: center; max-width: 92vw; }
+  .help b { color: #cfe; }
+  #over { background: rgba(0,0,0,.82); }
+  #over h1 { font-family: 'Orbitron'; font-size: clamp(36px, 7vw, 80px); letter-spacing: .2em; margin: 0 0 10px; }
+  #over .stats { margin: 10px 0 30px; line-height: 1.9; text-align: center; color: #bcb; }
+  #over .artrow { display: flex; gap: 18px; margin: 10px 0; align-items: center; }
+  #over .artrow img { height: 120px; width: auto; filter: drop-shadow(0 0 12px rgba(180,255,220,.6)); }
+  #pause { background: rgba(0,0,0,.55); font-family: 'Orbitron', 'Noto Sans JP'; letter-spacing: 4px; color: var(--hud); pointer-events: auto; cursor: pointer; }
+  #modal { background: rgba(0,0,0,.7); pointer-events: auto; }
+  #modal img { width: 240px; filter: drop-shadow(0 0 30px rgba(180,255,220,.7)); animation: float 3s ease-in-out infinite; }
+  #modal h2 { font-family: 'Orbitron', 'Noto Sans JP'; letter-spacing: 6px; color: #dff; margin: 18px 0 6px; }
+  #modal p { color: #bcc; max-width: 520px; text-align: center; line-height: 1.8; margin: 0 16px 24px; }
+  @keyframes float { 50% { transform: translateY(-12px); } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="vignette"></div>
+  <div id="dmg"></div>
+  <div id="log" class="panel"></div>
+  <div id="arts" class="panel"></div>
+  <canvas id="minimap" width="200" height="200" class="hidden"></canvas>
+  <div id="cross" class="panel hidden"></div>
+  <div id="prompt" class="panel hidden"></div>
+  <div id="area" class="panel"><h2></h2><p></p></div>
+  <div id="stats" class="panel">
+    <div class="lbl"><span id="lv">LV 1</span><span id="hptxt">100 / 100</span></div>
+    <div class="bar" id="hpbar"><i></i></div>
+    <div class="bar" id="xpbar"><i></i></div>
+    <div class="lbl"><span>MEDKIT [H]</span><span id="med">2</span></div>
+  </div>
+  <div id="ammo" class="panel"><div class="big" id="mag">30</div><div class="small" id="reserve">/ 90 PULSE ROUNDS</div></div>
+</div>
+
+<div id="title" class="screen">
+  <h1>DERELICT</h1>
+  <div class="sub">森に眠る異星船</div>
+  <button class="btn" id="start" disabled>LOADING 0%</button>
+  <div class="help">
+    森の奥に墜落した異星の宇宙船。その深部には未知のアーティファクトが眠っている。<br>
+    3つのアーティファクトを回収し、船の主を討て。<br><br>
+    <b>森</b>：WASD 移動 ／ マウスで照準・クリック射撃 ／ E 調べる・入る<br>
+    <b>船内</b>：WASD 移動 ／ マウス視点 ／ クリック射撃 ／ Shift 走る ／ E 調べる<br>
+    R リロード ／ H メディキット ／ F ライト
+  </div>
+</div>
+
+<div id="over" class="screen hidden">
+  <h1 id="overTitle">MISSION FAILED</h1>
+  <div class="artrow" id="overArts"></div>
+  <div class="stats" id="overStats"></div>
+  <button class="btn" onclick="location.reload()">RETRY</button>
+</div>
+
+<div id="pause" class="screen hidden">CLICK TO RESUME</div>
+<div id="modal" class="screen hidden">
+  <img id="modalImg" alt="">
+  <h2 id="modalTitle"></h2>
+  <p id="modalText"></p>
+  <button class="btn" id="modalOk">OK</button>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

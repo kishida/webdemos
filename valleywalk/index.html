@@ -1,0 +1,1527 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="森を歩くだけのゲーム">
+<meta property="og:description" content="森を歩くだけのゲーム">
+<meta property="og:image" content="https://kishida.github.io/webdemos/valleywalk/title.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/valleywalk/index.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<title>森を歩くだけのゲーム — 植生探検</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Old+Mincho:wght@600;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --hud-ink:#F4F1E6;--glass:rgba(20,27,23,.56);--glass-line:rgba(244,241,230,.16);--lichen:#E6D88A;
+  --paper:#EEE9D9;--paper-ink:#23291F;--paper-muted:#6A6E5C;--paper-line:#D4CDB6;--moss:#4F6B34;
+  --jp:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;
+  --min:"Zen Old Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#20251E;--paper-ink:#ECE6D3;--paper-muted:#A3A690;--paper-line:#3A4133;--moss:#9DBB78}}
+:root[data-theme="dark"]{--paper:#20251E;--paper-ink:#ECE6D3;--paper-muted:#A3A690;--paper-line:#3A4133;--moss:#9DBB78}
+*,*::before,*::after{box-sizing:inherit}
+html,body{height:100%;margin:0;overflow:hidden;background:#BCCBD3;font:15px/1.6 var(--jp);color:var(--hud-ink);-webkit-font-smoothing:antialiased}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#gl:active{cursor:grabbing}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--lichen);outline-offset:2px}
+.glass{background:var(--glass);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--glass-line);border-radius:12px}
+
+/* HUD */
+.hud{position:fixed;inset:0;pointer-events:none;padding:calc(env(safe-area-inset-top,0px) + 14px) 14px calc(env(safe-area-inset-bottom,0px) + 14px)}
+.hud > *{pointer-events:auto}
+.place{position:absolute;left:14px;top:calc(env(safe-area-inset-top,0px) + 14px);padding:10px 14px 9px;min-width:170px}
+#biome{font:900 22px/1.25 var(--min);letter-spacing:.04em;display:block}
+.place .sub{display:flex;gap:12px;font-size:12.5px;opacity:.85;margin-top:2px;font-variant-numeric:tabular-nums}
+.compass{position:absolute;left:50%;top:calc(env(safe-area-inset-top,0px) + 14px);transform:translateX(-50%);width:min(360px,44vw);height:34px;overflow:hidden;pointer-events:none;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 22%,#000 78%,transparent);mask-image:linear-gradient(90deg,transparent,#000 22%,#000 78%,transparent)}
+#compass-track{position:relative;height:100%}
+#compass-track span{position:absolute;top:6px;left:0;font-size:12px;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+#compass-track span.main{font:900 16px var(--min);top:4px}
+.compass::after{content:"";position:absolute;left:50%;bottom:0;width:2px;height:7px;background:var(--lichen);transform:translateX(-1px)}
+.topright{position:absolute;right:14px;top:calc(env(safe-area-inset-top,0px) + 14px);display:flex;gap:8px}
+.hbtn{font:500 14px var(--jp);color:var(--hud-ink);padding:8px 14px;cursor:pointer;display:flex;align-items:center;gap:8px}
+#count{font:600 15px var(--min);color:var(--lichen);font-variant-numeric:tabular-nums}
+.mapwrap{position:absolute;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);width:176px;height:176px;padding:4px;cursor:zoom-in;transition:width .25s,height .25s}
+.mapwrap.big{width:min(560px,86vw,78vh);height:min(560px,86vw,78vh);cursor:zoom-out}
+#map{width:100%;height:100%;border-radius:9px;display:block;image-rendering:auto}
+.mapwrap .n{position:absolute;top:8px;left:50%;transform:translateX(-50%);font:900 13px var(--min);text-shadow:0 1px 3px #000}
+.help{position:absolute;left:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);font-size:12.5px;padding:8px 12px;line-height:1.7;opacity:.9}
+.help kbd{font:600 11.5px var(--jp);border:1px solid var(--glass-line);border-radius:4px;padding:0 5px;background:rgba(255,255,255,.06)}
+#perf{position:absolute;right:196px;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);font-size:11.5px;opacity:.7;text-shadow:0 1px 2px #000;font-variant-numeric:tabular-nums}
+#toast{position:absolute;left:50%;top:calc(env(safe-area-inset-top,0px) + 64px);transform:translate(-50%,-10px);width:min(420px,88vw);padding:14px 18px;opacity:0;transition:opacity .35s,transform .35s;pointer-events:none}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+#toast strong{display:block;font:900 20px/1.3 var(--min);color:var(--lichen);letter-spacing:.04em}
+#toast p{margin:4px 0 0;font-size:13.5px;line-height:1.7}
+#flash{position:absolute;left:50%;bottom:30%;transform:translateX(-50%);font-size:14px;padding:6px 14px;opacity:0;transition:opacity .3s;pointer-events:none}
+#flash.show{opacity:1}
+#stance{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);transform:translateX(-50%);font-size:13px;padding:5px 12px}
+#crouch-btn{display:none;position:absolute;left:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);font:500 14px var(--jp);color:var(--hud-ink);padding:12px 16px;cursor:pointer}
+#crouch-btn[aria-pressed="true"]{border-color:var(--lichen);color:var(--lichen)}
+@media (hover:none){#crouch-btn{display:block}}
+#obs{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none}
+#obs span{font-size:12.5px;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+#joy{position:fixed;width:110px;height:110px;margin:-55px 0 0 -55px;border-radius:50%;border:1.5px solid rgba(255,255,255,.45);background:rgba(20,27,23,.25);pointer-events:none;z-index:5}
+#joy i{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:rgba(244,241,230,.7)}
+@media (hover:none){.help{display:none}}
+@media (max-width:640px){
+  .compass{top:calc(env(safe-area-inset-top,0px) + 80px);width:70vw}
+  #biome{font-size:18px}.place{min-width:0}
+  .mapwrap:not(.big){width:118px;height:118px}
+  #perf{display:none}
+  #toast{top:calc(env(safe-area-inset-top,0px) + 118px)}
+  .hbtn .lbl{display:none}
+}
+
+/* overlays */
+.overlay{position:fixed;inset:0;display:grid;place-items:center;padding:20px;background:rgba(18,24,20,.35);z-index:10;overflow-y:auto}
+.card{background:var(--paper);color:var(--paper-ink);border-radius:6px;box-shadow:0 20px 60px rgba(0,0,0,.35);width:min(520px,100%);padding:30px 32px 28px}
+.card h1{font:900 clamp(34px,7vw,46px)/1.15 var(--min);margin:0;letter-spacing:.06em}
+.card .lead{margin:10px 0 18px;color:var(--paper-muted);font-size:14.5px;line-height:1.8}
+.card dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0 0 18px;font-size:13.5px}
+.card dt{font-weight:700}.card dd{margin:0;color:var(--paper-muted)}
+.load{height:4px;background:var(--paper-line);border-radius:2px;overflow:hidden;margin:4px 0 6px}
+#load-bar{height:100%;width:0;background:var(--moss);transition:width .2s}
+#load-msg{font-size:12.5px;color:var(--paper-muted);margin:0}
+.row{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:18px;flex-wrap:wrap}
+.row label{font-size:13.5px;display:flex;gap:8px;align-items:center}
+select{font:500 14px var(--jp);color:var(--paper-ink);background:transparent;border:1px solid var(--paper-line);border-radius:6px;padding:5px 8px}
+#start{font:700 16px var(--jp);background:var(--paper-ink);color:var(--paper);border:0;border-radius:6px;padding:12px 22px;cursor:pointer}
+#start:disabled{opacity:.4;cursor:progress}
+#stats-trees{font-size:12.5px;color:var(--paper-muted)}
+.guide{width:min(860px,100%);max-height:calc(100% - 20px);display:flex;flex-direction:column;padding:26px 28px 22px}
+.guide header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-bottom:1px solid var(--paper-line);padding-bottom:12px}
+.guide h2{font:900 28px var(--min);margin:0;letter-spacing:.08em}
+#guide-count{color:var(--paper-muted);font-size:13px}
+#guide-close{font:500 14px var(--jp);color:var(--paper-ink);background:transparent;border:1px solid var(--paper-line);border-radius:6px;padding:6px 12px;cursor:pointer}
+#guide-list{list-style:none;margin:0;padding:14px 0 0;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+#guide-list li{border:1px dashed var(--paper-line);border-radius:4px;padding:12px 14px}
+#guide-list li.on{border-style:solid;border-color:var(--moss)}
+#guide-list .kind{font-size:12px;color:var(--paper-muted)}
+#guide-list h3{font:900 21px/1.3 var(--min);margin:2px 0 4px;letter-spacing:.04em}
+#guide-list li:not(.on) h3{color:var(--paper-muted)}
+#guide-list p{margin:0;font-size:13px;line-height:1.75}
+#guide-list li:not(.on) p{color:var(--paper-muted)}
+</style>
+</head>
+<body>
+<canvas id="gl" aria-label="3Dの谷の風景。ドラッグで見回し、WASDキーで移動"></canvas>
+<div id="joy" hidden><i></i></div>
+
+<div class="hud" hidden>
+  <div class="place glass" aria-live="polite"><span id="biome">—</span><div class="sub"><span id="elev"></span><span id="explored"></span></div></div>
+  <div class="compass" aria-hidden="true"><div id="compass-track"></div></div>
+  <div class="topright">
+    <button type="button" class="hbtn glass" id="guide-btn" aria-label="図鑑をひらく"><span class="lbl">図鑑</span><span id="count">0 / 17</span></button>
+    <button type="button" class="hbtn glass" id="pause-btn" aria-label="メニュー">Ⅱ</button>
+  </div>
+  <div class="help glass"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動　<kbd>Shift</kbd> 走る　ドラッグで見回す<br><kbd>C</kbd> しゃがむ　<kbd>M</kbd> 地図　<kbd>J</kbd> 図鑑　<kbd>Esc</kbd> メニュー</div>
+  <span id="perf"></span>
+  <span id="stance" class="glass" hidden>しゃがみ中</span>
+  <button type="button" id="crouch-btn" class="glass" aria-pressed="false">しゃがむ</button>
+  <div id="obs" hidden aria-hidden="true"><svg viewBox="0 0 52 52" width="52" height="52"><circle cx="26" cy="26" r="22" fill="none" stroke="rgba(244,241,230,.35)" stroke-width="2"/><circle class="p" cx="26" cy="26" r="22" fill="none" stroke="#E6D88A" stroke-width="3" stroke-linecap="round" stroke-dasharray="138" stroke-dashoffset="138" transform="rotate(-90 26 26)"/></svg><span>観察中</span></div>
+  <div class="mapwrap glass" role="button" aria-label="地図を拡大・縮小"><canvas id="map"></canvas><span class="n">北</span></div>
+  <div id="toast" class="glass" role="status"><strong></strong><p></p></div>
+  <div id="flash" class="glass"></div>
+</div>
+
+<div class="overlay" id="menu">
+  <div class="card">
+    <h1>谷をあるく</h1>
+    <p class="lead">湖から山頂まで続く谷を歩き、木や動物、地形を図鑑に記録する探検ゲームです。木は標高や水辺からの距離、日当たり、ほかの木との競争で生える場所が決まり、動物はそれぞれ好みの植生に住んでいます。</p>
+    <dl>
+      <dt>移動</dt><dd>WASD または矢印キー、Shift で走る。スマホは画面左をなぞる</dd>
+      <dt>見回す</dt><dd>ドラッグ(スマホは画面右をなぞる)</dd>
+      <dt>観察</dt><dd>木や地形は近づくと、動物は画面の中央にとらえてしばらく見つめると図鑑に載ります。全17件</dd>
+      <dt>忍び足</dt><dd>走ると動物は逃げます。C キー(スマホは「しゃがむ」)で姿勢を低くするか、立ち止まって待つと近づけます</dd>
+    </dl>
+    <div class="load" aria-hidden="true"><div id="load-bar"></div></div>
+    <p id="load-msg" role="status">準備しています</p>
+    <p id="stats-trees"></p>
+    <div class="row">
+      <label>画質<select id="quality"><option value="std">標準</option><option value="low">軽量</option></select></label>
+      <button type="button" id="start" disabled>探検を始める</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="guide" hidden>
+  <div class="card guide" role="dialog" aria-labelledby="guide-title">
+    <header><div><h2 id="guide-title">植生図鑑</h2><span id="guide-count"></span></div><button type="button" id="guide-close">閉じる</button></div>
+    <ul id="guide-list"></ul>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ===== Core: skeleton, leaf cards, LOD meshes, OBJ/ZIP export =====
+const V3 = THREE.Vector3, UP = new V3(0, 1, 0), XA = new V3(1, 0, 0);
+const DEG = Math.PI / 180, GOLD = 137.508 * DEG, BARK_W = 0.7, BARK_H = 1.4;
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function randUnit(r) { const z = r() * 2 - 1, a = r() * Math.PI * 2, s = Math.sqrt(1 - z * z); return new V3(s * Math.cos(a), z, s * Math.sin(a)); }
+function perpOf(t) { return new V3().crossVectors(t, Math.abs(t.y) < 0.9 ? UP : XA).normalize(); }
+
+const PRESETS = {
+  oak:    { name: 'オーク', height: 9, radius: 0.34, shape: '2', baseSize: 0.28, bark: 'oak', levels: 3, branches: 9, children2: 6, children3: 4, length1: 0.62, lengthRatio: 0.55, downAngle: 55, gnarl: 0.4, droop: 0.1, upAttr: 0.14, leafType: 'broad', cardMode: 'cross', leafDensity: 4, leafSize: 1.5, leafWidth: 0.42, leafHue: 92, normalBend: 0.75, radialTrunk: 8, radialBranch: 5, lenSegTrunk: 6, lenSegBranch: 4, skipTwigs: false, budget: 6000 },
+  fir:    { name: 'モミ', height: 13, radius: 0.26, shape: '0', baseSize: 0.1, bark: 'fir', levels: 2, branches: 34, children2: 6, children3: 0, length1: 0.34, lengthRatio: 0.42, downAngle: 82, gnarl: 0.12, droop: 0.3, upAttr: 0.02, leafType: 'needle', cardMode: 'single', leafDensity: 3.5, leafSize: 1.4, leafWidth: 0.3, leafHue: 128, normalBend: 0.6, radialTrunk: 7, radialBranch: 3, lenSegTrunk: 8, lenSegBranch: 2, skipTwigs: true, budget: 4000 },
+  birch:  { name: 'シラカバ', height: 11, radius: 0.17, shape: '4', baseSize: 0.35, bark: 'birch', levels: 3, branches: 13, children2: 5, children3: 3, length1: 0.42, lengthRatio: 0.55, downAngle: 38, gnarl: 0.3, droop: 0.22, upAttr: 0.18, leafType: 'broad', cardMode: 'cross', leafDensity: 4.5, leafSize: 1.1, leafWidth: 0.38, leafHue: 80, normalBend: 0.75, radialTrunk: 7, radialBranch: 4, lenSegTrunk: 7, lenSegBranch: 3, skipTwigs: true, budget: 5000 },
+  willow: { name: 'シダレヤナギ', height: 8, radius: 0.3, shape: '1', baseSize: 0.3, bark: 'willow', levels: 3, branches: 8, children2: 6, children3: 4, length1: 0.6, lengthRatio: 0.75, downAngle: 45, gnarl: 0.25, droop: 0.85, upAttr: 0.15, leafType: 'broad', cardMode: 'cross', leafDensity: 3.5, leafSize: 0.9, leafWidth: 0.15, leafHue: 72, normalBend: 0.7, radialTrunk: 8, radialBranch: 4, lenSegTrunk: 6, lenSegBranch: 5, skipTwigs: false, budget: 7000 },
+  dead:   { name: '枯れ木', height: 8, radius: 0.3, shape: '1', baseSize: 0.25, bark: 'dead', levels: 3, branches: 8, children2: 5, children3: 3, length1: 0.6, lengthRatio: 0.55, downAngle: 50, gnarl: 0.7, droop: 0.05, upAttr: 0.1, leafType: 'broad', cardMode: 'cross', leafDensity: 0, leafSize: 1.2, leafWidth: 0.4, leafHue: 60, normalBend: 0.7, radialTrunk: 8, radialBranch: 5, lenSegTrunk: 7, lenSegBranch: 4, skipTwigs: false, budget: 3000 }
+};
+
+// Weber–Penn crown shape: r = 1 at the lowest branch, 0 at the top
+function shapeRatio(s, r) {
+  switch (+s) {
+    case 0: return 0.2 + 0.8 * r;
+    case 1: return 0.2 + 0.8 * Math.sin(Math.PI * r);
+    case 2: return 0.2 + 0.8 * Math.sin(0.5 * Math.PI * r);
+    case 3: return 1;
+    case 4: return 0.5 + 0.5 * r;
+    case 5: return r <= 0.7 ? Math.max(r / 0.7, 0.05) : (1 - r) / 0.3;
+    case 6: return 1 - 0.8 * r;
+  }
+  return 1;
+}
+function sampleB(b, t) {
+  const n = b.pts.length - 1, f = clamp(t, 0, 1) * n, i = Math.min(Math.floor(f), n - 1), k = f - i;
+  const a = b.pts[i], c = b.pts[i + 1];
+  return { pos: new V3().lerpVectors(a, c, k), tan: new V3().subVectors(c, a).normalize() };
+}
+function rAt(b, t) {
+  let r = b.r0 * (1 - 0.86 * t);
+  if (b.level === 0) r *= 1 + 0.5 * Math.pow(Math.max(0, 1 - t / 0.1), 2); // root flare
+  return r;
+}
+
+const SKEL = [14, 8, 6, 5];
+function genSkeleton(P) {
+  const rng = mulberry32((P.seed | 0) * 9301 + 49297);
+  const list = [];
+  const grow = (level, origin, dir, len, r0, parent) => {
+    const n = SKEL[level], d = dir.clone(), step = len / n, pts = [origin.clone()];
+    let p = origin.clone();
+    const g = level === 0 ? P.gnarl * 0.12 : P.gnarl * 0.9 / Math.sqrt(n);
+    const lf = level === 1 ? 0.5 : 1;
+    for (let i = 1; i <= n; i++) {
+      d.x += (rng() * 2 - 1) * g; d.y += (rng() * 2 - 1) * g * 0.6; d.z += (rng() * 2 - 1) * g;
+      if (level === 0) d.lerp(UP, 0.12);
+      else { d.y -= P.droop * 2.2 * lf / n; d.y += P.upAttr * 1.2 / n; }
+      d.normalize();
+      p = p.clone().addScaledVector(d, step); pts.push(p);
+    }
+    const b = { level, pts, len, r0, parent };
+    list.push(b);
+    if (level < P.levels) spawn(b);
+  };
+  const spawn = (b) => {
+    const L = b.level; let n, t0;
+    if (L === 0) { n = Math.round(P.branches); t0 = P.baseSize; }
+    else {
+      const ref = L === 1 ? P.length1 * P.height : b.parent.len * P.lengthRatio;
+      const c = L === 1 ? P.children2 : P.children3;
+      n = Math.round(c * clamp(b.len / Math.max(ref, 1e-3), 0.35, 1)); t0 = 0.12;
+    }
+    if (n <= 0) return;
+    let az = rng() * Math.PI * 2;
+    for (let i = 0; i < n; i++) {
+      const t = clamp(t0 + (0.97 - t0) * ((i + 0.5 + (rng() - 0.5) * 0.7) / n), 0, 0.98);
+      az += GOLD + (rng() - 0.5) * 0.6; // phyllotaxis
+      const s = sampleB(b, t);
+      let len;
+      if (L === 0) len = P.length1 * P.height * shapeRatio(P.shape, clamp((1 - t) / Math.max(1 - P.baseSize, 1e-3), 0, 1)) * (0.85 + 0.3 * rng());
+      else len = b.len * P.lengthRatio * (1 - 0.5 * t) * (0.8 + 0.4 * rng());
+      if (len < 0.06) continue;
+      const down = (P.downAngle * (L === 0 ? 1 : 0.85) + (rng() - 0.5) * (L === 0 ? 16 : 30)) * DEG;
+      const p1 = perpOf(s.tan), p2 = new V3().crossVectors(s.tan, p1);
+      const side = p1.multiplyScalar(Math.cos(az)).addScaledVector(p2, Math.sin(az));
+      const dir = s.tan.clone().multiplyScalar(Math.cos(down)).addScaledVector(side, Math.sin(down));
+      dir.y += P.upAttr * 0.4; dir.normalize();
+      const rp = rAt(b, t);
+      const cr = clamp(rp * Math.pow(len / b.len, 1.15), 0.006, rp * 0.72); // pipe model
+      grow(L + 1, s.pos, dir, len, cr, b);
+    }
+  };
+  const d0 = new V3((rng() - 0.5) * 0.25 * P.gnarl, 1, (rng() - 0.5) * 0.25 * P.gnarl).normalize();
+  grow(0, new V3(0, -0.15, 0), d0, P.height, P.radius, null);
+  return list;
+}
+
+function genCards(P, skel) {
+  const cards = [];
+  if (P.leafDensity <= 0) return cards;
+  const rng = mulberry32((P.seed | 0) * 7919 + 104729);
+  const needle = P.leafType === 'needle';
+  const lv = needle ? [P.levels - 1, P.levels] : [P.levels];
+  for (const b of skel) {
+    if (b.level < 1 || !lv.includes(b.level)) continue;
+    const dens = needle && b.level < P.levels ? P.leafDensity * 0.6 : P.leafDensity;
+    const f = dens * b.len, cnt = Math.floor(f) + (rng() < f - Math.floor(f) ? 1 : 0);
+    for (let k = 0; k < cnt; k++) {
+      const key = rng(), phase = rng() * 6.283, variant = rng() < 0.5 ? 0 : 1;
+      if (needle) {
+        const t = 0.08 + 0.9 * ((k + rng()) / cnt), s = sampleB(b, t), side = k % 2 ? 1 : -1;
+        const U = s.tan.clone().addScaledVector(perpOf(s.tan), side * 0.6).normalize();
+        const V = new V3().crossVectors(UP, U); if (V.lengthSq() < 1e-4) V.copy(XA); V.normalize();
+        const tw = (rng() - 0.5) * 0.8, N0 = new V3().crossVectors(U, V);
+        V.multiplyScalar(Math.cos(tw)).addScaledVector(N0, Math.sin(tw)).normalize();
+        const sz = Math.min(P.leafSize * (0.7 + 0.5 * rng()), b.len * 1.3 + 0.3);
+        cards.push({ c: s.pos, U, V, w: sz, h: sz, base: true, key, phase, variant });
+      } else {
+        const t = 0.3 + 0.7 * ((k + rng()) / cnt), s = sampleB(b, t);
+        const out = new V3(s.pos.x, 0, s.pos.z);
+        if (out.lengthSq() < 1e-4) out.set(rng() - 0.5, 0, rng() - 0.5);
+        out.normalize();
+        const V = out.multiplyScalar(0.55).add(new V3(0, 0.6 * (1 - P.droop), 0)).addScaledVector(s.tan, 0.5 + P.droop * 1.5).add(randUnit(rng).multiplyScalar(0.75)).normalize();
+        let U = new V3().crossVectors(V, randUnit(rng));
+        if (U.lengthSq() < 1e-4) U = perpOf(V);
+        U.normalize();
+        const sz = P.leafSize * (0.75 + 0.5 * rng());
+        const c = s.pos.clone().addScaledVector(V, sz * 0.3).add(randUnit(rng).multiplyScalar(sz * 0.12));
+        cards.push({ c, U, V, w: sz, h: sz, base: false, key, phase, variant });
+      }
+    }
+  }
+  return cards;
+}
+
+function crownOf(cards, P) {
+  if (!cards.length) return null;
+  const mn = new V3(1e9, 1e9, 1e9), mx = new V3(-1e9, -1e9, -1e9);
+  for (const c of cards) { mn.min(c.c); mx.max(c.c); }
+  const pad = P.leafSize * 0.4;
+  const e = new V3().subVectors(mx, mn).multiplyScalar(0.5).addScalar(pad);
+  e.x = Math.max(e.x, 0.6); e.y = Math.max(e.y, 0.6); e.z = Math.max(e.z, 0.6);
+  return { c: new V3().addVectors(mn, mx).multiplyScalar(0.5), e };
+}
+
+const LODQ = [
+  { rad: 1, seg: 1, drop: 0, frac: 1, scale: 1 },
+  { rad: 0.6, seg: 0.55, drop: 1, frac: 0.45, scale: 1.45 },
+  { rad: 0.4, seg: 0.35, drop: 2, frac: 0.18, scale: 2.2 }
+];
+function newB() { return { pos: [], nor: [], uv: [], ao: [], sway: [], ph: [], idx: [] }; }
+
+function buildLOD(P, skel, cards, crown, l) {
+  const Q = LODQ[l];
+  let Htop = 0.5, R = 0.5;
+  for (const b of skel) for (const p of b.pts) { Htop = Math.max(Htop, p.y); R = Math.max(R, Math.hypot(p.x, p.z)); }
+  const aoAt = (p, leaf) => {
+    let a = 1;
+    if (crown) {
+      const c = crown.c, e = crown.e;
+      const d = Math.hypot((p.x - c.x) / e.x, (p.y - c.y) / e.y, (p.z - c.z) / e.z);
+      a = leaf ? 0.35 + 0.65 * smooth(0.15, 1.0, d) : 0.5 + 0.5 * smooth(0.3, 1.1, d);
+      if (leaf) a *= 0.8 + 0.2 * smooth(-1, 1, (p.y - c.y) / e.y);
+    }
+    return a * (0.72 + 0.28 * smooth(0, 1.2, p.y));
+  };
+  const swayAt = (p) => Math.pow(clamp(p.y / Htop, 0, 1.3), 2) * (0.6 + 0.4 * clamp(Math.hypot(p.x, p.z) / R, 0, 1.5));
+
+  // --- bark ---
+  const B = newB();
+  const baseMax = P.skipTwigs && P.levels > 1 ? P.levels - 1 : P.levels;
+  const maxLv = Math.max(1, baseMax - Q.drop);
+  for (const b of skel) {
+    if (b.level > maxLv) continue;
+    const rad0 = b.level === 0 ? P.radialTrunk : b.level === 1 ? P.radialBranch : Math.max(3, P.radialBranch - 2);
+    const radial = Math.max(b.level === 0 ? 4 : 3, Math.round(rad0 * Q.rad));
+    const seg0 = b.level === 0 ? P.lenSegTrunk : b.level === 1 ? P.lenSegBranch : Math.max(1, Math.round(P.lenSegBranch * 0.6));
+    const segs = Math.max(b.level === 0 ? 2 : 1, Math.round(seg0 * Q.seg));
+    addTube(B, b, radial, segs, aoAt, swayAt);
+  }
+  // --- leaves ---
+  const Lb = newB();
+  for (const cd of cards) {
+    if (cd.key >= Q.frac) continue;
+    const w = cd.w * Q.scale, h = cd.h * Q.scale;
+    const N = new V3().crossVectors(cd.U, cd.V).normalize();
+    const quads = [[cd.U, cd.V]];
+    if (P.cardMode === 'cross') quads.push(cd.base ? [cd.U, N] : [N, cd.V]);
+    for (const [A, Bv] of quads) addCard(Lb, cd, A, Bv, w, h, crown, P.normalBend, aoAt, swayAt);
+  }
+  const barkTris = B.idx.length / 3, leafTris = Lb.idx.length / 3;
+  return { bark: B, leaf: Lb, Htop, R, stats: { barkTris, leafTris, tris: barkTris + leafTris, verts: (B.pos.length + Lb.pos.length) / 3 } };
+}
+
+function pushV(B, p, n, u, v, ao, sw, ph) {
+  B.pos.push(p.x, p.y, p.z); B.nor.push(n.x, n.y, n.z); B.uv.push(u, v); B.ao.push(ao); B.sway.push(sw); B.ph.push(ph);
+}
+
+// Generalised cylinder with parallel-transport frames, tip closed to a single vertex
+function addTube(B, b, radial, segs, aoAt, swayAt) {
+  const base = B.pos.length / 3, pts = [], rs = [];
+  for (let i = 0; i <= segs; i++) { const t = i / segs; pts.push(sampleB(b, t).pos); rs.push(rAt(b, t)); }
+  const T = pts.map((p, i) => new V3().subVectors(pts[Math.min(i + 1, segs)], pts[Math.max(i - 1, 0)]).normalize());
+  const N = perpOf(T[0]);
+  const uRep = Math.max(1, Math.round(2 * Math.PI * b.r0 / BARK_W));
+  const q = new THREE.Quaternion(), n = new V3(), p = new V3(), Bv = new V3();
+  let vAcc = 0;
+  for (let i = 0; i < segs; i++) {
+    if (i > 0) {
+      q.setFromUnitVectors(T[i - 1], T[i]); N.applyQuaternion(q);
+      N.addScaledVector(T[i], -N.dot(T[i])).normalize();
+      vAcc += pts[i].distanceTo(pts[i - 1]);
+    }
+    Bv.crossVectors(T[i], N).normalize();
+    for (let j = 0; j <= radial; j++) {
+      const a = j / radial * Math.PI * 2;
+      n.copy(N).multiplyScalar(Math.cos(a)).addScaledVector(Bv, Math.sin(a));
+      p.copy(pts[i]).addScaledVector(n, rs[i]);
+      pushV(B, p, n, j / radial * uRep, vAcc / BARK_H, aoAt(p, false), swayAt(p), 0);
+    }
+  }
+  vAcc += pts[segs].distanceTo(pts[segs - 1]);
+  const tip = base + segs * (radial + 1);
+  pushV(B, pts[segs], T[segs], 0.5 * uRep, vAcc / BARK_H, aoAt(pts[segs], false), swayAt(pts[segs]), 0);
+  const W = radial + 1;
+  for (let i = 0; i < segs - 1; i++) for (let j = 0; j < radial; j++) {
+    const a = base + i * W + j, d = a + 1, bb = a + W, c = bb + 1;
+    B.idx.push(a, d, c, a, c, bb);
+  }
+  const last = base + (segs - 1) * W;
+  for (let j = 0; j < radial; j++) B.idx.push(last + j, last + j + 1, tip);
+}
+
+// Alpha-tested leaf card; normals bent toward the crown ellipsoid
+function addCard(B, cd, A, Bv, w, h, crown, bend, aoAt, swayAt) {
+  const base = B.pos.length / 3, c = cd.c;
+  const corners = cd.base
+    ? [[0, -0.5, 0, 1], [1, -0.5, 1, 1], [1, 0.5, 1, 0], [0, 0.5, 0, 0]]
+    : [[-0.5, -0.5, 0, 1], [0.5, -0.5, 1, 1], [0.5, 0.5, 1, 0], [-0.5, 0.5, 0, 0]];
+  const cn = new V3().crossVectors(A, Bv).normalize();
+  const cc = cd.base ? c.clone().addScaledVector(A, w * 0.5) : c;
+  if (crown && cn.dot(new V3().subVectors(cc, crown.c)) < 0) cn.negate();
+  const p = new V3(), n = new V3(), s = new V3();
+  for (const [a, b2, u, v] of corners) {
+    p.copy(c).addScaledVector(A, a * w).addScaledVector(Bv, b2 * h);
+    if (crown) {
+      s.set((p.x - crown.c.x) / (crown.e.x * crown.e.x), (p.y - crown.c.y) / (crown.e.y * crown.e.y), (p.z - crown.c.z) / (crown.e.z * crown.e.z)).normalize();
+      n.copy(cn).multiplyScalar(1 - bend).addScaledVector(s, bend).normalize();
+    } else n.copy(cn);
+    pushV(B, p, n, (cd.variant + u) * 0.5, v, aoAt(p, true), swayAt(p) * 1.15, cd.phase);
+  }
+  B.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+}
+
+
+function tileNoise(rng, gx, gy) {
+  const g = new Float32Array(gx * gy); for (let i = 0; i < g.length; i++) g[i] = rng();
+  return (x, y) => {
+    x = ((x % gx) + gx) % gx; y = ((y % gy) + gy) % gy;
+    const x0 = Math.floor(x), y0 = Math.floor(y), x1 = (x0 + 1) % gx, y1 = (y0 + 1) % gy;
+    let fx = x - x0, fy = y - y0; fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+    const a = g[y0 * gx + x0], b = g[y0 * gx + x1], c = g[y1 * gx + x0], d = g[y1 * gx + x1];
+    const top = a + (b - a) * fx, bot = c + (d - c) * fx;
+    return top + (bot - top) * fy;
+  };
+}
+function fbm(rng, gx, gy, oct) {
+  const ns = []; for (let o = 0; o < oct; o++) ns.push(tileNoise(rng, gx << o, gy << o));
+  return (u, v) => { let s = 0, a = 0.5, t = 0; ns.forEach((n, o) => { s += n(u * (gx << o), v * (gy << o)) * a; t += a; a *= 0.5; }); return s / t; };
+}
+const mix3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+
+const BARKS = {
+  oak: { dark: [0.13, 0.10, 0.08], light: [0.46, 0.38, 0.29], gx: 7, gy: 2, pw: 1.6 },
+  willow: { dark: [0.11, 0.10, 0.09], light: [0.40, 0.36, 0.30], gx: 9, gy: 3, pw: 2.2 },
+  dead: { dark: [0.25, 0.24, 0.22], light: [0.66, 0.63, 0.58], gx: 8, gy: 2, pw: 1.3 },
+  fir: { dark: [0.16, 0.09, 0.07], light: [0.48, 0.30, 0.22], gx: 6, gy: 9, pw: 1 },
+  birch: { dark: [0.12, 0.11, 0.10], light: [0.90, 0.88, 0.83], gx: 4, gy: 40, pw: 1 }
+};
+function makeBarkData(type) {
+  const W = 256, H = 512, data = new Uint8Array(W * H * 4), rng = mulberry32(77), cfg = BARKS[type];
+  const big = fbm(rng, cfg.gx, cfg.gy, 4), fine = fbm(rng, 16, 32, 3), blot = fbm(rng, 3, 6, 3);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const u = x / W, v = y / H; let col;
+    if (type === 'birch') {
+      const f = fine(u, v); col = mix3([0.72, 0.70, 0.66], cfg.light, f);
+      const l = big(u, v); col = mix3(col, cfg.dark, smooth(0.6, 0.72, l) * 0.9);
+      col = mix3(col, cfg.dark, smooth(0.68, 0.76, blot(u, v)) * 0.95);
+    } else if (type === 'fir') {
+      const n = big(u, v), crack = smooth(0.07, 0.0, Math.abs(n - 0.5));
+      col = mix3(cfg.dark, cfg.light, n * (0.8 + 0.4 * fine(u, v)));
+      col = mix3(col, [0.07, 0.05, 0.04], crack);
+    } else {
+      const n = big(u, v); let r = 1 - Math.abs(2 * n - 1); r = Math.pow(r, cfg.pw);
+      col = mix3(cfg.dark, cfg.light, r); const f = 0.8 + 0.4 * fine(u, v);
+      col = [col[0] * f, col[1] * f, col[2] * f];
+    }
+    const i = (y * W + x) * 4;
+    data[i] = clamp(col[0] * 255, 0, 255); data[i + 1] = clamp(col[1] * 255, 0, 255); data[i + 2] = clamp(col[2] * 255, 0, 255); data[i + 3] = 255;
+  }
+  return { data, W, H };
+}
+
+function drawBroad(ctx, ox, S, rng, hue, wid) {
+  ctx.save(); ctx.beginPath(); ctx.rect(ox, 0, S, S); ctx.clip();
+  const stems = [];
+  const stem = (x, y, a, len, d) => {
+    const pts = [[x, y, a]], n = 7;
+    for (let i = 0; i < n; i++) { a += (rng() - 0.5) * 0.3; x += Math.cos(a) * len / n; y += Math.sin(a) * len / n; pts.push([x, y, a]); }
+    stems.push({ pts, d });
+    if (d < 2) { const m = d === 0 ? 4 : 2; for (let k = 0; k < m; k++) { const j = 1 + Math.floor(rng() * (n - 2)), sd = k % 2 ? 1 : -1; stem(pts[j][0], pts[j][1], pts[j][2] + sd * (0.5 + rng() * 0.5), len * (0.42 + rng() * 0.2), d + 1); } }
+  };
+  stem(ox + S / 2, S * 0.99, -Math.PI / 2 + (rng() - 0.5) * 0.3, S * 0.72, 0);
+  ctx.lineCap = 'round';
+  for (const s of stems) {
+    ctx.strokeStyle = `hsl(${hue - 55},28%,${20 + s.d * 4}%)`; ctx.lineWidth = [6, 3.5, 2][s.d];
+    ctx.beginPath(); s.pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke();
+  }
+  const leaves = [];
+  for (const s of stems) {
+    for (let i = 1; i < s.pts.length; i++) { const p = s.pts[i]; for (const sd of [-1, 1]) { if (rng() < 0.2) continue; leaves.push({ x: p[0], y: p[1], a: p[2] + sd * (0.55 + rng() * 0.6), len: S * (0.085 + rng() * 0.06) * (1 - s.d * 0.12) }); } }
+    const e = s.pts[s.pts.length - 1]; leaves.push({ x: e[0], y: e[1], a: e[2], len: S * 0.11 });
+  }
+  for (let i = leaves.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [leaves[i], leaves[j]] = [leaves[j], leaves[i]]; }
+  leaves.forEach((lf, i) => {
+    const tx = lf.x + Math.cos(lf.a) * lf.len, ty = lf.y + Math.sin(lf.a) * lf.len;
+    if (tx < ox + 6 || tx > ox + S - 6 || ty < 6 || ty > S - 6) return;
+    const light = 20 + 30 * (i / leaves.length) + rng() * 8, w = lf.len * wid;
+    ctx.save(); ctx.translate(lf.x, lf.y); ctx.rotate(lf.a);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(lf.len * 0.45, -w * 1.25, lf.len, 0); ctx.quadraticCurveTo(lf.len * 0.45, w * 1.25, 0, 0);
+    ctx.fillStyle = `hsl(${hue + (rng() - 0.5) * 18},${36 + rng() * 22}%,${light}%)`; ctx.fill();
+    ctx.strokeStyle = `hsla(${hue + 10},40%,${light + 14}%,0.7)`; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(lf.len * 0.05, 0); ctx.lineTo(lf.len * 0.9, 0); ctx.stroke();
+    ctx.restore();
+  });
+  ctx.restore();
+}
+function drawNeedle(ctx, ox, S, rng, hue) {
+  ctx.save(); ctx.beginPath(); ctx.rect(ox, 0, S, S); ctx.clip();
+  const stems = [];
+  const stem = (x, y, a, len, d) => {
+    const pts = [[x, y, a]], n = 10;
+    for (let i = 0; i < n; i++) { a += (rng() - 0.5) * 0.12; x += Math.cos(a) * len / n; y += Math.sin(a) * len / n; pts.push([x, y, a]); }
+    stems.push({ pts, d });
+    if (d < 1) for (let j = 1; j < n - 1; j++) for (const sd of [-1, 1]) if (rng() < 0.7) stem(pts[j][0], pts[j][1], pts[j][2] + sd * (0.55 + rng() * 0.3), S * (0.36 * (1 - j / n) + 0.1), d + 1);
+  };
+  stem(ox + S * 0.02, S * 0.5, (rng() - 0.5) * 0.1, S * 0.94, 0);
+  ctx.lineCap = 'round';
+  for (const s of stems) { ctx.strokeStyle = `hsl(20,35%,${18 + s.d * 5}%)`; ctx.lineWidth = s.d ? 2.5 : 5; ctx.beginPath(); s.pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke(); }
+  ctx.lineWidth = 2.6;
+  for (const s of stems) for (let i = 0; i < s.pts.length - 1; i++) {
+    const [x0, y0, a] = s.pts[i], [x1, y1] = s.pts[i + 1], L = Math.hypot(x1 - x0, y1 - y0), steps = Math.ceil(L / 4);
+    for (let k = 0; k < steps; k++) {
+      const t = k / steps, x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t;
+      for (const sd of [-1, 1]) {
+        const ang = a + sd * (0.7 + rng() * 0.4), nl = S * (0.04 + rng() * 0.018) * (s.d ? 0.85 : 1);
+        ctx.strokeStyle = `hsl(${hue + (rng() - 0.5) * 14},${30 + rng() * 20}%,${14 + rng() * 20}%)`;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(ang) * nl, y + Math.sin(ang) * nl); ctx.stroke();
+      }
+    }
+  }
+  ctx.restore();
+}
+function makeLeafCanvas(P) {
+  const S = 512, cv = document.createElement('canvas'); cv.width = S * 2; cv.height = S;
+  const ctx = cv.getContext('2d'), rng = mulberry32(31 + Math.round(P.leafHue));
+  for (let v = 0; v < 2; v++) P.leafType === 'needle' ? drawNeedle(ctx, v * S, S, rng, P.leafHue) : drawBroad(ctx, v * S, S, rng, P.leafHue, P.leafWidth);
+  const img = ctx.getImageData(0, 0, cv.width, cv.height), d = new Uint8Array(img.data);
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 200) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
+  if (n) { r /= n; g /= n; b /= n; }
+  for (let i = 0; i < d.length; i += 4) if (d[i + 3] < 10) { d[i] = r; d[i + 1] = g; d[i + 2] = b; } // bleed colour into transparent texels
+  return { cv, data: d, W: cv.width, H: cv.height };
+}
+function toTex({ data, W, H }, repeat) {
+  const t = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
+  t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
+  if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4; t.needsUpdate = true; return t;
+}
+
+// ===================== Small animals =====================
+const ANIMAL_DEFS = [
+  { id: 'rabbit', name: 'ノウサギ', kind: '動物', count: 24, group: 1, scare: 9, obs: 13, speed: 1.1, flee: 7, home: 25, hop: 6,
+    note: '草原と林の境目に住み、草を食べる。見通しのよい場所で暮らすので、走って近づくとすぐ跳ねて逃げる。', hint: '草原のふちで、しゃがんでそっと', flush: '草むらで何かが跳ねた',
+    hab: (e) => e.h > 1 && e.rd > 8 && e.s < 0.6 && e.h < e.tl - 4 && e.cover < 0.55 && e.m < 0.85 },
+  { id: 'squirrel', name: 'ニホンリス', kind: '動物', count: 18, group: 1, scare: 7, obs: 11, speed: 1.5, flee: 5, home: 18, hop: 9,
+    note: '木の実の多い森に住む。驚くと近くの幹を駆けのぼり、幹の裏側に回りこんで隠れる。', hint: '森の木の根元や幹を見上げよう', flush: '木の幹を何かが駆けのぼった',
+    hab: (e) => e.cover > 0.6 && e.h > 4 && e.h < 60 && e.rd > 8 && e.s < 0.8 },
+  { id: 'fox', name: 'キツネ', kind: '動物', count: 7, group: 1, scare: 15, obs: 17, speed: 1.8, flee: 8, home: 60, hop: 0,
+    note: '林縁と草原を行き来して獲物を探す。警戒心が強く、遠くから人の気配に気づく。', hint: '林縁で立ち止まるか、しゃがんで待とう', flush: '林の縁を何かが走り去った',
+    hab: (e) => e.edge > 0.3 && e.h > 2 && e.h < e.tl - 6 && e.rd > 8 && e.s < 0.7 },
+  { id: 'duck', name: 'マガモ', kind: '動物', count: 12, group: 3, scare: 11, obs: 16, speed: 0.4, flee: 1.6, home: 20, hop: 0, water: true,
+    note: '湖や流れのゆるい川に浮かび、水草や種を食べる。近づくと岸から離れるように泳いでいく。', hint: '湖のほとりへ', flush: '水面で羽音がした',
+    hab: (e, x, z) => { const w = waterDepth(x, z, e.h); return w > 0.7 && w < 3; } },
+  { id: 'ptarmigan', name: 'ライチョウ', kind: '動物', count: 9, group: 2, scare: 4, obs: 12, speed: 0.5, flee: 2.2, home: 20, hop: 0,
+    note: '森林限界より上の岩場や草地に住む鳥。天敵の少ない環境で暮らしてきたため、人をあまり恐れない。', hint: '高山帯の岩のあいだを', flush: '岩のあいだで何かが動いた',
+    hab: (e) => e.h > e.tl && e.s < 0.9 && e.h < 105 }
+];
+
+// low-poly model from ellipsoids / cones / cylinders, merged with vertex colours (model faces +z)
+function buildModel(parts) {
+  const pos = [], nor = [], col = [], m = new THREE.Matrix4(), q = new THREE.Quaternion(), eul = new THREE.Euler();
+  for (const [k, c, p, s, r] of parts) {
+    let g = k === 's' ? new THREE.SphereGeometry(1, 9, 6) : k === 'c' ? new THREE.ConeGeometry(1, 1, 7) : new THREE.CylinderGeometry(1, 1, 1, 6);
+    g = g.toNonIndexed(); eul.set(...(r || [0, 0, 0])); q.setFromEuler(eul);
+    const sc = typeof s === 'number' ? [s, s, s] : s;
+    g.applyMatrix4(m.compose(new V3(...p), q, new V3(...sc)));
+    const P = g.attributes.position.array, Nn = g.attributes.normal.array;
+    for (let i = 0; i < P.length; i++) { pos.push(P[i]); nor.push(Nn[i]); }
+    for (let i = 0; i < P.length / 3; i++) col.push(...c);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setAttribute('tcol', new THREE.Float32BufferAttribute(col, 3));
+  return g;
+}
+const BLK = [0.05, 0.04, 0.04], WHT = [0.92, 0.9, 0.85];
+const MODELS = {
+  rabbit: () => { const b = [0.55, 0.45, 0.34], d = [0.47, 0.38, 0.29], l = [0.8, 0.74, 0.64]; return buildModel([
+    ['s', b, [0, 0.16, -0.02], [0.13, 0.13, 0.19]], ['s', b, [0, 0.13, -0.1], [0.14, 0.12, 0.13]], ['s', l, [0, 0.12, 0.06], [0.09, 0.09, 0.1]],
+    ['s', b, [0, 0.27, 0.13], [0.085, 0.08, 0.1]], ['s', d, [0.035, 0.39, 0.09], [0.025, 0.1, 0.035], [-0.3, 0, 0.15]], ['s', d, [-0.035, 0.39, 0.09], [0.025, 0.1, 0.035], [-0.3, 0, -0.15]],
+    ['s', BLK, [0.045, 0.47, 0.06], [0.02, 0.025, 0.025]], ['s', BLK, [-0.045, 0.47, 0.06], [0.02, 0.025, 0.025]],
+    ['s', BLK, [0.06, 0.29, 0.18], 0.015], ['s', BLK, [-0.06, 0.29, 0.18], 0.015], ['s', [0.8, 0.5, 0.5], [0, 0.26, 0.225], 0.013],
+    ['s', WHT, [0, 0.18, -0.2], 0.045], ['s', l, [0.04, 0.03, 0.1], [0.025, 0.03, 0.05]], ['s', l, [-0.04, 0.03, 0.1], [0.025, 0.03, 0.05]],
+    ['s', b, [0.07, 0.04, -0.06], [0.03, 0.035, 0.09]], ['s', b, [-0.07, 0.04, -0.06], [0.03, 0.035, 0.09]]]); },
+  squirrel: () => { const b = [0.55, 0.3, 0.18], d = [0.42, 0.22, 0.13]; return buildModel([
+    ['s', b, [0, 0.1, 0], [0.06, 0.065, 0.1], [-0.3, 0, 0]], ['s', WHT, [0, 0.085, 0.04], [0.045, 0.05, 0.06]], ['s', b, [0, 0.16, 0.09], [0.045, 0.045, 0.055]],
+    ['c', d, [0.025, 0.205, 0.08], [0.012, 0.035, 0.012]], ['c', d, [-0.025, 0.205, 0.08], [0.012, 0.035, 0.012]],
+    ['s', BLK, [0.035, 0.17, 0.12], 0.009], ['s', BLK, [-0.035, 0.17, 0.12], 0.009],
+    ['s', b, [0, 0.17, -0.1], [0.045, 0.1, 0.045], [0.35, 0, 0]], ['s', d, [0, 0.26, -0.06], [0.04, 0.06, 0.05], [-0.6, 0, 0]],
+    ['s', d, [0.025, 0.02, 0.05], [0.015, 0.02, 0.025]], ['s', d, [-0.025, 0.02, 0.05], [0.015, 0.02, 0.025]], ['s', b, [0.04, 0.03, -0.03], [0.02, 0.03, 0.05]], ['s', b, [-0.04, 0.03, -0.03], [0.02, 0.03, 0.05]]]); },
+  fox: () => { const o = [0.78, 0.42, 0.17], d = [0.18, 0.13, 0.1]; return buildModel([
+    ['s', o, [0, 0.38, 0], [0.12, 0.13, 0.28]], ['s', WHT, [0, 0.36, 0.2], [0.08, 0.1, 0.1]], ['s', o, [0, 0.48, 0.32], [0.09, 0.085, 0.1]],
+    ['c', o, [0, 0.46, 0.45], [0.045, 0.14, 0.045], [Math.PI / 2, 0, 0]], ['s', BLK, [0, 0.46, 0.52], 0.016],
+    ['c', o, [0.05, 0.58, 0.3], [0.035, 0.08, 0.025]], ['c', o, [-0.05, 0.58, 0.3], [0.035, 0.08, 0.025]],
+    ['s', BLK, [0.045, 0.5, 0.4], 0.012], ['s', BLK, [-0.045, 0.5, 0.4], 0.012],
+    ['y', d, [0.06, 0.16, 0.17], [0.025, 0.32, 0.025]], ['y', d, [-0.06, 0.16, 0.17], [0.025, 0.32, 0.025]], ['y', d, [0.06, 0.16, -0.17], [0.025, 0.32, 0.025]], ['y', d, [-0.06, 0.16, -0.17], [0.025, 0.32, 0.025]],
+    ['s', o, [0, 0.31, -0.38], [0.07, 0.07, 0.22], [0.6, 0, 0]], ['s', WHT, [0, 0.2, -0.53], [0.045, 0.045, 0.07], [0.6, 0, 0]]]); },
+  duck: () => buildModel([
+    ['s', [0.55, 0.5, 0.45], [0, 0.06, 0], [0.1, 0.07, 0.17]], ['s', [0.45, 0.25, 0.18], [0, 0.07, 0.1], [0.08, 0.07, 0.08]], ['s', [0.15, 0.15, 0.15], [0, 0.09, -0.16], [0.05, 0.04, 0.06], [-0.4, 0, 0]],
+    ['s', WHT, [0, 0.12, 0.13], [0.042, 0.02, 0.042]], ['s', [0.1, 0.35, 0.2], [0, 0.18, 0.14], [0.055, 0.055, 0.065]], ['s', [0.9, 0.75, 0.2], [0, 0.17, 0.21], [0.025, 0.012, 0.04]],
+    ['s', BLK, [0.04, 0.2, 0.17], 0.009], ['s', BLK, [-0.04, 0.2, 0.17], 0.009], ['s', [0.2, 0.3, 0.7], [0.09, 0.08, -0.03], [0.02, 0.03, 0.05]], ['s', [0.2, 0.3, 0.7], [-0.09, 0.08, -0.03], [0.02, 0.03, 0.05]]]),
+  ptarmigan: () => { const b = [0.45, 0.38, 0.3]; return buildModel([
+    ['s', b, [0, 0.12, 0], [0.1, 0.1, 0.14]], ['s', WHT, [0, 0.08, 0.02], [0.085, 0.07, 0.11]], ['s', WHT, [0.075, 0.1, -0.02], [0.035, 0.05, 0.09]], ['s', WHT, [-0.075, 0.1, -0.02], [0.035, 0.05, 0.09]],
+    ['s', b, [0, 0.21, 0.1], [0.055, 0.055, 0.06]], ['s', [0.85, 0.15, 0.12], [0, 0.245, 0.12], [0.03, 0.012, 0.02]], ['s', BLK, [0, 0.2, 0.16], 0.012],
+    ['s', BLK, [0.035, 0.22, 0.13], 0.008], ['s', BLK, [-0.035, 0.22, 0.13], 0.008], ['s', [0.15, 0.13, 0.12], [0, 0.14, -0.13], [0.05, 0.02, 0.04]],
+    ['s', WHT, [0.03, 0.02, 0.02], [0.025, 0.025, 0.03]], ['s', WHT, [-0.03, 0.02, 0.02], [0.025, 0.025, 0.03]]]); }
+};
+
+const animals = [];
+const ADI = Object.fromEntries(ANIMAL_DEFS.map((a, i) => [a.id, i]));
+function buildAnimals() {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { ...SH },
+    vertexShader: `attribute vec3 tcol; varying vec3 vC, vN; varying float vFog;
+      void main(){ vec4 wp = modelMatrix * vec4(position,1.0); vN = normalize(mat3(modelMatrix) * normal); vC = tcol; vec4 mv = viewMatrix * wp; vFog = -mv.z; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `varying vec3 vC, vN; varying float vFog; ${LIGHT_GLSL}
+      void main(){ gl_FragColor = finish(lightIt(pow(vC, vec3(2.2)), normalize(vN), 1.0, 0.25), vFog); }`
+  });
+  const rng = mulberry32(777);
+  for (const D of ANIMAL_DEFS) {
+    const geo = MODELS[D.id](); let placed = 0;
+    for (let tries = 0; tries < 30000 && placed < D.count; tries++) {
+      const x = (rng() * 2 - 1) * 280, z = (rng() * 2 - 1) * 280, e = env(x, z);
+      if (!D.hab(e, x, z)) continue;
+      for (let g = 0; g < D.group && placed < D.count; g++) {
+        const gx = x + (rng() - 0.5) * 6 * g, gz = z + (rng() - 0.5) * 6 * g;
+        if (g && !D.hab(env(gx, gz), gx, gz)) continue;
+        const mesh = new THREE.Mesh(geo, mat); mesh.rotation.order = 'YXZ';
+        const s = 0.9 + rng() * 0.25; mesh.scale.set(s, s, s); scene.add(mesh);
+        animals.push({ D, mesh, x: gx, z: gz, hx: gx, hz: gz, y: 0, heading: rng() * 6.28, state: 'idle', timer: rng() * 4, phase: rng() * 6, tx: gx, tz: gz, obs: 0, climbY: 0, tree: null, seed: rng() * 10 });
+        placed++;
+      }
+    }
+  }
+}
+
+function surfaceY(a, x, z) {
+  const h = hAt(x, z);
+  if (!a.D.water) return h;
+  return riverDist(x, z) < 9 ? Math.max(0, riverBed(z) + 1.1) : 0;
+}
+function okAt(a, x, z) {
+  if (Math.abs(x) > 288 || Math.abs(z) > 288) return false;
+  const e = env(x, z);
+  if (a.D.water) { const w = waterDepth(x, z, e.h); return w > 0.5 && w < 3.2; }
+  return e.h > 0.6 && e.s < 0.95 && waterDepth(x, z, e.h) < 0.05 && !(e.rd < 6);
+}
+function noiseLevel() {
+  if (player.speed < 0.3 && player.still > 1) return 0.4;
+  if (player.crouch) return 0.55;
+  return player.speed > 6 ? 2 : 1;
+}
+const camDir = new V3(), toA = new V3();
+let obsTarget = null;
+function updateAnimals(dt) {
+  const nl = noiseLevel(); camera.getWorldDirection(camDir);
+  let best = null, bestDot = 0;
+  for (const a of animals) {
+    const D = a.D, dx = a.x - player.x, dz = a.z - player.z, d = Math.hypot(dx, dz);
+    if (d > 150) { a.mesh.visible = false; continue; }
+    a.mesh.visible = true;
+    // fear
+    if (d < D.scare * nl && a.state !== 'flee' && a.state !== 'climb' && a.state !== 'toTree') {
+      a.timer = 3 + Math.random() * 2;
+      if (D.id === 'squirrel') {
+        let tr = null, td = 14;
+        near(a.x, a.z, 14, (t) => { if (t.sp === 'shrub') return; const k = Math.hypot(t.x - a.x, t.z - a.z); if (k < td) { td = k; tr = t; } });
+        a.tree = tr; a.state = tr ? 'toTree' : 'flee';
+      } else a.state = 'flee';
+      if (!found.has(D.id) && d < 28) flash(D.flush);
+    }
+    let speed = 0, mx = 0, mz = 0;
+    switch (a.state) {
+      case 'idle':
+        a.timer -= dt;
+        if (a.timer < 0) {
+          for (let k = 0; k < 8; k++) {
+            const r = Math.random() * D.home, an = Math.random() * 6.28, tx = a.hx + Math.cos(an) * r, tz = a.hz + Math.sin(an) * r;
+            if (okAt(a, tx, tz)) { a.tx = tx; a.tz = tz; a.state = 'walk'; break; }
+          }
+          a.timer = 2 + Math.random() * 4;
+        }
+        break;
+      case 'walk': {
+        const ex = a.tx - a.x, ez = a.tz - a.z, el = Math.hypot(ex, ez);
+        if (el < 0.3) { a.state = 'idle'; a.timer = 2 + Math.random() * 5; break; }
+        mx = ex / el; mz = ez / el; speed = D.speed; break;
+      }
+      case 'flee': {
+        a.timer -= dt; const l = Math.max(d, 1e-3);
+        mx = dx / l; mz = dz / l; speed = D.flee;
+        if (a.timer < 0 && d > D.scare * nl * 1.3) { a.state = 'idle'; a.timer = 1 + Math.random() * 3; a.hx = a.x; a.hz = a.z; }
+        break;
+      }
+      case 'toTree': {
+        const t = a.tree, ex = t.x - a.x, ez = t.z - a.z, el = Math.hypot(ex, ez);
+        if (el < 0.35) { a.state = 'climb'; a.climbY = 0; a.timer = 6 + Math.random() * 5; break; }
+        mx = ex / el; mz = ez / el; speed = D.flee; break;
+      }
+      case 'climb': {
+        const t = a.tree, top = 2.5 + (a.seed % 2);
+        if (a.timer > 0) { a.climbY = Math.min(top, a.climbY + dt * 2.2); a.timer -= dt; if (d < 10) a.timer = Math.max(a.timer, 2); }
+        else { a.climbY -= dt * 1.5; if (a.climbY <= 0) { a.state = 'idle'; a.timer = 2; a.x = t.x + 0.5; a.z = t.z; a.hx = a.x; a.hz = a.z; } }
+        // stay on the far side of the trunk from the player
+        const ox = t.x - player.x, oz = t.z - player.z, ol = Math.max(Math.hypot(ox, oz), 1e-3);
+        const r = Math.max(0.12, SPECIES[SPI[t.sp]].base.radius * t.scale * 0.9) + 0.05;
+        a.x = t.x + ox / ol * r; a.z = t.z + oz / ol * r; a.heading = Math.atan2(-ox, -oz);
+        break;
+      }
+    }
+    if (speed > 0) {
+      // steer around water / cliffs
+      let hx = mx, hz = mz, ok = false;
+      for (let k = 0; k < 7 && !ok; k++) {
+        const an = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.55, c = Math.cos(an), s = Math.sin(an);
+        hx = mx * c - mz * s; hz = mx * s + mz * c;
+        ok = okAt(a, a.x + hx * 1.2, a.z + hz * 1.2);
+      }
+      if (ok) {
+        const target = Math.atan2(hx, hz); let dh = target - a.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+        a.heading += dh * Math.min(1, dt * 8);
+        a.x += Math.sin(a.heading) * speed * dt; a.z += Math.cos(a.heading) * speed * dt;
+        a.phase += dt * (D.hop ? D.hop * (speed > D.speed ? 1.4 : 1) : speed * 6);
+      } else if (a.state === 'walk') a.state = 'idle';
+    }
+    // pose
+    const m = a.mesh, base = a.state === 'climb' ? hAt(a.x, a.z) : surfaceY(a, a.x, a.z);
+    let y = base, pitch = 0, roll = 0;
+    const moving = speed > 0;
+    if (a.state === 'climb') { y = base + 0.15 + a.climbY; pitch = -Math.PI / 2; }
+    else if (D.water) { y = base - 0.02 + Math.sin(SH.uTime.value * 2 + a.seed) * 0.015; roll = Math.sin(SH.uTime.value * 1.3 + a.seed) * 0.05; }
+    else if (D.hop) { if (moving) { const s = Math.abs(Math.sin(a.phase)); y += s * (D.id === 'rabbit' ? 0.16 : 0.08); pitch = Math.cos(a.phase) * 0.25; } else pitch = Math.sin(SH.uTime.value * 3 + a.seed) * 0.04 - 0.05; }
+    else if (moving) { y += Math.abs(Math.sin(a.phase)) * 0.03; roll = Math.sin(a.phase) * 0.04; }
+    else pitch = D.id === 'ptarmigan' ? Math.max(0, Math.sin(SH.uTime.value * 1.7 + a.seed)) * 0.35 : 0;
+    m.position.set(a.x, y, a.z); m.rotation.set(pitch, a.heading, roll);
+    // observation: a calm animal near the centre of view
+    if (!found.has(D.id) && a.state !== 'flee' && a.state !== 'toTree') {
+      toA.set(a.x - camera.position.x, y + 0.2 - camera.position.y, a.z - camera.position.z);
+      const dist = toA.length();
+      if (dist < D.obs) { const dot = toA.multiplyScalar(1 / dist).dot(camDir); if (dot > 0.965 && dot > bestDot) { best = a; bestDot = dot; } }
+    }
+  }
+  // observation progress
+  const ring = $('#obs');
+  if (best && best === obsTarget) best.obs += dt; else { if (obsTarget) obsTarget.obs = 0; obsTarget = best; }
+  if (obsTarget) {
+    const p = Math.min(1, obsTarget.obs / 1.3);
+    ring.hidden = false; ring.querySelector('circle.p').style.strokeDashoffset = 138 * (1 - p);
+    if (p >= 1) { discover(obsTarget.D.id); obsTarget.obs = 0; obsTarget = null; ring.hidden = true; }
+  } else ring.hidden = true;
+}
+
+// ===================== World generation =====================
+const $ = (s) => document.querySelector(s);
+const mix = (a, b, t) => a + (b - a) * t;
+const bell = (x, c, w) => Math.exp(-((x - c) / w) * ((x - c) / w));
+function hash2(ix, iz, s) { let h = Math.imul(ix, 374761393) ^ Math.imul(iz, 668265263) ^ Math.imul(s, 982451653); h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
+function vnoise(x, z, s) {
+  const ix = Math.floor(x), iz = Math.floor(z); let fx = x - ix, fz = z - iz; fx = fx * fx * (3 - 2 * fx); fz = fz * fz * (3 - 2 * fz);
+  const a = hash2(ix, iz, s), b = hash2(ix + 1, iz, s), c = hash2(ix, iz + 1, s), d = hash2(ix + 1, iz + 1, s);
+  return a + (b - a) * fx + (c - a) * fz + (a - b - c + d) * fx * fz;
+}
+function fbm2(x, z, s, oct = 5) { let t = 0, a = 0.5, n = 0; for (let o = 0; o < oct; o++) { t += vnoise(x, z, s + o * 17) * a; n += a; a *= 0.5; x = x * 2.03 + 1.7; z = z * 2.03 - 0.9; } return t / n; }
+function ridged(x, z, s, oct = 5) { let t = 0, a = 0.5, n = 0, w = 1; for (let o = 0; o < oct; o++) { let v = 1 - Math.abs(vnoise(x, z, s + o * 31) * 2 - 1); v *= v; v *= w; w = clamp(v * 1.6, 0, 1); t += v * a; n += a; a *= 0.5; x *= 2.1; z *= 2.1; } return t / n; }
+
+const HALF = 300, G = 2, N = 300, NV = N + 1;
+const RIVER_START = -215, RIVER_END = 232;
+const riverX = (z) => 60 + 45 * Math.sin((z - 190) / 95) + 18 * Math.sin((z - 190) / 33);
+function baseH(x, z) {
+  const hills = (fbm2(x * 0.0065, z * 0.0065, 11) - 0.5) * 26 + 9;
+  const m = smooth(80, -250, z);
+  const mount = m * m * (ridged(x * 0.0075 + 3.1, z * 0.0075 - 1.3, 23) * 95 + 18);
+  const fine = (fbm2(x * 0.05, z * 0.05, 5, 3) - 0.5) * 1.6;
+  const e = Math.max(Math.abs(x), Math.abs(z));
+  return hills + mount + fine + smooth(240, 420, e) * 70 * (0.6 + 0.4 * fbm2(x * 0.01, z * 0.01, 91, 3));
+}
+// river bed profile: must only go downhill and stay below the valley floor
+const BED = (() => {
+  const n = RIVER_END - RIVER_START + 1, b = new Float32Array(n);
+  let prev = 1e9;
+  for (let i = 0; i < n; i++) { const z = RIVER_START + i; prev = Math.max(-1.8, Math.min(prev, baseH(riverX(z), z) - 3)); b[i] = prev; }
+  const s = new Float32Array(n);
+  for (let i = 0; i < n; i++) { let t = 0, c = 0; for (let k = -12; k <= 12; k++) { const j = clamp(i + k, 0, n - 1); t += b[j]; c++; } s[i] = t / c; }
+  for (let i = 1; i < n; i++) s[i] = Math.min(s[i], s[i - 1]);
+  return s;
+})();
+const riverBed = (z) => { const f = clamp(z - RIVER_START, 0, RIVER_END - RIVER_START), i = Math.floor(f), j = Math.min(i + 1, BED.length - 1); return mix(BED[i], BED[j], f - i); };
+const riverDist = (x, z) => (z < RIVER_START - 30 || z > RIVER_END) ? 1e9 : Math.abs(x - riverX(z));
+const lakeDist = (x, z) => Math.hypot((x - 60) / 85, (z - 215) / 58);
+function heightAt(x, z) {
+  let h = baseH(x, z);
+  h = mix(h, -4.5, smooth(1.35, 0.75, lakeDist(x, z)));
+  const d = riverDist(x, z);
+  if (d < 40) {
+    const bed = riverBed(z), fade = smooth(RIVER_START - 30, RIVER_START, z);
+    h = mix(h, Math.min(h, bed + 3.4 + d * 0.18), smooth(34, 6, d) * fade);
+    h = mix(h, bed, smooth(6.5, 3, d) * fade);
+  }
+  return h;
+}
+const treelineAt = (x, z) => 72 + (fbm2(x * 0.02, z * 0.02, 77, 3) - 0.5) * 14;
+const coverAt = (x, z) => fbm2(x * 0.011, z * 0.011, 41, 4);
+
+// grids
+const GH = new Float32Array(NV * NV), GS = new Float32Array(NV * NV), GM = new Float32Array(NV * NV), GFC = new Float32Array(NV * NV), GCan = new Float32Array(NV * NV);
+const GNx = new Float32Array(NV * NV), GNz = new Float32Array(NV * NV);
+function gsample(g, x, z) {
+  const fx = clamp((x + HALF) / G, 0, N - 0.0001), fz = clamp((z + HALF) / G, 0, N - 0.0001);
+  const i = Math.floor(fx), j = Math.floor(fz), tx = fx - i, tz = fz - j, k = j * NV + i;
+  return mix(mix(g[k], g[k + 1], tx), mix(g[k + NV], g[k + NV + 1], tx), tz);
+}
+const hAt = (x, z) => gsample(GH, x, z);
+function env(x, z) {
+  const h = hAt(x, z), fc = gsample(GFC, x, z);
+  return { h, s: gsample(GS, x, z), m: gsample(GM, x, z), fc, tl: treelineAt(x, z), rd: riverDist(x, z), ld: lakeDist(x, z), edge: clamp(1 - Math.abs(fc - 0.44) / 0.09, 0, 1), cover: smooth(0.36, 0.52, fc) };
+}
+let MAXH = 0, SUMMIT = { x: 0, z: 0 };
+function buildGrids() {
+  for (let j = 0; j < NV; j++) for (let i = 0; i < NV; i++) {
+    const x = -HALF + i * G, z = -HALF + j * G, k = j * NV + i, h = heightAt(x, z);
+    GH[k] = h; GFC[k] = coverAt(x, z);
+    if (h > MAXH) { MAXH = h; SUMMIT = { x, z }; }
+  }
+  for (let j = 0; j < NV; j++) for (let i = 0; i < NV; i++) {
+    const k = j * NV + i, x = -HALF + i * G, z = -HALF + j * G;
+    const hl = GH[j * NV + Math.max(i - 1, 0)], hr = GH[j * NV + Math.min(i + 1, N)], hu = GH[Math.max(j - 1, 0) * NV + i], hd = GH[Math.min(j + 1, N) * NV + i];
+    const gx = (hr - hl) / (2 * G), gz = (hd - hu) / (2 * G);
+    GNx[k] = gx; GNz[k] = gz; GS[k] = Math.hypot(gx, gz);
+    const h = GH[k], rd = riverDist(x, z);
+    const wet = Math.max(Math.exp(-Math.max(0, rd - 6) / 24) * smooth(RIVER_START - 30, RIVER_START + 10, z), smooth(1.75, 1.0, lakeDist(x, z)), smooth(2.5, 0.2, h));
+    GM[k] = clamp(wet * 0.85 + (fbm2(x * 0.02, z * 0.02, 55, 3) - 0.5) * 0.35 + 0.12 - smooth(40, 90, h) * 0.1, 0, 1);
+  }
+}
+
+// ===================== Species & ecology =====================
+const SHRUB = { height: 2.2, radius: 0.06, shape: '1', baseSize: 0.05, bark: 'willow', levels: 2, branches: 10, children2: 5, children3: 0, length1: 0.7, lengthRatio: 0.6, downAngle: 55, gnarl: 0.5, droop: 0.15, upAttr: 0.2, leafType: 'broad', cardMode: 'cross', leafDensity: 5, leafSize: 0.75, leafWidth: 0.45, leafHue: 108, normalBend: 0.8, radialTrunk: 4, radialBranch: 3, lenSegTrunk: 2, lenSegBranch: 2, skipTwigs: true };
+const SPECIES = [
+  { id: 'oak', name: 'コナラ', kind: '落葉広葉樹', base: PRESETS.oak, nv: 3, spacing: 9, note: '標高の低い、水はけのよい丘に多い。大きな樹冠どうしが光を奪い合うので、間隔を空けて立つ。', hint: '低い丘の森を歩いてみよう' },
+  { id: 'willow', name: 'シダレヤナギ', kind: '落葉広葉樹', base: PRESETS.willow, nv: 2, spacing: 8, note: '川岸や湖畔など、根が水に届く場所に帯状に並ぶ。', hint: '水辺をたどってみよう' },
+  { id: 'birch', name: 'シラカバ', kind: '落葉広葉樹', base: PRESETS.birch, nv: 3, spacing: 4.5, note: '日当たりを好む先駆樹。森と草原の境目や、中くらいの標高に多い。', hint: '森の縁を探そう' },
+  { id: 'fir', name: 'モミ', kind: '常緑針葉樹', base: PRESETS.fir, nv: 3, spacing: 5, note: '涼しい山地の森の主役。森林限界に近づくほど背が低く、まばらになる。', hint: '山の斜面を登ってみよう' },
+  { id: 'dead', name: '立ち枯れ', kind: '枯死木', base: PRESETS.dead, nv: 2, spacing: 6, note: '森林限界付近の厳しい環境や、水はけの悪い湿地に残る。', hint: '木がまばらになる高さへ' },
+  { id: 'shrub', name: 'ヤマツツジ', kind: '落葉低木', base: SHRUB, nv: 3, spacing: 2.4, note: '林の縁や、木が途切れた明るい場所に茂る低木。', hint: '明るい林縁で' }
+];
+const LANDMARKS = [
+  { id: 'lake', name: '湖', kind: '地形', note: '川が流れ込む谷底の湖。岸辺にはヤナギが集まる。', hint: '川を下流へ' },
+  { id: 'gorge', name: '渓谷', kind: '地形', note: '川が山を削ってできた深い谷。', hint: '川を上流へ' },
+  { id: 'meadow', name: '花の草原', kind: '植生', note: '木がまばらな明るい草地。高木がいないので、草花が光を独り占めできる。', hint: '森の切れ目を探そう' },
+  { id: 'treeline', name: '森林限界', kind: '植生', note: '寒さと風で高木が育たなくなる高さ。ここから上は草と岩の高山帯。', hint: '山を登り続けよう' },
+  { id: 'summit', name: '山頂', kind: '地形', note: 'この谷でいちばん高い場所。谷全体の植生の帯が見わたせる。', hint: 'いちばん高いところへ' },
+  { id: 'giant', name: '巨木', kind: '名木', note: '草原にひとり立つ古いコナラ。競争相手がいないので、枝を大きく広げた。', hint: '開けた低地のどこかに' }
+];
+const SPI = Object.fromEntries(SPECIES.map((s, i) => [s.id, i]));
+
+function suit(id, e) {
+  if (e.h < 0.5 || e.s > 0.95) return 0;
+  const channel = e.rd < 7 ? 0 : 1, gentle = smooth(0.95, 0.45, e.s);
+  switch (id) {
+    case 'oak': return channel * e.cover * smooth(36, 16, e.h) * (1 - smooth(0.55, 0.85, e.m)) * gentle;
+    case 'willow': return (e.rd < 5.5 ? 0 : 1) * smooth(0.58, 0.85, e.m) * smooth(28, 10, e.h) * (0.5 + 0.5 * e.cover) * 1.4;
+    case 'birch': return channel * bell(e.h, 32, 20) * (0.3 * e.cover + 0.9 * e.edge) * gentle;
+    case 'fir': return channel * e.cover * smooth(20, 40, e.h) * smooth(e.tl + 3, e.tl - 5, e.h) * smooth(1.05, 0.6, e.s) * (0.6 + 0.4 * e.m) * 1.2;
+    case 'dead': return channel * (bell(e.h, e.tl + 1, 6) * 0.35 + smooth(0.86, 0.97, e.m) * smooth(6, 2, e.h) * 0.5 + 0.025 * e.cover);
+  }
+  return 0;
+}
+
+// spatial hash
+const CELL = 8, hash = new Map();
+const hkey = (x, z) => (Math.floor(x / CELL) + 200) * 1000 + Math.floor(z / CELL) + 200;
+function hashAdd(t) { const k = hkey(t.x, t.z); let a = hash.get(k); if (!a) hash.set(k, a = []); a.push(t); }
+function near(x, z, r, fn) {
+  const c = Math.ceil(r / CELL), cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
+  for (let i = -c; i <= c; i++) for (let j = -c; j <= c; j++) { const a = hash.get((cx + i + 200) * 1000 + cz + j + 200); if (a) for (const t of a) if (fn(t) === false) return false; }
+  return true;
+}
+
+const trees = []; let GIANT = null, SPAWN = { x: 0, z: 150 };
+function placeTree(sp, x, z, scale, rng, extra) {
+  const S = SPECIES[SPI[sp]];
+  const t = { sp, x, z, scale, rot: rng() * Math.PI * 2, v: Math.floor(rng() * S.nv), spacing: S.spacing * (extra || 1) };
+  trees.push(t); hashAdd(t); return t;
+}
+function placeVegetation() {
+  const rng = mulberry32(2024);
+  // giant tree in the largest lowland meadow
+  let best = null;
+  for (let x = -250; x <= 250; x += 10) for (let z = -120; z <= 240; z += 10) {
+    const e = env(x, z);
+    if (e.h < 4 || e.h > 22 || e.s > 0.2 || e.rd < 40 || e.ld < 1.6) continue;
+    if (!best || e.fc < best.fc) best = { x, z, fc: e.fc };
+  }
+  if (best) { GIANT = placeTree('oak', best.x, best.z, 2.3, rng, 3.2); GIANT.v = 0; }
+  // canopy trees: big species compete first (dart throwing with species-specific spacing)
+  const cands = [];
+  for (let x = -HALF + 3; x < HALF - 3; x += 3) for (let z = -HALF + 3; z < HALF - 3; z += 3) cands.push([x + (rng() - 0.5) * 3, z + (rng() - 0.5) * 3]);
+  for (let i = cands.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [cands[i], cands[j]] = [cands[j], cands[i]]; }
+  const canopy = ['oak', 'willow', 'birch', 'fir', 'dead'];
+  for (const [x, z] of cands) {
+    const e = env(x, z), w = canopy.map((id) => suit(id, e)), S = w.reduce((a, b) => a + b, 0);
+    if (S <= 0.02 || rng() > Math.min(1, S) * 0.95) continue;
+    let r = rng() * S, k = 0; while (r > w[k] && k < w.length - 1) { r -= w[k]; k++; }
+    const sp = canopy[k], sd = SPECIES[SPI[sp]].spacing;
+    const ok = near(x, z, 20, (t) => { const d = Math.hypot(t.x - x, t.z - z); return d >= 0.5 * (sd + t.spacing) * (0.85 + 0.3 * rng()); });
+    if (!ok) continue;
+    let sc = (0.72 + 0.5 * rng()) * (0.7 + 0.3 * w[k] / Math.max(S, 1e-3));
+    if (sp === 'fir') sc *= mix(1, 0.38, smooth(e.tl - 20, e.tl + 2, e.h)); // krummholz toward the treeline
+    placeTree(sp, x, z, sc, rng);
+  }
+  // shrubs: forest edges and open understory
+  for (let x = -HALF + 2; x < HALF - 2; x += 2.2) for (let z = -HALF + 2; z < HALF - 2; z += 2.2) {
+    const px = x + (rng() - 0.5) * 2.2, pz = z + (rng() - 0.5) * 2.2, e = env(px, pz);
+    if (e.h < 0.8 || e.s > 0.8 || e.rd < 6) continue;
+    const p = (e.edge * 0.55 + e.cover * 0.12 + (1 - e.cover) * 0.04) * smooth(e.tl + 8, e.tl - 4, e.h) * smooth(0.9, 0.3, e.m);
+    if (rng() > p * 0.3) continue;
+    const ok = near(px, pz, 10, (t) => { const d = Math.hypot(t.x - px, t.z - pz); return t.sp === 'shrub' ? d > 2.2 : d > Math.max(2.2, t.scale * 1.6); });
+    if (ok) placeTree('shrub', px, pz, 0.7 + 0.6 * rng(), rng);
+  }
+  // spawn point: north shore of the lake, facing the mountains
+  for (let r = 0; r < 120; r += 4) {
+    let found = false;
+    for (let a = 0; a < 6.28 && !found; a += 0.5) {
+      const x = -10 + Math.cos(a) * r, z = 140 + Math.sin(a) * r, e = env(x, z);
+      if (e.h > 2 && e.h < 16 && e.rd > 12 && e.s < 0.3 && e.ld > 1.3 && near(x, z, 4, (t) => Math.hypot(t.x - x, t.z - z) > 3)) { SPAWN = { x, z }; found = true; }
+    }
+    if (found) break;
+  }
+}
+
+// ===================== Rendering setup =====================
+const canvas = $('#gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 1200); camera.rotation.order = 'YXZ';
+const SUN = new V3(0.5, 0.55, 0.36).normalize();
+const FOGC = new THREE.Color(0.74, 0.80, 0.84);
+const SH = { uTime: { value: 0 }, uWind: { value: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 0.35 }, uSun: { value: SUN }, uFog: { value: FOGC }, uFogN: { value: 50 }, uFogF: { value: 230 } };
+scene.background = FOGC;
+
+const LIGHT_GLSL = `
+uniform vec3 uSun, uFog; uniform float uFogN, uFogF;
+vec3 lightIt(vec3 alb, vec3 N, float ao, float wrap){
+  vec3 L = normalize(uSun); float ndl = dot(N, L);
+  float dif = wrap > 0.0 ? clamp((ndl + wrap) / (1.0 + wrap), 0.0, 1.0) : max(ndl, 0.0);
+  vec3 amb = mix(vec3(0.20,0.18,0.15), vec3(0.42,0.49,0.58), N.y * 0.5 + 0.5);
+  return alb * (amb * ao + vec3(1.3,1.18,1.0) * dif * mix(0.5, 1.0, ao));
+}
+vec4 finish(vec3 col, float fogD){ col = pow(col, vec3(1.0/2.2)); return vec4(mix(col, uFog, smoothstep(uFogN, uFogF, fogD)), 1.0); }`;
+
+const TREE_VS = `
+attribute float ao; attribute float sway; attribute float phase;
+uniform float uTime, uWind, uLeaf;
+varying vec2 vUv; varying vec3 vN, vW; varying float vAo, vFog;
+void main(){
+  #ifdef USE_INSTANCING
+  mat4 im = instanceMatrix;
+  #else
+  mat4 im = mat4(1.0);
+  #endif
+  vec3 ip = im[3].xyz; vec3 p = position; float w = sway * uWind; float t = uTime + ip.x * 0.05 + ip.z * 0.07;
+  vec2 off = vec2(sin(t*1.1 + p.x*0.15 + p.z*0.1)*0.7 + sin(t*2.7 + p.y*0.4)*0.2, sin(t*0.83 + p.z*0.2 + 1.7)*0.5);
+  p.xz += off * w * 0.6;
+  p += normal * sin(t*7.0 + phase) * uLeaf * uWind * 0.05;
+  vec4 wp = modelMatrix * im * vec4(p, 1.0);
+  vW = wp.xyz; vN = normalize(mat3(modelMatrix) * mat3(im) * normal); vUv = uv; vAo = ao;
+  vec4 mv = viewMatrix * wp; vFog = -mv.z; gl_Position = projectionMatrix * mv;
+}`;
+const TREE_FS = `
+uniform sampler2D map; uniform float uLeaf, uAT;
+varying vec2 vUv; varying vec3 vN, vW; varying float vAo, vFog;
+${LIGHT_GLSL}
+void main(){
+  vec4 tx = texture2D(map, vUv);
+  if (tx.a < uAT * mix(1.0, 0.55, smoothstep(30.0, 180.0, vFog))) discard;
+  vec3 alb = pow(tx.rgb, vec3(2.2));
+  vec3 N = normalize(vN);
+  vec3 col = lightIt(alb, N, vAo, uLeaf > 0.5 ? 0.45 : 0.0);
+  if (uLeaf > 0.5) { vec3 V = normalize(cameraPosition - vW); float tr = pow(clamp(dot(V, -normalize(uSun)), 0.0, 1.0), 3.0); col += alb * vec3(1.1,1.25,0.5) * tr * 0.9 * vAo; }
+  gl_FragColor = finish(col, vFog);
+}`;
+function treeMat(tex, leaf) {
+  return new THREE.ShaderMaterial({
+    uniforms: { ...SH, map: { value: tex }, uLeaf: { value: leaf ? 1 : 0 }, uAT: { value: leaf ? 0.42 : -1 } },
+    vertexShader: TREE_VS, fragmentShader: TREE_FS, side: leaf ? THREE.DoubleSide : THREE.FrontSide
+  });
+}
+
+// terrain
+const TERR_VS = `attribute vec3 tcol; varying vec3 vC, vN, vW; varying float vFog;
+void main(){ vec4 wp = modelMatrix * vec4(position,1.0); vW = wp.xyz; vN = normal; vC = tcol; vec4 mv = viewMatrix * wp; vFog = -mv.z; gl_Position = projectionMatrix * mv; }`;
+const TERR_FS = `uniform sampler2D uDetail; varying vec3 vC, vN, vW; varying float vFog;
+${LIGHT_GLSL}
+void main(){
+  float d = texture2D(uDetail, vW.xz * 0.23).r * 0.55 + texture2D(uDetail, vW.xz * 0.031).r * 0.45;
+  vec3 alb = pow(vC, vec3(2.2)) * (0.62 + 0.76 * d);
+  gl_FragColor = finish(lightIt(alb, normalize(vN), 1.0, 0.0), vFog);
+}`;
+// grass
+const GRASS_VS = `attribute vec4 iData; uniform float uTime, uWind; varying vec2 vUv; varying vec3 vT; varying float vFog, vH;
+void main(){
+  vec3 ip = instanceMatrix[3].xyz; vec3 p = position; float w = (1.0 - uv.y);
+  float t = uTime * 1.6 + ip.x * 0.21 + ip.z * 0.17;
+  vec4 wp = modelMatrix * instanceMatrix * vec4(p, 1.0);
+  wp.xz += vec2(sin(t), cos(t * 0.7)) * w * w * (0.08 + uWind * 0.35);
+  vUv = vec2((uv.x + iData.w) * 0.5, uv.y); vT = iData.rgb; vH = w;
+  vec4 mv = viewMatrix * wp; vFog = -mv.z; gl_Position = projectionMatrix * mv;
+}`;
+const GRASS_FS = `uniform sampler2D map; uniform float uGR; varying vec2 vUv; varying vec3 vT; varying float vFog, vH;
+${LIGHT_GLSL}
+void main(){
+  vec4 tx = texture2D(map, vUv);
+  if (tx.a < mix(0.45, 1.01, smoothstep(uGR * 0.65, uGR, vFog))) discard;
+  float gm = clamp((tx.g - max(tx.r, tx.b)) * 5.0, 0.0, 1.0);
+  vec3 alb = pow(mix(tx.rgb, tx.rgb * vT * 2.0, gm), vec3(2.2));
+  gl_FragColor = finish(lightIt(alb, vec3(0.0,1.0,0.0), mix(0.55, 1.0, vH), 0.3), vFog);
+}`;
+// rocks
+const ROCK_VS = `attribute vec4 iData; varying vec3 vN, vT; varying float vFog, vMoss;
+void main(){ vec4 wp = modelMatrix * instanceMatrix * vec4(position,1.0); vN = normalize(mat3(instanceMatrix) * normal); vT = iData.rgb; vMoss = iData.w; vec4 mv = viewMatrix * wp; vFog = -mv.z; gl_Position = projectionMatrix * mv; }`;
+const ROCK_FS = `varying vec3 vN, vT; varying float vFog, vMoss;
+${LIGHT_GLSL}
+void main(){ vec3 N = normalize(vN); vec3 c = mix(vT, vec3(0.30,0.40,0.18), smoothstep(0.55, 0.85, N.y) * vMoss);
+  gl_FragColor = finish(lightIt(pow(c, vec3(2.2)), N, 1.0, 0.0), vFog); }`;
+// water
+const WATER_VS = `varying vec3 vW; varying float vFog; void main(){ vec4 wp = modelMatrix * vec4(position,1.0); vW = wp.xyz; vec4 mv = viewMatrix * wp; vFog = -mv.z; gl_Position = projectionMatrix * mv; }`;
+const WATER_FS = `uniform float uTime; varying vec3 vW; varying float vFog;
+uniform vec3 uSun, uFog; uniform float uFogN, uFogF;
+void main(){
+  float t = uTime; vec2 p = vW.xz;
+  vec3 N = normalize(vec3(sin(p.x*0.35 + t)*0.04 + sin(p.y*0.9 - t*1.7)*0.03 + sin((p.x+p.y)*1.7 + t*2.3)*0.015, 1.0, cos(p.y*0.3 + t*0.8)*0.04 + sin(p.x*1.1 + t*1.3)*0.025));
+  vec3 V = normalize(cameraPosition - vW), L = normalize(uSun);
+  float fr = 0.06 + 0.9 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+  vec3 sky = mix(uFog, vec3(0.42,0.60,0.80), clamp(reflect(-V, N).y * 2.0, 0.0, 1.0));
+  vec3 col = mix(vec3(0.07,0.15,0.15), sky, fr) + vec3(1.0,0.95,0.85) * pow(max(dot(reflect(-L, N), V), 0.0), 160.0) * 1.6;
+  gl_FragColor = vec4(mix(col, uFog, smoothstep(uFogN, uFogF, vFog)), 0.9);
+}`;
+
+// sky dome
+{
+  const g = new THREE.SphereGeometry(1000, 32, 16);
+  const m = new THREE.ShaderMaterial({
+    uniforms: { uSun: SH.uSun, uFog: SH.uFog }, side: THREE.BackSide, depthWrite: false, fog: false,
+    vertexShader: `varying vec3 vD; void main(){ vD = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position,1.0); gl_Position = p.xyww; }`,
+    fragmentShader: `uniform vec3 uSun, uFog; varying vec3 vD; void main(){ vec3 d = normalize(vD); float y = max(d.y, 0.0);
+      vec3 c = mix(uFog, vec3(0.36,0.55,0.80), pow(y, 0.6)); float s = max(dot(d, normalize(uSun)), 0.0);
+      c += vec3(1.0,0.9,0.7) * (pow(s, 600.0) * 3.0 + pow(s, 12.0) * 0.18); gl_FragColor = vec4(c, 1.0); }`
+  });
+  const sky = new THREE.Mesh(g, m); sky.frustumCulled = false; sky.renderOrder = -1; sky.onBeforeRender = () => sky.position.copy(camera.position); scene.add(sky);
+}
+
+// ===================== Textures =====================
+function detailTex() {
+  const W = 256, d = new Uint8Array(W * W * 4), n = fbm(mulberry32(5), 8, 8, 5);
+  for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) { const v = n(x / W, y / W) * 255, i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+  return toTex({ data: d, W, H: W }, true);
+}
+function grassTex() {
+  const S = 256, cv = document.createElement('canvas'); cv.width = S * 2; cv.height = S;
+  const c = cv.getContext('2d'), r = mulberry32(9); c.lineCap = 'round';
+  for (let v = 0; v < 2; v++) {
+    const ox = v * S;
+    for (let k = 0; k < 46; k++) {
+      const x = ox + 14 + r() * (S - 28), h = S * (0.45 + r() * 0.5), lean = (r() - 0.5) * 60, w = 3 + r() * 4;
+      c.fillStyle = `rgb(${60 + r() * 50},${120 + r() * 60},${30 + r() * 30})`;
+      c.beginPath(); c.moveTo(x - w, S); c.quadraticCurveTo(x + lean * 0.3, S - h * 0.6, x + lean, S - h); c.quadraticCurveTo(x + lean * 0.3 + w * 0.3, S - h * 0.6, x + w, S); c.fill();
+    }
+    if (v === 1) for (let k = 0; k < 16; k++) {
+      const x = ox + 24 + r() * (S - 48), y = S * (0.12 + r() * 0.45), col = ['#f4f1e6', '#f2d34a', '#b58ad8', '#e9a3c0'][Math.floor(r() * 4)];
+      c.strokeStyle = 'rgb(70,130,40)'; c.lineWidth = 2; c.beginPath(); c.moveTo(x, S); c.lineTo(x, y); c.stroke();
+      c.fillStyle = col; for (let p = 0; p < 5; p++) { const a = p / 5 * 6.28; c.beginPath(); c.arc(x + Math.cos(a) * 5, y + Math.sin(a) * 5, 4.5, 0, 6.28); c.fill(); }
+      c.fillStyle = '#e8b830'; c.beginPath(); c.arc(x, y, 3, 0, 6.28); c.fill();
+    }
+  }
+  const img = c.getImageData(0, 0, cv.width, cv.height), d = new Uint8Array(img.data);
+  for (let i = 0; i < d.length; i += 4) if (d[i + 3] < 10) { d[i] = 90; d[i + 1] = 140; d[i + 2] = 50; }
+  return toTex({ data: d, W: cv.width, H: cv.height }, false);
+}
+
+// ===================== Build world =====================
+const variants = []; // per species: [variant...]
+const TREE_GROUPS = []; // {trees, lods:[{bark, leaf, attr}]}
+let grassMesh, grassChunks = [], GRASS_MAX = 16000;
+const QUALITY = { std: { l0: 40, l1: 95, far: 230, grass: 70, dpr: 1.75 }, low: { l0: 26, l1: 60, far: 160, grass: 42, dpr: 1 } };
+let Q = QUALITY.std;
+
+function colorAt(x, z, h, s, m, fc, tl, can) {
+  const n = fbm2(x * 0.08, z * 0.08, 3, 3);
+  let c = [mix(0.62, 0.36, m), mix(0.60, 0.50, m), mix(0.34, 0.22, m)];
+  const blend = (t, col) => { c = [mix(c[0], col[0], t), mix(c[1], col[1], t), mix(c[2], col[2], t)]; };
+  blend(clamp(can, 0, 1) * 0.85, [0.30, 0.26, 0.17]);
+  blend(smooth(tl - 4, tl + 10, h), [0.52, 0.50, 0.38]);
+  blend(smooth(0.62, 0.95, s), [0.46, 0.44, 0.41]);
+  blend(smooth(92, 104, h + (n - 0.5) * 16) * smooth(0.95, 0.6, s), [0.93, 0.94, 0.96]);
+  const rd = riverDist(x, z);
+  blend(Math.max(smooth(1.8, 0.4, h), rd < 10 ? smooth(10, 5.5, rd) : 0) * 0.85, [0.58, 0.54, 0.45]);
+  blend(smooth(-0.2, -1.5, h), [0.30, 0.27, 0.21]);
+  const f = 0.86 + 0.28 * n; return [c[0] * f, c[1] * f, c[2] * f];
+}
+function buildTerrain(detail) {
+  // canopy shade from placed trees
+  for (const t of trees) {
+    const V = variants[SPI[t.sp]][t.v], R = V.crownR * t.scale * 1.1, off = V.crownY * t.scale * 0.35;
+    const cx = t.x - SUN.x * off, cz = t.z - SUN.z * off, r = Math.ceil(R / G);
+    const ci = Math.round((cx + HALF) / G), cj = Math.round((cz + HALF) / G);
+    for (let j = cj - r; j <= cj + r; j++) for (let i = ci - r; i <= ci + r; i++) {
+      if (i < 0 || j < 0 || i > N || j > N) continue;
+      const d = Math.hypot(-HALF + i * G - cx, -HALF + j * G - cz) / R; if (d < 1) GCan[j * NV + i] += (1 - d * d) * (t.sp === 'shrub' ? 0.25 : 0.55);
+    }
+  }
+  const mk = (n, step, org, hf, cf, nf) => {
+    const V = n + 1, pos = new Float32Array(V * V * 3), nor = new Float32Array(V * V * 3), col = new Float32Array(V * V * 3), idx = [];
+    for (let j = 0; j < V; j++) for (let i = 0; i < V; i++) {
+      const k = j * V + i, x = org + i * step, z = org + j * step, h = hf(x, z, i, j);
+      pos.set([x, h, z], k * 3); col.set(cf(x, z, h, i, j), k * 3); nor.set(nf(x, z, i, j), k * 3);
+    }
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const a = j * V + i, b = a + 1, c = a + V, d = c + 1; idx.push(a, c, b, b, c, d); }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('tcol', new THREE.BufferAttribute(col, 3)); g.setIndex(idx);
+    return g;
+  };
+  const mat = new THREE.ShaderMaterial({ uniforms: { ...SH, uDetail: { value: detail } }, vertexShader: TERR_VS, fragmentShader: TERR_FS });
+  const inner = mk(N, G, -HALF, (x, z, i, j) => GH[j * NV + i],
+    (x, z, h, i, j) => { const k = j * NV + i; return colorAt(x, z, h, GS[k], GM[k], GFC[k], treelineAt(x, z), GCan[k]); },
+    (x, z, i, j) => { const k = j * NV + i, l = Math.hypot(GNx[k], 1, GNz[k]); return [-GNx[k] / l, 1 / l, -GNz[k] / l]; });
+  const OS = 10, ON = 140, oh = (x, z) => heightAt(x, z) - (Math.abs(x) < 296 && Math.abs(z) < 296 ? 3 : 0);
+  const outer = mk(ON, OS, -700, (x, z) => oh(x, z),
+    (x, z, h) => { const gx = (heightAt(x + 3, z) - heightAt(x - 3, z)) / 6, gz = (heightAt(x, z + 3) - heightAt(x, z - 3)) / 6; return colorAt(x, z, h, Math.hypot(gx, gz), 0.35, coverAt(x, z), treelineAt(x, z), smooth(0.4, 0.6, coverAt(x, z)) * smooth(75, 60, h) * 0.8); },
+    (x, z) => { const gx = (heightAt(x + 5, z) - heightAt(x - 5, z)) / 10, gz = (heightAt(x, z + 5) - heightAt(x, z - 5)) / 10, l = Math.hypot(gx, 1, gz); return [-gx / l, 1 / l, -gz / l]; });
+  scene.add(new THREE.Mesh(inner, mat), new THREE.Mesh(outer, mat));
+  // outer forest silhouettes: simple instanced far trees are skipped; fog does the rest
+}
+function buildWater() {
+  const mat = new THREE.ShaderMaterial({ uniforms: { uTime: SH.uTime, uSun: SH.uSun, uFog: SH.uFog, uFogN: SH.uFogN, uFogF: SH.uFogF }, vertexShader: WATER_VS, fragmentShader: WATER_FS, transparent: true, depthWrite: false });
+  const lake = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), mat); lake.rotation.x = -Math.PI / 2; scene.add(lake);
+  const pos = [], idx = []; let n = 0;
+  for (let z = RIVER_START + 6; z <= RIVER_END; z += 2.5) {
+    const cx = riverX(z), dx = (riverX(z + 1) - riverX(z - 1)) / 2, l = Math.hypot(dx, 1), px = 1 / l, pz = -dx / l, y = riverBed(z) + 1.1;
+    if (y < 0.02 && n > 0) { for (let k = pos.length - 12; k < pos.length; k += 3) pos[k + 1] = Math.max(pos[k + 1], 0.02); break; }
+    for (const o of [-8, -3, 3, 8]) pos.push(cx + px * o, y, z + pz * o);
+    if (n > 0) { const a = (n - 1) * 4, b = n * 4; for (let k = 0; k < 3; k++) idx.push(a + k, b + k, a + k + 1, a + k + 1, b + k, b + k + 1); }
+    n++;
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+  const river = new THREE.Mesh(g, mat); river.renderOrder = 1; scene.add(river);
+}
+function buildRocks() {
+  const rng = mulberry32(88), list = [];
+  for (let x = -HALF + 5; x < HALF - 5; x += 6) for (let z = -HALF + 5; z < HALF - 5; z += 6) {
+    const px = x + (rng() - 0.5) * 6, pz = z + (rng() - 0.5) * 6, e = env(px, pz);
+    const p = smooth(0.45, 1.0, e.s) * 0.55 + smooth(e.tl, e.tl + 15, e.h) * 0.3 + (e.rd > 4 && e.rd < 10 ? 0.25 : 0) + 0.015;
+    if (rng() > p || e.h < -1) continue;
+    const sc = (0.4 + rng() * 1.2) * (1 + smooth(0.5, 1.2, e.s) * 1.5);
+    list.push({ x: px, z: pz, y: e.h - sc * 0.3, sc, e });
+  }
+  const geo = new THREE.IcosahedronGeometry(1, 1), p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), k = 0.75 + 0.5 * vnoise(x * 1.7 + 5, z * 1.7 + y * 1.3, 3); p.setXYZ(i, x * k * 1.2, Math.max(y * k * 0.7, -0.35), z * k); }
+  geo.computeVertexNormals();
+  const im = new THREE.InstancedMesh(geo, new THREE.ShaderMaterial({ uniforms: { ...SH }, vertexShader: ROCK_VS, fragmentShader: ROCK_FS }), list.length);
+  const data = new Float32Array(list.length * 4), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
+  list.forEach((r, i) => {
+    e.set((rng() - 0.5) * 0.4, rng() * 6.28, (rng() - 0.5) * 0.4); q.setFromEuler(e);
+    m.compose(new V3(r.x, r.y, r.z), q, new V3(r.sc * (0.8 + rng() * 0.5), r.sc, r.sc * (0.8 + rng() * 0.5))); im.setMatrixAt(i, m);
+    const g = 0.42 + rng() * 0.14; data.set([g, g * 0.97, g * 0.92, r.e.m * (1 - smooth(r.e.tl, r.e.tl + 10, r.e.h))], i * 4);
+  });
+  geo.setAttribute('iData', new THREE.InstancedBufferAttribute(data, 4));
+  im.frustumCulled = false; scene.add(im);
+}
+function buildGrass(tex) {
+  const rng = mulberry32(4242), CH = 30, NC = (HALF * 2) / CH;
+  for (let cj = 0; cj < NC; cj++) for (let ci = 0; ci < NC; ci++) {
+    const mats = [], dat = [], x0 = -HALF + ci * CH, z0 = -HALF + cj * CH;
+    for (let x = x0; x < x0 + CH; x += 1.7) for (let z = z0; z < z0 + CH; z += 1.7) {
+      const px = x + rng() * 1.7, pz = z + rng() * 1.7, e = env(px, pz);
+      if (e.h < 0.3 || e.s > 1.0 || e.rd < 5) continue;
+      const can = gsample(GCan, px, pz);
+      let p = ((1 - e.cover) * 0.9 + e.cover * 0.18 + e.edge * 0.3) * (1 - clamp(can, 0, 1) * 0.75) * smooth(1.0, 0.7, e.s) * (1 - smooth(e.tl + 10, e.tl + 30, e.h) * 0.6) * (1 - smooth(92, 100, e.h));
+      if (rng() > p) continue;
+      const sc = (0.7 + rng() * 0.6) * mix(1, 0.6, smooth(e.tl, e.tl + 15, e.h)) * mix(0.8, 1.2, e.m), a = rng() * 6.28;
+      const c = Math.cos(a) * sc, s = Math.sin(a) * sc;
+      mats.push(c, 0, -s, 0, 0, sc * (0.8 + 0.5 * e.m), 0, 0, s, 0, c, 0, px, e.h - 0.05, pz, 1);
+      const dry = 1 - e.m, alp = smooth(e.tl - 5, e.tl + 10, e.h);
+      const flower = e.fc < 0.3 && e.h < 45 && e.m > 0.25 && rng() < 0.45 ? 1 : 0;
+      dat.push(mix(0.42, 0.62, dry) + alp * 0.1, mix(0.50, 0.46, dry) - alp * 0.05, mix(0.22, 0.20, dry), flower);
+    }
+    grassChunks.push({ cx: x0 + CH / 2, cz: z0 + CH / 2, m: new Float32Array(mats), d: new Float32Array(dat) });
+  }
+  // three crossed quads per tuft
+  const pos = [], uv = [], nor = [], idx = [];
+  for (let k = 0; k < 3; k++) {
+    const a = k * Math.PI / 3, cx = Math.cos(a) * 0.55, cz = Math.sin(a) * 0.55, b = pos.length / 3;
+    pos.push(-cx, 0, -cz, cx, 0, cz, cx, 0.75, cz, -cx, 0.75, cz * -1); uv.push(0, 1, 1, 1, 1, 0, 0, 0);
+    nor.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0); idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setIndex(idx);
+  const dAttr = new THREE.InstancedBufferAttribute(new Float32Array(GRASS_MAX * 4), 4); dAttr.setUsage(THREE.DynamicDrawUsage); g.setAttribute('iData', dAttr);
+  const mat = new THREE.ShaderMaterial({ uniforms: { ...SH, map: { value: tex }, uGR: { value: Q.grass } }, vertexShader: GRASS_VS, fragmentShader: GRASS_FS, side: THREE.DoubleSide });
+  grassMesh = new THREE.InstancedMesh(g, mat, GRASS_MAX); grassMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); grassMesh.count = 0; grassMesh.frustumCulled = false;
+  scene.add(grassMesh);
+}
+function buildTreeMeshes() {
+  variants.forEach((vs, si) => vs.forEach((V, vi) => {
+    const list = trees.filter((t) => t.sp === SPECIES[si].id && t.v === vi); if (!list.length) return;
+    const mats = new Float32Array(list.length * 16), m = new THREE.Matrix4(), q = new THREE.Quaternion();
+    list.forEach((t, i) => {
+      let y = 1e9; for (const [dx, dz] of [[0.8, 0], [-0.8, 0], [0, 0.8], [0, -0.8], [0, 0]]) y = Math.min(y, hAt(t.x + dx, t.z + dz));
+      q.setFromAxisAngle(UP, t.rot); m.compose(new V3(t.x, y - 0.25 * t.scale, t.z), q, new V3(t.scale, t.scale, t.scale)); m.toArray(mats, i * 16);
+    });
+    const grp = { list, mats, lods: [] };
+    for (let l = 0; l < 3; l++) {
+      const attr = new THREE.InstancedBufferAttribute(new Float32Array(list.length * 16), 16); attr.setUsage(THREE.DynamicDrawUsage);
+      const mk = (geo, mat) => { const im = new THREE.InstancedMesh(geo, mat, list.length); im.instanceMatrix = attr; im.count = 0; im.frustumCulled = false; scene.add(im); return im; };
+      grp.lods.push({ attr, bark: mk(V.geo[l].bark, V.barkMat), leaf: V.geo[l].leaf ? mk(V.geo[l].leaf, V.leafMat) : null });
+    }
+    TREE_GROUPS.push(grp);
+  }));
+}
+function toGeo(B) {
+  if (!B.idx.length) return null;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(B.pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(B.nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(B.uv, 2)); g.setAttribute('ao', new THREE.Float32BufferAttribute(B.ao, 1));
+  g.setAttribute('sway', new THREE.Float32BufferAttribute(B.sway, 1)); g.setAttribute('phase', new THREE.Float32BufferAttribute(B.ph, 1));
+  g.setIndex(B.idx); return g;
+}
+
+// ===================== Per-frame instance updates =====================
+let tris = 0;
+function updateInstances() {
+  const cx = camera.position.x, cz = camera.position.z, fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw);
+  const L0 = Q.l0 * Q.l0, L1 = Q.l1 * Q.l1, F = Q.far * Q.far; tris = 0;
+  for (const grp of TREE_GROUPS) {
+    const c = [0, 0, 0], arrs = grp.lods.map((l) => l.attr.array);
+    for (let i = 0; i < grp.list.length; i++) {
+      const t = grp.list[i], dx = t.x - cx, dz = t.z - cz, d2 = dx * dx + dz * dz;
+      if (d2 > F) continue;
+      if (d2 > 225 && dx * fx + dz * fz < -0.15 * Math.sqrt(d2)) continue; // behind the camera
+      const l = d2 < L0 ? 0 : d2 < L1 ? 1 : 2;
+      arrs[l].set(grp.mats.subarray(i * 16, i * 16 + 16), c[l] * 16); c[l]++;
+    }
+    grp.lods.forEach((L, l) => {
+      L.bark.count = c[l]; if (L.leaf) L.leaf.count = c[l]; L.attr.needsUpdate = c[l] > 0;
+      tris += c[l] * (L.bark.geometry.index.count + (L.leaf ? L.leaf.geometry.index.count : 0)) / 3;
+    });
+  }
+  // grass
+  const R = Q.grass, R2 = R * R, ma = grassMesh.instanceMatrix.array, da = grassMesh.geometry.attributes.iData.array; let n = 0;
+  for (const ch of grassChunks) {
+    if (Math.abs(ch.cx - cx) > R + 22 || Math.abs(ch.cz - cz) > R + 22) continue;
+    const cnt = ch.d.length / 4;
+    for (let i = 0; i < cnt && n < GRASS_MAX; i++) {
+      const dx = ch.m[i * 16 + 12] - cx, dz = ch.m[i * 16 + 14] - cz, d2 = dx * dx + dz * dz;
+      if (d2 > R2 || (d2 > 36 && dx * fx + dz * fz < -0.2 * Math.sqrt(d2))) continue;
+      ma.set(ch.m.subarray(i * 16, i * 16 + 16), n * 16); da.set(ch.d.subarray(i * 4, i * 4 + 4), n * 4); n++;
+    }
+  }
+  grassMesh.count = n; grassMesh.instanceMatrix.needsUpdate = true; grassMesh.geometry.attributes.iData.needsUpdate = true;
+  tris += n * 6;
+}
+
+// ===================== Player & input =====================
+const player = { x: 0, z: 0, y: 10, yaw: 0, pitch: -0.05, bob: 0, crouch: false, speed: 0, still: 0 };
+function setCrouch(v) { player.crouch = v; $('#stance').hidden = !v; $('#crouch-btn').setAttribute('aria-pressed', v); }
+$('#crouch-btn').addEventListener('click', () => setCrouch(!player.crouch));
+const keys = new Set(); let joy = null, look = null, started = false, paused = true;
+addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+  if (e.code === 'Escape') { if (!$('#guide').hidden) toggleGuide(false); else if (started) setPaused(!paused); return; }
+  if (!started || paused) return;
+  if (e.code === 'KeyM') { toggleMap(); return; }
+  if (e.code === 'KeyC') { setCrouch(!player.crouch); return; }
+  if (e.code === 'KeyJ' || e.code === 'Tab') { e.preventDefault(); toggleGuide(); return; }
+  keys.add(e.code); if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
+});
+addEventListener('keyup', (e) => keys.delete(e.code));
+addEventListener('blur', () => keys.clear());
+canvas.addEventListener('pointerdown', (e) => {
+  if (paused) return;
+  canvas.setPointerCapture(e.pointerId);
+  if (e.pointerType === 'touch' && e.clientX < innerWidth * 0.45 && !joy) { joy = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: 0, y: 0 }; showJoy(e.clientX, e.clientY, 0, 0); }
+  else if (!look) look = { id: e.pointerId, x: e.clientX, y: e.clientY };
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (joy && e.pointerId === joy.id) { let dx = e.clientX - joy.x0, dy = e.clientY - joy.y0; const l = Math.hypot(dx, dy); if (l > 55) { dx *= 55 / l; dy *= 55 / l; } joy.x = dx / 55; joy.y = dy / 55; showJoy(joy.x0, joy.y0, dx, dy); }
+  else if (look && e.pointerId === look.id) {
+    const k = e.pointerType === 'touch' ? 0.006 : 0.004;
+    player.yaw -= (e.clientX - look.x) * k; player.pitch = clamp(player.pitch - (e.clientY - look.y) * k, -1.3, 1.3); look.x = e.clientX; look.y = e.clientY;
+  }
+});
+const endP = (e) => { if (joy && e.pointerId === joy.id) { joy = null; $('#joy').hidden = true; } if (look && e.pointerId === look.id) look = null; };
+canvas.addEventListener('pointerup', endP); canvas.addEventListener('pointercancel', endP);
+function showJoy(x, y, dx, dy) { const j = $('#joy'); j.hidden = false; j.style.left = x + 'px'; j.style.top = y + 'px'; j.firstElementChild.style.transform = `translate(${dx}px,${dy}px)`; }
+
+function waterDepth(x, z, h) { let s = 0; if (riverDist(x, z) < 9) s = Math.max(s, riverBed(z) + 1.1); return s - h; }
+function movePlayer(dt) {
+  let ix = 0, iy = 0;
+  if (keys.has('KeyW') || keys.has('ArrowUp')) iy += 1; if (keys.has('KeyS') || keys.has('ArrowDown')) iy -= 1;
+  if (keys.has('KeyD')) ix += 1; if (keys.has('KeyA')) ix -= 1;
+  if (keys.has('ArrowLeft')) player.yaw += dt * 1.8; if (keys.has('ArrowRight')) player.yaw -= dt * 1.8;
+  if (joy) { ix += joy.x; iy -= joy.y; }
+  const l = Math.hypot(ix, iy); if (l > 1) { ix /= l; iy /= l; }
+  const h0 = hAt(player.x, player.z), px0 = player.x, pz0 = player.z;
+  if (l > 0.05) {
+    const run = keys.has('ShiftLeft') || keys.has('ShiftRight') || (joy && Math.hypot(joy.x, joy.y) > 0.95);
+    let sp = player.crouch ? 1.8 : run ? 9 : 4.5;
+    const fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw), rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
+    let dx = (fx * iy + rx * ix) * sp * dt, dz = (fz * iy + rz * ix) * sp * dt;
+    const d = Math.hypot(dx, dz), nx = player.x + dx, nz = player.z + dz, h1 = hAt(nx, nz), grade = (h1 - h0) / Math.max(d, 1e-4);
+    if (grade > 1.2) { dx = dz = 0; }
+    else {
+      let f = clamp(1 - Math.max(0, grade) * 0.6, 0.35, 1);
+      const wd = waterDepth(nx, nz, h1);
+      if (wd > 1.35) { dx = dz = 0; flash('ここから先は深い水です'); }
+      else if (wd > 0.2) f *= 0.45;
+      dx *= f; dz *= f;
+    }
+    player.x = clamp(player.x + dx, -285, 285); player.z = clamp(player.z + dz, -285, 285);
+    player.bob += d * 1.6;
+  }
+  // trunk collision
+  near(player.x, player.z, 6, (t) => {
+    const r = t.sp === 'shrub' ? 0.5 * t.scale : Math.max(0.35, SPECIES[SPI[t.sp]].base.radius * t.scale * 1.6);
+    const dx = player.x - t.x, dz = player.z - t.z, d = Math.hypot(dx, dz);
+    if (d < r + 0.3 && d > 1e-4) { player.x = t.x + dx / d * (r + 0.3); player.z = t.z + dz / d * (r + 0.3); }
+  });
+  const h = hAt(player.x, player.z), wd = Math.max(0, waterDepth(player.x, player.z, h));
+  const moved = dt > 0 ? Math.hypot(player.x - px0, player.z - pz0) / dt : 0;
+  player.speed += (moved - player.speed) * Math.min(1, dt * 6); player.still = player.speed < 0.3 ? player.still + dt : 0;
+  const target = h + (player.crouch ? 0.95 : 1.65) - Math.min(wd, 0.9) * 0.5 + Math.sin(player.bob) * 0.04;
+  player.y += (target - player.y) * Math.min(1, dt * 12);
+  camera.position.set(player.x, player.y, player.z); camera.rotation.set(player.pitch, player.yaw, 0);
+}
+
+// ===================== Discovery, HUD, map =====================
+const found = new Set(), ALL = [...SPECIES.map((s) => ({ ...s, cat: 'tree' })), ...ANIMAL_DEFS.map((s) => ({ ...s, cat: 'animal' })), ...LANDMARKS.map((s) => ({ ...s, cat: 'place' }))];
+function discover(id) {
+  if (found.has(id)) return; found.add(id);
+  const it = ALL.find((a) => a.id === id);
+  toast(`発見: ${it.name}`, it.note);
+  if (id === 'giant' || id === 'summit' || id === 'lake') markers.push({ id, x: player.x, z: player.z });
+  updateCount(); renderGuide();
+  if (found.size === ALL.length) setTimeout(() => toast('すべて見つけました', '谷の植生をひととおり記録しました。気になった場所をもう一度歩いてみてください。'), 4500);
+}
+function checkDiscoveries() {
+  const x = player.x, z = player.z, e = env(x, z);
+  near(x, z, 9, (t) => { if (Math.hypot(t.x - x, t.z - z) < 9) discover(t.sp); });
+  if (GIANT && Math.hypot(GIANT.x - x, GIANT.z - z) < 16) discover('giant');
+  if (e.ld < 1.2 && e.h < 6) discover('lake');
+  if (z < -110 && e.rd < 16) discover('gorge');
+  if (e.fc < 0.27 && e.h > 1 && e.h < 40 && e.m < 0.8 && e.rd > 10) discover('meadow');
+  if (e.h > e.tl) discover('treeline');
+  if (Math.hypot(SUMMIT.x - x, SUMMIT.z - z) < 25 && e.h > MAXH - 10) discover('summit');
+}
+function biomeName(e) {
+  if (e.h < 0.2) return '水辺';
+  if (e.h > e.tl + 6) return e.h > 92 ? '高山帯(雪渓)' : '高山帯';
+  if (e.h > e.tl - 10) return '森林限界';
+  if ((e.rd < 18 || e.ld < 1.35) && e.m > 0.6) return '河畔林';
+  if (e.m > 0.85 && e.h < 6) return '湿地';
+  if (e.cover < 0.3) return e.edge > 0.4 ? '林縁' : '草原';
+  if (e.h < 22) return '落葉広葉樹林';
+  if (e.h < 42) return '針広混交林';
+  return '亜高山針葉樹林';
+}
+const markers = [];
+let toastTimer = 0, flashTimer = 0;
+function toast(title, body) {
+  const t = $('#toast'); t.querySelector('strong').textContent = title; t.querySelector('p').textContent = body;
+  t.classList.remove('show'); void t.offsetWidth; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 5200);
+}
+function flash(msg) { if (flashTimer > 0) return; flashTimer = 2.5; const f = $('#flash'); f.textContent = msg; f.classList.add('show'); setTimeout(() => f.classList.remove('show'), 1800); }
+function updateCount() { $('#count').textContent = `${found.size} / ${ALL.length}`; }
+
+// minimap
+const MAPN = 300, mapCv = $('#map'), mctx = mapCv.getContext('2d');
+mapCv.width = mapCv.height = MAPN;
+const mapBase = document.createElement('canvas'), fogCv = document.createElement('canvas');
+mapBase.width = mapBase.height = fogCv.width = fogCv.height = MAPN;
+const explored = new Uint8Array(60 * 60);
+function buildMap() {
+  const c = mapBase.getContext('2d'), img = c.createImageData(MAPN, MAPN);
+  for (let j = 0; j < MAPN; j++) for (let i = 0; i < MAPN; i++) {
+    const k = j * NV + i, x = -HALF + i * G, z = -HALF + j * G, h = GH[k];
+    let col;
+    const inRiver = riverDist(x, z) < 5 && h < riverBed(z) + 1.1;
+    if (h < 0 || inRiver) col = [0.33, 0.50, 0.58];
+    else {
+      col = colorAt(x, z, h, GS[k], GM[k], GFC[k], treelineAt(x, z), 0);
+      const can = clamp(GCan[k], 0, 1); col = [mix(col[0], 0.17, can), mix(col[1], 0.30, can), mix(col[2], 0.15, can)];
+      const l = Math.hypot(GNx[k], 1, GNz[k]), sh = clamp(0.55 + ((-GNx[k] * SUN.x - GNz[k] * SUN.z + SUN.y) / l) * 0.6, 0.4, 1.25);
+      col = col.map((v) => v * sh);
+    }
+    const o = (j * MAPN + i) * 4; img.data[o] = clamp(col[0] * 255, 0, 255); img.data[o + 1] = clamp(col[1] * 255, 0, 255); img.data[o + 2] = clamp(col[2] * 255, 0, 255); img.data[o + 3] = 255;
+  }
+  c.putImageData(img, 0, 0);
+  const f = fogCv.getContext('2d'); f.fillStyle = 'rgba(24,30,26,0.82)'; f.fillRect(0, 0, MAPN, MAPN);
+}
+function reveal() {
+  const f = fogCv.getContext('2d'), px = (player.x + HALF) / G, pz = (player.z + HALF) / G;
+  f.globalCompositeOperation = 'destination-out';
+  const g = f.createRadialGradient(px, pz, 8, px, pz, 22); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  f.fillStyle = g; f.beginPath(); f.arc(px, pz, 22, 0, 6.29); f.fill(); f.globalCompositeOperation = 'source-over';
+  const ci = Math.floor((player.x + HALF) / 10), cj = Math.floor((player.z + HALF) / 10);
+  for (let j = cj - 3; j <= cj + 3; j++) for (let i = ci - 3; i <= ci + 3; i++) if (i >= 0 && j >= 0 && i < 60 && j < 60 && Math.hypot(i - ci, j - cj) <= 3.5) explored[j * 60 + i] = 1;
+}
+function drawMap() {
+  mctx.drawImage(mapBase, 0, 0); mctx.drawImage(fogCv, 0, 0);
+  for (const m of markers) { mctx.fillStyle = '#F4E9B8'; mctx.strokeStyle = '#1d2520'; mctx.lineWidth = 1.5; mctx.beginPath(); mctx.arc((m.x + HALF) / G, (m.z + HALF) / G, 4, 0, 6.29); mctx.fill(); mctx.stroke(); }
+  const px = (player.x + HALF) / G, pz = (player.z + HALF) / G;
+  mctx.save(); mctx.translate(px, pz); mctx.rotate(-player.yaw);
+  mctx.fillStyle = '#fff'; mctx.strokeStyle = '#1d2520'; mctx.lineWidth = 2;
+  mctx.beginPath(); mctx.moveTo(0, -9); mctx.lineTo(6, 6); mctx.lineTo(0, 3); mctx.lineTo(-6, 6); mctx.closePath(); mctx.stroke(); mctx.fill(); mctx.restore();
+}
+function toggleMap() { $('.mapwrap').classList.toggle('big'); }
+$('.mapwrap').addEventListener('click', toggleMap);
+
+// compass
+const compass = $('#compass-track');
+const DIRS = [['北', 0], ['北東', 45], ['東', 90], ['南東', 135], ['南', 180], ['南西', 225], ['西', 270], ['北西', 315]];
+compass.innerHTML = [...DIRS, ...DIRS.map(([n, a]) => [n, a + 360]), ...DIRS.map(([n, a]) => [n, a - 360])].map(([n, a]) => `<span data-a="${a}" class="${n.length === 1 ? 'main' : ''}">${n}</span>`).join('');
+const compSpans = [...compass.children];
+function updateCompass() {
+  const head = ((-player.yaw * 180 / Math.PI) % 360 + 360) % 360, w = compass.clientWidth;
+  for (const s of compSpans) { const d = +s.dataset.a - head, x = w / 2 + d * 2.2; s.style.transform = `translateX(${x}px) translateX(-50%)`; s.style.opacity = Math.abs(d) > 80 ? 0 : 1 - Math.abs(d) / 90; }
+}
+
+// field guide
+function renderGuide() {
+  $('#guide-list').innerHTML = ALL.map((a) => {
+    const f = found.has(a.id);
+    return `<li class="${f ? 'on' : ''}"><span class="kind">${a.kind}</span><h3>${f ? a.name : '？？？'}</h3><p>${f ? a.note : 'ヒント: ' + a.hint}</p></li>`;
+  }).join('');
+  $('#guide-count').textContent = `${found.size} / ${ALL.length} 件を記録`;
+}
+function toggleGuide(force) {
+  const g = $('#guide'), open = force === undefined ? g.hidden : force;
+  g.hidden = !open; keys.clear();
+  if (open) { renderGuide(); $('#guide-close').focus(); }
+}
+$('#guide-btn').addEventListener('click', () => toggleGuide(true));
+$('#guide-close').addEventListener('click', () => toggleGuide(false));
+
+function setPaused(p) {
+  paused = p; keys.clear();
+  $('#menu').hidden = !p; $('#start').textContent = started ? '探検を再開する' : '探検を始める';
+  if (p) $('#start').focus();
+}
+$('#start').addEventListener('click', () => {
+  started = true; setPaused(false); $('.hud').hidden = false;
+  if (!found.size) toast('谷に着きました', '木や動物、地形を記録しよう。動物は走ると逃げるので、見つけたらしゃがんでそっと近づいて。');
+});
+$('#pause-btn').addEventListener('click', () => setPaused(true));
+$('#quality').addEventListener('change', (e) => { Q = QUALITY[e.target.value]; applyQuality(); try { localStorage.setItem('forest-q', e.target.value); } catch (_) {} });
+function applyQuality() {
+  SH.uFogF.value = Q.far; SH.uFogN.value = Q.far * 0.22; scene.background = FOGC;
+  if (grassMesh) grassMesh.material.uniforms.uGR.value = Q.grass;
+  renderer.setPixelRatio(Math.min(devicePixelRatio, Q.dpr)); resize();
+}
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize);
+
+// ===================== Boot =====================
+const step = (msg, p) => new Promise((r) => { $('#load-msg').textContent = msg; $('#load-bar').style.width = (p * 100) + '%'; setTimeout(r, 16); });
+async function boot() {
+  try { const q = localStorage.getItem('forest-q'); if (q && QUALITY[q]) { $('#quality').value = q; Q = QUALITY[q]; } } catch (_) {}
+  applyQuality();
+  await step('地形をつくっています', 0.05); buildGrids();
+  await step('テクスチャを描いています', 0.2);
+  const barkTex = {}, detail = detailTex(), grassT = grassTex();
+  for (const s of SPECIES) if (!barkTex[s.base.bark]) barkTex[s.base.bark] = toTex(makeBarkData(s.base.bark), true);
+  let done = 0; const total = SPECIES.reduce((a, s) => a + s.nv, 0);
+  for (const [si, s] of SPECIES.entries()) {
+    const leafTex = s.base.leafDensity > 0 ? toTex(makeLeafCanvas(s.base), false) : null;
+    const barkMat = treeMat(barkTex[s.base.bark], false), leafMat = leafTex ? treeMat(leafTex, true) : null;
+    variants[si] = [];
+    for (let v = 0; v < s.nv; v++) {
+      await step(`${s.name}のモデルを生成しています`, 0.25 + 0.35 * done / total);
+      const P = { ...s.base, seed: 100 + si * 1000 + v * 37 };
+      const sk = genSkeleton(P), cards = genCards(P, sk), crown = crownOf(cards, P);
+      const lods = [0, 1, 2].map((l) => buildLOD(P, sk, cards, crown, l));
+      variants[si].push({ lods, barkMat, leafMat, crownR: crown ? (crown.e.x + crown.e.z) / 2 : 1.5, crownY: crown ? crown.c.y : P.height * 0.6, geo: lods.map((L) => ({ bark: toGeo(L.bark), leaf: toGeo(L.leaf) })) });
+      done++;
+    }
+  }
+  await step('植生を配置しています', 0.62); placeVegetation();
+  await step('地面を仕上げています', 0.72); buildTerrain(detail); buildWater(); buildRocks();
+  await step('草を植えています', 0.84); buildGrass(grassT);
+  await step('地図を描いています', 0.94); buildTreeMeshes(); buildMap();
+  await step('動物を放しています', 0.98); buildAnimals();
+  player.x = SPAWN.x; player.z = SPAWN.z; player.y = hAt(SPAWN.x, SPAWN.z) + 1.65; player.yaw = 0;
+  $('#stats-trees').textContent = `${trees.length.toLocaleString('ja-JP')}本の木`;
+  $('.load').hidden = true; $('#load-msg').textContent = '準備ができました'; $('#start').disabled = false; $('#start').focus();
+  updateCount(); renderGuide(); movePlayer(0); updateInstances(); requestAnimationFrame(loop);
+}
+
+let last = performance.now(), frame = 0, tick = 0, fpsAcc = 0, fpsN = 0;
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; frame++;
+  SH.uTime.value = now / 1000; flashTimer -= dt;
+  if (!paused) { movePlayer(dt); updateAnimals(dt); }
+  if (frame % 3 === 0) updateInstances();
+  tick += dt; fpsAcc += dt; fpsN++;
+  if (tick > 0.25 && started) {
+    tick = 0; checkDiscoveries(); reveal(); drawMap();
+    const e = env(player.x, player.z);
+    $('#biome').textContent = biomeName(e); $('#elev').textContent = `標高 ${Math.round(Math.max(0, e.h) * 10 + 120)} m`;
+    let ex = 0; for (const v of explored) ex += v; $('#explored').textContent = `探索 ${Math.round(ex / explored.length * 100)}%`;
+    if (fpsAcc > 1) { $('#perf').textContent = `${Math.round(fpsN / fpsAcc)} fps　${Math.round(tris / 1000)}k 三角形`; fpsAcc = 0; fpsN = 0; }
+  }
+  updateCompass();
+  renderer.render(scene, camera);
+}
+boot().catch((e) => { $('#load-msg').textContent = '読み込みに失敗しました: ' + e.message; console.error(e); });
+</script>
+</body></html>

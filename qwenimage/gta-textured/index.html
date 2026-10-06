@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grand Theft Night</title>
+<style>
+  :root { --hud: #f2f2f2; --green: #6ee17a; --red: #ff4a4a; --gold: #f6c544; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #05070c; font-family: 'Segoe UI', 'Arial Black', sans-serif; user-select: none; }
+  canvas#gl { display: block; }
+  #hud { position: fixed; inset: 0; pointer-events: none; color: var(--hud); }
+  #topright { position: absolute; top: 18px; right: 24px; text-align: right; }
+  #money { font: 900 34px 'Arial Black', sans-serif; color: var(--green); letter-spacing: 1px;
+           text-shadow: 0 0 2px #000, 2px 2px 0 #000, -1px -1px 0 #000; }
+  #stars { font-size: 30px; letter-spacing: 2px; margin-top: 2px; text-shadow: 2px 2px 0 #000; }
+  #stars span { color: rgba(255,255,255,0.18); }
+  #stars span.on { color: var(--gold); }
+  #stars.flash span.on { animation: blink .5s steps(2) infinite; }
+  @keyframes blink { 50% { color: #fff; } }
+  #bars { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+  .bar { width: 180px; height: 9px; background: rgba(0,0,0,.6); border: 2px solid #000; }
+  .bar > div { height: 100%; }
+  #hp > div { background: #d9443c; }
+  #carhp > div { background: #4da3ff; }
+  #weapon { margin-top: 6px; font: 700 15px sans-serif; text-shadow: 1px 1px 0 #000; opacity: .9; }
+  #vehicle { position: absolute; bottom: 26px; right: 30px; text-align: right; text-shadow: 2px 2px 0 #000; }
+  #vehicle .name { font: 900 26px 'Arial Black', sans-serif; color: #fff; }
+  #vehicle .speed { font: 700 18px sans-serif; color: #ccc; }
+  #minimapWrap { position: absolute; left: 22px; bottom: 22px; width: 230px; height: 230px; border-radius: 50%;
+                 overflow: hidden; border: 4px solid rgba(0,0,0,.75); box-shadow: 0 0 0 2px rgba(255,255,255,.15); }
+  #msg { position: absolute; top: 38%; width: 100%; text-align: center; font: 900 92px 'Arial Black', sans-serif;
+         letter-spacing: 6px; opacity: 0; transition: opacity .4s; text-shadow: 4px 4px 0 #000; }
+  #toast { position: absolute; top: 22%; width: 100%; text-align: center; font: 800 26px sans-serif; color: var(--green);
+           text-shadow: 2px 2px 0 #000; opacity: 0; transition: opacity .3s; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; opacity: .85; display: none; }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 2px #000; }
+  #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+  #crosshair::after { top: 8px; left: 0; height: 2px; width: 18px; }
+  #help { position: absolute; left: 22px; top: 18px; background: rgba(0,0,0,.62); padding: 12px 16px; border-radius: 6px;
+          font: 13px/1.65 sans-serif; color: #ddd; max-width: 300px; }
+  #help b { color: #fff; display: inline-block; min-width: 92px; }
+  #help h3 { margin: 0 0 4px; font-size: 15px; color: var(--gold); }
+  #clickToPlay { position: absolute; bottom: 40%; width: 100%; text-align: center; font: 700 20px sans-serif; color: #fff;
+                 text-shadow: 2px 2px 0 #000; animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  #loading { position: fixed; inset: 0; background: #05070c center/cover no-repeat; display: flex; flex-direction: column;
+             align-items: center; justify-content: flex-end; padding-bottom: 9vh; z-index: 10; transition: opacity .6s; }
+  #loading::before { content: ''; position: absolute; inset: 0; background: linear-gradient(transparent 40%, rgba(0,0,0,.85)); }
+  #loading h1 { position: relative; margin: 0 0 18px; font: 900 clamp(26px, 7vw, 64px) 'Arial Black', sans-serif; text-align: center; color: #fff; letter-spacing: 3px;
+                text-shadow: 4px 4px 0 #000, 0 0 30px rgba(255,120,200,.6); }
+  #loadbar { position: relative; width: min(520px, 80vw); height: 10px; background: rgba(255,255,255,.12); border: 2px solid #000; }
+  #loadbar > div { height: 100%; width: 0; background: linear-gradient(90deg, #ff4fa3, #f6c544); }
+  #loadtxt { position: relative; margin-top: 10px; color: #ccc; font: 14px monospace; }
+  #start { position: relative; display: none; font: 800 26px sans-serif; color: #fff; letter-spacing: 4px;
+           text-shadow: 2px 2px 0 #000, 0 0 18px rgba(255,120,200,.7); animation: pulse 1.6s infinite; }
+  #mission { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); text-align: center; display: none;
+             background: rgba(0,0,0,.5); padding: 8px 22px 10px; border-radius: 8px; min-width: 260px; text-shadow: 2px 2px 0 #000; }
+  #mtitle { font: 900 20px 'Arial Black', sans-serif; color: var(--gold); }
+  #mdesc { font: 13px sans-serif; color: #ddd; margin-top: 2px; }
+  #mtimer { font: 900 40px 'Arial Black', monospace; letter-spacing: 2px; margin-top: 2px; }
+  #mcount { font: 800 15px sans-serif; color: #fff; }
+  #mstatus { font: 600 14px sans-serif; color: #9fe; margin-top: 2px; }
+  #overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.45);
+             color: #fff; font: 700 22px sans-serif; z-index: 5; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="loading">
+  <h1>GRAND THEFT NIGHT</h1>
+  <div id="loadbar"><div></div></div>
+  <div id="loadtxt">loading…</div>
+  <div id="start">クリックしてプレイ</div>
+</div>
+<div id="overlay">Re-baking reflections…</div>
+<div id="hud">
+  <div id="topright">
+    <div id="money">$00000000</div>
+    <div id="stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
+    <div id="bars"><div class="bar" id="hp"><div></div></div><div class="bar" id="carhp" style="display:none"><div></div></div></div>
+    <div id="weapon">🔫 PISTOL ∞</div>
+  </div>
+  <div id="vehicle"><div class="name"></div><div class="speed"></div></div>
+  <div id="minimapWrap"><canvas id="minimap" width="230" height="230"></canvas></div>
+  <div id="crosshair"></div>
+  <div id="mission"><div id="mtitle"></div><div id="mdesc"></div><div id="mtimer">0:00.0</div><div id="mcount"></div><div id="mstatus"></div></div>
+  <div id="msg"></div>
+  <div id="toast"></div>
+  <div id="help">
+    <h3>操作</h3>
+    <b>クリック</b>マウス操作開始 / 射撃<br>
+    <b>W A S D</b>移動・運転<br>
+    <b>マウス</b>カメラ<br>
+    <b>Shift</b>ダッシュ<br>
+    <b>Space</b>ジャンプ / ハンドブレーキ<br>
+    <b>F</b>車に乗る・降りる（奪う）<br>
+    <b>E</b>クラクション<br>
+    <b>N</b>昼 / 夜 切替<br>
+    <b>ミッション</b>光るマーカー（地図の R / D / P）に入る<br>
+    <b>H</b>このヘルプ
+  </div>
+  <div id="clickToPlay">クリックしてプレイ</div>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>ひかりの姫と黒き竜</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap">
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; font-family: "DotGothic16", monospace; }
+  canvas { display: block; image-rendering: pixelated; background: #000; }
+  #pad { display: none; position: fixed; inset: auto 0 0 0; height: 190px; pointer-events: none; }
+  @media (pointer: coarse) { #pad { display: block; } }
+  #pad button { position: absolute; pointer-events: auto; width: 58px; height: 58px; border-radius: 12px; border: 2px solid rgba(255,255,255,.5);
+    background: rgba(30,40,90,.45); color: #fff; font: 20px "DotGothic16", monospace; touch-action: none; }
+  #pad button.on { background: rgba(120,150,255,.6); }
+  #pad .ab { border-radius: 50%; width: 66px; height: 66px; }
+</style>
+</head>
+<body>
+<canvas id="game" width="768" height="576"></canvas>
+<div id="pad">
+  <button data-key="up" style="left:76px;bottom:120px">▲</button>
+  <button data-key="left" style="left:16px;bottom:62px">◀</button>
+  <button data-key="right" style="left:136px;bottom:62px">▶</button>
+  <button data-key="down" style="left:76px;bottom:4px">▼</button>
+  <button data-key="cancel" class="ab" style="right:100px;bottom:20px">X</button>
+  <button data-key="ok" class="ab" style="right:20px;bottom:70px">Z</button>
+</div>
+<script src="js/fm-worklet.js"></script>
+<script src="js/fm-audio.js"></script>
+<script src="js/music.js"></script>
+<script src="js/data.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

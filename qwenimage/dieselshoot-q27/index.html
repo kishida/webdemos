@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DIESEL STRIKE - ディーゼルパンク・シューティング</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0d0a08; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas {
+    background: #000;
+    border: 1px solid #3a2c1f;
+    box-shadow: 0 0 60px rgba(224, 166, 74, .22), 0 0 14px rgba(0, 0, 0, .9);
+  }
+</style>
+</head>
+<body>
+<canvas id="game" width="480" height="720"></canvas>
+<script src="js/fm-worklet.js"></script>
+<script src="js/fm-audio.js"></script>
+<script src="js/fm-fallback.js"></script>
+<script src="js/songs.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

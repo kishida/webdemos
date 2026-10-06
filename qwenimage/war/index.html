@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HEX FRONT — 鋼鉄の六角戦線</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div class="logo">HEX FRONT</div>
+    <div id="hudDay">DAY 1</div>
+    <div id="hudTurn">—</div>
+    <div id="hudFunds">0 G</div>
+    <div class="spacer"></div>
+    <button id="btnEnd">ターン終了</button>
+    <button id="btnAnim">戦闘アニメ ON</button>
+    <button id="btnMute">音 ON</button>
+    <button id="btnTitle">タイトル</button>
+  </header>
+  <div id="main">
+    <div id="mapWrap">
+      <canvas id="map"></canvas>
+      <div id="menu"></div>
+    </div>
+    <aside id="side">
+      <div id="info"></div>
+      <div id="stats"></div>
+      <div class="ops">
+        <b>操作</b>
+        <span>左クリック：選択・移動・決定</span>
+        <span>右クリック / Esc：キャンセル</span>
+        <span>自軍の空き拠点をクリック：生産</span>
+        <span>敵ユニットをクリック：移動範囲表示</span>
+        <span>M：ミュート / P：PCMドラム切替</span>
+      </div>
+    </aside>
+  </div>
+
+  <div id="toast"></div>
+  <div id="banner"><div class="bar"><div id="bannerBig"></div><div id="bannerSmall"></div></div></div>
+
+  <div id="shop" class="modal">
+    <div class="panel">
+      <div class="phead"><b>部隊生産</b><span id="shopFunds"></span><button id="shopClose">×</button></div>
+      <div id="shopList"></div>
+    </div>
+  </div>
+
+  <div id="battle" class="overlay"><canvas id="bcv" width="960" height="540"></canvas></div>
+
+  <div id="title" class="overlay show">
+    <div class="titleBox">
+      <h1>HEX FRONT</h1>
+      <h2>鋼鉄の六角戦線</h2>
+      <div id="loading">素材を読み込み中…</div>
+      <div class="btns">
+        <button data-mode="cpu">VS CPU</button>
+        <button data-mode="pvp">2人対戦</button>
+        <button data-mode="watch">CPU観戦</button>
+        <button id="btnHelp" class="sub">遊び方</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="help" class="modal">
+    <div class="panel help">
+      <div class="phead"><b>遊び方</b><button id="helpClose">×</button></div>
+      <div class="helpBody">
+        <p><b>勝利条件：</b>敵の<b>首都（★）</b>を歩兵で占領するか、敵の部隊をすべて撃破すると勝利。</p>
+        <p><b>ターン：</b>自軍ユニットをクリックすると移動範囲（青）と攻撃可能範囲（赤）が表示されます。移動先をクリックし、メニューから「攻撃」「占領」「待機」を選びます。全員動かしたら「ターン終了」。</p>
+        <p><b>占領：</b>歩兵だけが都市・首都を占領できます。拠点の耐久20から歩兵のHPぶん減り、0で自軍のものになります。途中で離れたり倒されると元に戻ります。</p>
+        <p><b>資金と生産：</b>毎ターン、都市1つにつき100G、首都で200Gの収入。自軍の空いている拠点をクリックすると部隊を生産できます（生産したターンは行動不可）。拠点上のユニットはターン開始時にHPが2回復します。</p>
+        <p><b>戦闘：</b>ダメージは相性・HP・地形の防御★で決まります。直接攻撃は生き残った相手から反撃を受けます。自走砲は射程2〜3の間接攻撃で反撃を受けませんが、移動したターンは攻撃できません。</p>
+        <table>
+          <tr><th>部隊</th><th>費用</th><th>移動</th><th>特徴</th></tr>
+          <tr><td>歩兵</td><td>100</td><td>3</td><td>占領可。山岳OK</td></tr>
+          <tr><td>戦車</td><td>350</td><td>5</td><td>地上の主力</td></tr>
+          <tr><td>自走砲</td><td>300</td><td>4</td><td>射程2〜3の間接攻撃</td></tr>
+          <tr><td>対空戦車</td><td>250</td><td>5</td><td>航空機キラー</td></tr>
+          <tr><td>戦闘機</td><td>450</td><td>8</td><td>空対空。爆撃機に強い</td></tr>
+          <tr><td>爆撃機</td><td>550</td><td>6</td><td>地上に絶大な威力</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="result" class="overlay">
+    <div class="titleBox">
+      <h1 id="resultTitle">勝利！</h1>
+      <h2 id="resultSub"></h2>
+      <div class="btns"><button id="resultBack">タイトルへ</button></div>
+    </div>
+  </div>
+</div>
+<script src="js/fm-worklet.js"></script>
+<script src="js/fm-audio.js"></script>
+<script src="js/pcm.js"></script>
+<script src="js/data.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/battle.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

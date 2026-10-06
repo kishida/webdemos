@@ -2,6 +2,18 @@
 Web Demos  
 https://kishida.github.io/webdemos/
 
+## Qwen Image 2.1
+
+[Qwen Image 2.1作品](qwenimage/index.md)
+
+## 森をあるく
+
+[森をあるくだけのゲーム](valleywalk/index.html)
+
+## Qwen3.8-27B
+
+[Qwen3.8-27B作品](qwen38/index.md)
+
 ## ギャルゲー
 
 Opus5.5+Qwen Image 2.1でのギャルゲー
