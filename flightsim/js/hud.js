@@ -57,18 +57,21 @@ export class HUD {
     if (info.cockpit) this.drawConformal(st, info, hdg);
 
     // 速度テープ・高度テープ
-    const cx = w / 2, cy = h / 2;
-    const tapeH = Math.min(360, h * 0.45);
-    this.tape(g, cx - Math.min(360, w * 0.3), cy, tapeH, ias, 10, 20, 'kt', true, spec);
-    this.tape(g, cx + Math.min(360, w * 0.3), cy, tapeH, alt, 100, 500, 'ft', false, null, vs);
-    this.heading(g, cx, 34, hdg);
+    const C = this.compact;   // スマホ等: 画面下の操作ボタンを避けたレイアウト
+    const cx = w / 2, cy = C ? h * 0.4 : h / 2;
+    const tapeH = C ? Math.min(240, h * 0.36) : Math.min(360, h * 0.45);
+    const tx = C ? Math.min(220, w * 0.17) : Math.min(360, w * 0.3);
+    this.tape(g, cx - tx, cy, tapeH, ias, 10, 20, 'kt', true, spec);
+    this.tape(g, cx + tx, cy, tapeH, alt, 100, 500, 'ft', false, null, vs);
+    this.heading(g, cx, C ? 24 : 34, hdg, C ? 240 : 360);
     // 姿勢指示器（PFD 風）
-    const ar = 70 * Math.max(0.75, scale);
-    this.attitude(g, 20 + ar + 10, h - ar - 30, ar, pitch, roll, st, info.ils);
+    if (C) { const ar = 40; this.attitude(g, 66 + ar, 22 + ar, ar, pitch, roll, st, info.ils); }
+    else { const ar = 70 * Math.max(0.75, scale); this.attitude(g, 20 + ar + 10, h - ar - 30, ar, pitch, roll, st, info.ils); }
     // 状態パネル
-    this.status(g, w - 230, h - 200, st, spec, info);
+    if (C) this.statusCompact(g, cx, 70, st, spec);
+    else this.status(g, w - 230, h - 200, st, spec, info);
     // ミニマップ
-    if (info.showMap) this.minimap(g, w - 196, 70, 180, st, hdg);
+    if (info.showMap) { if (C) this.minimap(g, w - 120, 8, 110, st, hdg); else this.minimap(g, w - 196, 70, 180, st, hdg); }
     // 警告
     const warn = [];
     if (st.stallWarn) warn.push(['STALL', RED]);
@@ -79,25 +82,28 @@ export class HUD {
     if (st.tailStrike) warn.push(['TAIL STRIKE', AMBER]);
     if (st.parkBrake) warn.push(['PARKING BRAKE', AMBER]);
     warn.forEach(([t, c], i) => {
-      const y = 78 + i * 34; g.font = '700 20px "Segoe UI", sans-serif';
+      const y = (C ? 100 : 78) + i * (C ? 26 : 34); g.font = C ? '700 15px "Segoe UI", sans-serif' : '700 20px "Segoe UI", sans-serif';
       const tw = g.measureText(t).width + 30; const blink = c === RED && (performance.now() % 600) < 300;
       g.fillStyle = blink ? c : 'rgba(0,0,0,0.6)'; g.fillRect(cx - tw / 2, y - 14, tw, 28);
       g.strokeStyle = c; g.lineWidth = 2; g.strokeRect(cx - tw / 2, y - 14, tw, 28);
       g.fillStyle = blink ? '#000' : c; g.textAlign = 'center'; g.fillText(t, cx, y + 1);
     });
     // メッセージ
-    g.font = '600 20px "Segoe UI", "Yu Gothic UI", sans-serif'; g.textAlign = 'center';
+    g.textAlign = 'center';
     this.msgs = this.msgs.filter((m) => (m.t -= info.dt) > 0);
     this.msgs.forEach((m, i) => {
       const a = Math.min(1, m.t / 0.5, (m.dur - m.t) / 0.2 + 0.2);
-      g.globalAlpha = a; const y = h * 0.68 + i * 32;
-      const tw = g.measureText(m.text).width + 36;
+      let fs = C ? 15 : 20; g.font = `600 ${fs}px "Segoe UI", "Yu Gothic UI", sans-serif`;
+      const maxW = C ? w * 0.4 : w - 40; const tw0 = g.measureText(m.text).width;
+      if (tw0 > maxW) { fs = Math.max(10, fs * maxW / tw0); g.font = `600 ${fs}px "Segoe UI", "Yu Gothic UI", sans-serif`; }
+      g.globalAlpha = a; const y = (C ? h * 0.72 : h * 0.68) + i * (C ? 24 : 32);
+      const tw = g.measureText(m.text).width + 24;
       g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(cx - tw / 2, y - 15, tw, 30);
       g.fillStyle = m.color; g.fillText(m.text, cx, y + 1); g.globalAlpha = 1;
     });
     // 電波高度
     if (st.agl < 750 && !st.onGround) {
-      g.font = '700 22px "Segoe UI", sans-serif'; g.textAlign = 'center'; g.fillStyle = st.agl < 60 ? AMBER : GREEN;
+      g.font = C ? '700 17px "Segoe UI", sans-serif' : '700 22px "Segoe UI", sans-serif'; g.textAlign = 'center'; g.fillStyle = st.agl < 60 ? AMBER : GREEN;
       g.fillText(`RA ${Math.max(0, Math.round(st.agl * 3.281))}`, cx, cy + tapeH / 2 + 24);
     }
     g.textAlign = 'left';
@@ -143,8 +149,8 @@ export class HUD {
     }
   }
 
-  heading(g, cx, y, hdg) {
-    const W = 360, px = W / 60;
+  heading(g, cx, y, hdg, W = 360) {
+    const px = W / 60;
     g.save(); g.fillStyle = 'rgba(10,16,24,0.45)'; g.fillRect(cx - W / 2, y - 16, W, 34);
     g.beginPath(); g.rect(cx - W / 2, y - 16, W, 34); g.clip();
     g.strokeStyle = WHITE; g.fillStyle = WHITE; g.textAlign = 'center'; g.font = '600 13px "Segoe UI", sans-serif'; g.lineWidth = 1.5;
@@ -186,6 +192,24 @@ export class HUD {
       g.fillText(`ILS ${ils.rwy}  ${ils.dme.toFixed(1)} NM`, -r, -r - 12);
     }
     g.restore();
+  }
+
+  // 1行の簡易ステータス（スマホ用）
+  statusCompact(g, cx, y, st, spec) {
+    const parts = [];
+    parts.push([st.reverse ? 'REV' : `THR ${Math.round(st.throttle * 100)}%`, st.ab ? '#ff9a3c' : GREEN]);
+    parts.push([`FLAP ${spec.flaps[st.flapIdx]}`, CYAN]);
+    if (spec.retractGear) parts.push([st.gearPos >= 1 ? 'GEAR DN' : st.gearPos <= 0 ? 'GEAR UP' : 'GEAR ..', st.gearPos >= 1 ? GREEN : st.gearPos <= 0 ? WHITE : RED]);
+    if (st.spoilerCmd || st.spoilerArmed) parts.push([st.spoilerCmd ? 'SPLR' : 'SPLR ARM', st.spoilerCmd ? AMBER : CYAN]);
+    if (st.brake || st.parkBrake) parts.push([st.parkBrake ? 'PARK' : 'BRAKE', AMBER]);
+    parts.push([`AoA ${(st.alpha * D).toFixed(0)}°`, st.stallWarn ? RED : WHITE]);
+    parts.push([`G ${st.gLoad.toFixed(1)}`, WHITE]);
+    g.font = '600 12px "Segoe UI", sans-serif'; g.textAlign = 'left';
+    const widths = parts.map(([t]) => g.measureText(t).width + 12);
+    const total = widths.reduce((a, b) => a + b, 0);
+    let x = cx - total / 2;
+    g.fillStyle = 'rgba(10,16,24,0.5)'; g.fillRect(x - 6, y - 10, total + 12, 20);
+    parts.forEach(([t, c], i) => { g.fillStyle = c; g.fillText(t, x + 6, y + 1); x += widths[i]; });
   }
 
   status(g, x, y, st, spec, info) {

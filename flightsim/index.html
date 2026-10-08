@@ -2,32 +2,16 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-2YMCH5GKYT');
-</script>
-
-<meta property="og:title" content="SKY HARBOR フライトシミュレーター">
-<meta property="og:description" content="SKY HARBOR フライトシミュレーター">
-<meta property="og:image" content="https://kishida.github.io/webdemos/flightsim/og.png">
-<meta property="og:url" content="https://kishida.github.io/webdemos/flightsim/index.html"/>
-<meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:site" content="@kis"/>
-
-
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>SKY HARBOR フライトシミュレーター</title>
 <style>
   :root { --bg: rgba(12,18,28,0.82); --line: rgba(255,255,255,0.14); --acc: #4fb3ff; --acc2: #ffcf4a; --txt: #e9eef4; --sub: #9fb0c2; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1018; color: var(--txt); font-family: "Segoe UI", "Yu Gothic UI", "Hiragino Sans", sans-serif; }
+  html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; background: #0b1018; color: var(--txt); font-family: "Segoe UI", "Yu Gothic UI", "Hiragino Sans", sans-serif; }
   #gl, #hud { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #gl { touch-action: none; }
   #hud { pointer-events: none; }
   .overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; }
   .overlay.show { display: flex; }
@@ -72,7 +56,34 @@
   #help .modal { margin: 70px 0 0 16px; text-align: left; pointer-events: auto; min-width: 0; padding: 16px 18px; }
   #help .keys { margin-top: 6px; }
   #camlabel { position: fixed; left: 16px; top: 14px; font-size: 13px; color: #dfe7ef; text-shadow: 0 1px 3px #000; z-index: 5; pointer-events: none; }
-  @media (max-width: 720px) { .cards { grid-template-columns: 1fr; } #menu .panel { padding: 18px 16px; } }
+  /* ---- タッチ操作 ---- */
+  #touch { display: none; position: fixed; inset: 0; z-index: 6; pointer-events: none; touch-action: none; }
+  #touch > * { pointer-events: auto; touch-action: none; }
+  #touch button { font: inherit; color: #eaf2fa; background: rgba(12,20,30,0.5); border: 1px solid rgba(255,255,255,0.28); border-radius: 10px; font-size: 12px; line-height: 1.15; padding: 0; }
+  #touch button.on, #touch button.active { background: rgba(79,179,255,0.55); border-color: #9fd6ff; }
+  .t-stick { position: absolute; left: calc(18px + env(safe-area-inset-left)); bottom: 18px; width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,0.08), rgba(255,255,255,0.16)); border: 2px solid rgba(255,255,255,0.3); }
+  .t-stick::before, .t-stick::after { content: ''; position: absolute; background: rgba(255,255,255,0.18); }
+  .t-stick::before { left: 50%; top: 10%; bottom: 10%; width: 1px; } .t-stick::after { top: 50%; left: 10%; right: 10%; height: 1px; }
+  .t-knob { position: absolute; left: 50%; top: 50%; width: 62px; height: 62px; margin: -31px 0 0 -31px; border-radius: 50%; background: rgba(230,240,255,0.55); border: 2px solid rgba(255,255,255,0.8); box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+  .t-rud { position: absolute; left: calc(180px + env(safe-area-inset-left)); bottom: 18px; display: flex; gap: 6px; align-items: center; font-size: 11px; color: #cfe0ef; text-shadow: 0 1px 2px #000; }
+  .t-rud button { width: 46px; height: 46px; font-size: 18px !important; }
+  .t-btns { position: absolute; right: calc(88px + env(safe-area-inset-right)); bottom: 14px; display: grid; grid-template-columns: repeat(3, 54px); gap: 5px; }
+  .t-btns button { height: 42px; font-size: 11px !important; }
+  .t-thr { position: absolute; right: calc(18px + env(safe-area-inset-right)); bottom: 18px; width: 60px; height: 206px; border-radius: 12px; background: rgba(12,20,30,0.45); border: 1px solid rgba(255,255,255,0.3); overflow: hidden; }
+  .t-thr-fill { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(0deg, rgba(110,220,140,0.55), rgba(255,200,70,0.6)); }
+  .t-thr-thumb { position: absolute; left: 4px; right: 4px; height: 8px; border-radius: 4px; background: #fff; box-shadow: 0 0 6px rgba(0,0,0,0.5); }
+  .t-thr-label { position: absolute; top: 6px; left: 0; right: 0; text-align: center; font-size: 12px; font-weight: 700; text-shadow: 0 1px 2px #000; }
+  .t-rev { position: absolute; bottom: 0; left: 0; right: 0; height: 15%; border-top: 1px dashed rgba(255,160,60,0.8); color: #ffb050; font-size: 10px; text-align: center; line-height: 30px; }
+  .t-pause { position: absolute; left: calc(12px + env(safe-area-inset-left)); top: 10px; width: 44px; height: 38px; }
+  .t-smoke { position: absolute; right: calc(88px + env(safe-area-inset-right)); bottom: 160px; width: 80px; height: 32px; }
+  #rotate { z-index: 40; background: rgba(6,10,16,0.94); flex-direction: column; gap: 14px; text-align: center; font-size: 17px; }
+  #rotate .ph { width: 54px; height: 90px; border: 3px solid #e9eef4; border-radius: 10px; animation: rot 2s ease-in-out infinite; }
+  @keyframes rot { 0%, 25% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+  body.touch #camlabel, body.touch .keys { display: none; }
+  body.touch .touchhelp { display: block; }
+  .touchhelp { display: none; margin-top: 14px; font-size: 13px; color: #c8d2dd; line-height: 1.6; }
+  @media (max-width: 720px), (max-height: 500px) { .cards { grid-template-columns: 1fr; } #menu .panel { padding: 16px 16px; } #menu h1 { font-size: 26px; } .card p { display: none; } .go { margin-top: 14px; padding: 12px; } }
+  @media (max-height: 500px) and (orientation: landscape) { .cards { grid-template-columns: repeat(3, 1fr); } #menu .panel { width: min(560px, 70vw); } .sec { margin: 10px 0 4px; } }
 </style>
 <script type="importmap">
 { "imports": { "three": "./js/lib/three.module.js", "three/addons/": "./js/lib/" } }
@@ -117,9 +128,11 @@
       <label><input type="checkbox" id="optTrim" checked> オートトリム（小型機）</label>
       <label><input type="checkbox" id="optCall" checked> 高度コールアウト（音声）</label>
       <label><input type="checkbox" id="optMap" checked> ミニマップ</label>
+      <label><input type="checkbox" id="optTouch"> タッチ操作</label>
     </div>
     <button class="go" id="go" disabled>ワールド生成中…</button>
     <div class="keys" id="keys1"></div>
+    <div class="touchhelp">左下のスティックで操縦（下に引くと機首上げ）、右下のバーでスロットル、◀▶でラダー・前輪操向。<br>「傾き操縦」をオンにすると端末を傾けて操縦できます（HTTPS 接続時のみ）。2本指のピンチで視点ズーム、ドラッグで視点回転。</div>
   </div>
 </div>
 
@@ -140,6 +153,8 @@
   <p id="crashReason" style="font-size:16px"></p>
   <div class="btns"><button class="pri" data-act="restart">やり直し</button><button data-act="menu">メニューへ</button></div>
 </div></div>
+
+<div id="rotate" class="overlay"><div class="ph"></div><div>端末を横向きにしてください</div></div>
 
 <div id="help" class="overlay"><div class="modal">
   <b>操作方法</b> <span style="color:#9fb0c2;font-size:12px">（H で閉じる）</span>

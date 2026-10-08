@@ -9,6 +9,7 @@ import { HUD, GREEN, AMBER, RED, WHITE, CYAN } from './hud.js';
 import { Audio } from './audio.js';
 import { Particles } from './effects.js';
 import { setAnisotropy } from './textures.js';
+import { TouchControls, isTouchDevice, isPortrait } from './touch.js';
 import { RWY, terrainHeight, DOWNTOWN } from './layout.js';
 import { clamp, lerp } from './geo.js';
 
@@ -18,7 +19,9 @@ const $ = (id) => document.getElementById(id);
 // ---------- レンダラー ----------
 const canvas = $('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+// スマホ・タブレットは負荷を下げる
+const LOW = isTouchDevice;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, LOW ? 1 : 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -29,7 +32,7 @@ const hud = new HUD($('hud'));
 
 const sky = new Sky(); sky.scale.setScalar(80000); scene.add(sky);
 const sun = new THREE.DirectionalLight(0xffffff, 3); sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.6;
+sun.shadow.mapSize.set(LOW ? 1024 : 2048, LOW ? 1024 : 2048); sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.6;
 scene.add(sun); scene.add(sun.target);
 const hemi = new THREE.HemisphereLight(0xbcd4ff, 0x5a5040, 0.8); scene.add(hemi);
 scene.fog = new THREE.FogExp2(0xb4c8de, 0.000035);
@@ -67,7 +70,7 @@ function applyTime(name) {
 let nightLevel = 0;
 
 // ---------- ワールド ----------
-const world = new World(scene);
+const world = new World(scene); world.low = LOW;
 const particles = new Particles(scene);
 
 // ---------- 状態 ----------
@@ -90,10 +93,17 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
-let drag = null;
-canvas.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); });
-canvas.addEventListener('pointerup', () => { drag = null; });
+let drag = null; const ptrs = new Map(); let pinch = null;
+canvas.addEventListener('pointerdown', (e) => {
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId);
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), dist: cam.dist }; drag = null; }
+  else drag = { x: e.clientX, y: e.clientY };
+});
+const ptrUp = (e) => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (ptrs.size === 0) drag = null; };
+canvas.addEventListener('pointerup', ptrUp); canvas.addEventListener('pointercancel', ptrUp);
 canvas.addEventListener('pointermove', (e) => {
+  if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; cam.dist = clamp(pinch.dist * pinch.d / Math.max(10, Math.hypot(a.x - b.x, a.y - b.y)), 0.35, 6); return; }
   if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag = { x: e.clientX, y: e.clientY };
   if (camMode === 1) { cam.lookYaw = clamp(cam.lookYaw - dx * 0.004, -2.6, 2.6); cam.lookPitch = clamp(cam.lookPitch - dy * 0.004, -1.0, 1.2); }
   else { cam.yawOff -= dx * 0.006; cam.pitchOff = clamp(cam.pitchOff + dy * 0.004, -0.3, 1.45); }
@@ -140,6 +150,22 @@ function onKey(e) {
   }
 }
 let lightsOn = true;
+const touch = new TouchControls((e) => onKey(e));
+let touchOn = isTouchDevice, rotatePaused = false;
+function applyTouchSetting() { touchOn = $('optTouch').checked; document.body.classList.toggle('touch', touchOn); hud.compact = touchOn || window.innerHeight < 500; }
+// 縦向きになったら一時停止して横向きを促す
+function checkOrientation() {
+  // 横向き要求はスマホ/タブレットのみ（PCで縦長ウィンドウにしても止めない）
+  const need = isTouchDevice && touchOn && isPortrait() && (mode === 'flight' || mode === 'paused');
+  $('rotate').classList.toggle('show', need);
+  if (need && mode === 'flight') { rotatePaused = true; setMode('paused'); }
+  else if (!need && rotatePaused && mode === 'paused') { rotatePaused = false; setMode('flight'); }
+}
+matchMedia('(orientation: portrait)').addEventListener('change', () => setTimeout(checkOrientation, 50));
+async function goFullscreenLandscape() {
+  try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch {}
+  try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch {}
+}
 
 function readInput(dt) {
   const k = keys;
@@ -152,12 +178,22 @@ function readInput(dt) {
   const rate = spec.id === 'fighter' ? 3.5 : 2.2;
   const app = (cur, tgt, r) => cur + clamp(tgt - cur, -r * dt, r * dt);
   const dz = (v) => (Math.abs(v) < 0.12 ? 0 : (v - Math.sign(v) * 0.12) / 0.88);
-  if (pad && (Math.abs(dz(pad.axes[0])) > 0 || Math.abs(dz(pad.axes[1])) > 0 || Math.abs(dz(pad.axes[2] || 0)) > 0) && !pitchT && !rollT) {
+  const ta = touchOn ? touch.axes() : { active: false };
+  if (ta.active && !pitchT && !rollT) {
+    // タッチ/傾き: 中心付近を細かく（2乗カーブ）
+    const curve = (v) => Math.sign(v) * (0.35 * Math.abs(v) + 0.65 * v * v);
+    c.elev = app(c.elev, curve(ta.pitch), 6); c.ail = app(c.ail, curve(ta.roll), 8);
+    c.rudder = app(c.rudder, touch.rudder || yawT, 2.5);
+  } else if (pad && (Math.abs(dz(pad.axes[0])) > 0 || Math.abs(dz(pad.axes[1])) > 0 || Math.abs(dz(pad.axes[2] || 0)) > 0) && !pitchT && !rollT) {
     c.elev = dz(pad.axes[1]); c.ail = dz(pad.axes[0]); c.rudder = dz(pad.axes[2] || 0);
   } else {
     c.elev = app(c.elev, pitchT, pitchT ? spec.pitchKeyRate : spec.pitchKeyRate * 2);
     c.ail = app(c.ail, rollT, rollT ? rate * 1.4 : rate * 2);
-    c.rudder = app(c.rudder, yawT, 2.5);
+    c.rudder = app(c.rudder, yawT || (touchOn ? touch.rudder : 0), 2.5);
+  }
+  if (touchOn && touch.throttleDrag != null) {
+    const canRev = spec.id === 'airliner' && st.onGround;
+    st.throttle = canRev ? touch.throttleDrag : Math.max(0, touch.throttleDrag);
   }
   // スロットル
   const thrUp = k.KeyR || k.PageUp || k.ShiftLeft, thrDn = k.KeyF || k.PageDown;
@@ -173,7 +209,7 @@ function readInput(dt) {
     padButtons(pad);
   }
   if (st.reverse && !st.onGround) st.throttle = 0;
-  st.brake = k.Space || (pad && pad.buttons[0]?.pressed) ? 1 : 0;
+  st.brake = k.Space || (pad && pad.buttons[0]?.pressed) || (touchOn && touch.brake) ? 1 : 0;
   if (st.brake && st.parkBrake) st.parkBrake = false;
   // トリム
   const tr = (k.BracketLeft || k.Home ? 1 : 0) - (k.BracketRight || k.End ? 1 : 0);
@@ -300,6 +336,9 @@ function setMode(m) {
   $('result').classList.toggle('show', m === 'result');
   $('crash').classList.toggle('show', m === 'crash');
   $('camlabel').style.display = m === 'flight' ? '' : 'none';
+  touch.show(touchOn && m === 'flight');
+  if (m !== 'paused') rotatePaused = false;
+  setTimeout(checkOrientation, 0);
   if (m === 'menu') { Audio.silence(); if (Audio.ready) Audio.playTitle(); if (model) scene.remove(model.group); st = null; menuDemo(); }
   if (m === 'paused' || m === 'result' || m === 'crash') Audio.silence();
 }
@@ -332,7 +371,12 @@ function buildMenu() {
     ['L', '着陸灯'], ['M', 'ミュート'], ['Esc / P', '一時停止'], ['N', 'やり直し'], ['H', '操作ヘルプ'], ['パッド', '左スティック/トリガー/ABXY'],
   ].map(([k, v]) => `<kbd>${k}</kbd><span>${v}</span>`).join('');
   $('keys1').innerHTML = keysHtml; $('keys2').innerHTML = keysHtml;
-  $('go').addEventListener('click', async () => { await ensureAudio(); Audio.sfx('select'); startFlight(); });
+  $('optTouch').checked = isTouchDevice; applyTouchSetting();
+  $('optTouch').addEventListener('change', applyTouchSetting);
+  $('go').addEventListener('click', async () => {
+    if (isTouchDevice && touchOn) goFullscreenLandscape();
+    await ensureAudio(); Audio.sfx('select'); startFlight();
+  });
   syncMenu();
 }
 function syncMenu() {
@@ -535,6 +579,7 @@ function tick(dt) {
   world.update(dt, t, camera, renderer.domElement.height, env.wind);
   const ils = ilsInfo();
   const info = mode === 'flight' && !st.crashed ? warnings(ils) : {};
+  if (mode === 'flight') touch.update(st, spec);
   if (mode === 'flight' && !st.crashed) { soundWarnings(info, dt); callout(ils); checkLandingResult(); Audio.update(st, spec, view); }
   info.ils = ils && ils.along > -200 ? ils : null; info.cockpit = view.cockpit; info.camera = camera; info.dt = dt; info.showMap = $('optMap').checked; info.wind = env.windTxt;
   if (window.__noRender) return;
@@ -545,6 +590,7 @@ function tick(dt) {
 window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); hud.resize();
+  hud.compact = touchOn || window.innerHeight < 500;
 });
 
 // ---------- 起動 ----------
@@ -585,6 +631,6 @@ async function boot() {
   $('go').disabled = false; $('go').textContent = 'フライト開始';
   setMode('menu');
 }
-window.__sim = { particles, get st() { return st; }, get spec() { return spec; }, world, tick, startFlight, cfg, setMode, keys, get mode() { return mode; }, camera, renderer, scene, setCam, applyTime, FM: window.FM };
+window.__sim = { touch, particles, get st() { return st; }, get spec() { return spec; }, world, tick, startFlight, cfg, setMode, keys, get mode() { return mode; }, camera, renderer, scene, setCam, applyTime, FM: window.FM };
 boot().then(() => frame());
 void lerp; void onRunway; void DOWNTOWN; void RED;

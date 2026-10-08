@@ -59,7 +59,7 @@ export class World {
 
   // ---------- 地形 ----------
   buildTerrain() {
-    const N = 480, S = 21500, A = 0.33, CX = 1500, CZ = 0;
+    const N = this.low ? 360 : 480, S = 21500, A = 0.33, CX = 1500, CZ = 0;
     const map = (u) => S * (A * u + (1 - A) * u * u * u);
     const xs = [], zs = [];
     for (let i = 0; i <= N; i++) { const u = (i / N) * 2 - 1; xs.push(CX + map(u)); zs.push(CZ + map(u)); }
@@ -811,7 +811,8 @@ export class World {
     }
     // 郊外・山の森
     let tries = 0;
-    while (conif.length + broad.length < 26000 && tries++ < 300000) {
+    const maxTrees = this.low ? 12000 : 26000;
+    while (conif.length + broad.length < maxTrees && tries++ < 300000) {
       const a = R() * Math.PI * 2, r = 1500 + Math.sqrt(R()) * 15000;
       const x = 1500 + Math.cos(a) * r, z = Math.sin(a) * r;
       if (Math.abs(x) < 900 && Math.abs(z) < 3500) continue;
