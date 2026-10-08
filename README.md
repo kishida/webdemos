@@ -2,13 +2,30 @@
 Web Demos  
 https://kishida.github.io/webdemos/
 
+## スキル
+
+[Unsloth Desktopで画像生成](skills/unsloth-media.zip)  
+[和笛](skills/wafue-sfx.zip)  
+[FM音源](skills/fm-synth.zip)  
+
+2026/10/08
+
+## フライトシミュレーター
+
+[フライトシミュレーター](flightsim/index.html)  
+![フライトシミュレーター](assets/flightsim.png)
+
+2026/10/08
+
 ## Qwen Image 2.1
 
 [Qwen Image 2.1作品](qwenimage/index.md)
 
 ## 森をあるく
 
-[森をあるくだけのゲーム](valleywalk/index.html)
+[森をあるくだけのゲーム](valleywalk/index.html)  
+![森をあるくだけのゲーム](assets/valleywalk.png)
+
 
 ## Qwen3.8-27B
 
