@@ -7,3 +7,4 @@
 [エイリアン](alienrpg/index.html)  
 [ギーガー](cyberpank-shoot/index.html)  
 [ディーゼル](dieselshoot-q27/index.html)  
+[キャンディ](candy/index.html)

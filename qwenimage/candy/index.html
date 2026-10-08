@@ -1,0 +1,1182 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>ふしぎなキャンディのそら</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@700;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#2a1f3d;--btn:#ffffffcc;--ink:#2a1f3d}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1a1328}}
+:root[data-theme="dark"]{--bg:#1a1328}
+html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+#wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+canvas{display:block;border-radius:14px;box-shadow:0 10px 40px #0006;font-family:'Zen Maru Gothic',sans-serif}
+.pad{position:fixed;bottom:16px;display:none;gap:12px;z-index:5}
+.pad.l{left:16px}.pad.r{right:16px}
+.pad button{width:72px;height:72px;border-radius:50%;border:4px solid var(--ink);background:var(--btn);font-size:30px;font-weight:900;color:var(--ink);font-family:inherit;touch-action:none}
+.pad button:active{background:#ffd84a}
+body.touch .pad{display:flex}
+#mute{position:fixed;top:12px;right:12px;z-index:6;border:3px solid var(--ink);background:#fff;border-radius:20px;padding:4px 12px;font:900 14px 'Zen Maru Gothic',sans-serif;color:var(--ink);cursor:pointer}
+</style>
+<div id="wrap"><canvas id="c"></canvas></div>
+<button id="mute">♪ ON</button>
+<div class="pad l"><button data-k="ArrowLeft">◀</button><button data-k="ArrowRight">▶</button></div>
+<div class="pad r"><button data-k="Space">▲</button></div>
+<script>
+/* fm-synth skill: fm-worklet.js */
+// 4-operator FM synthesizer (YM2612-style algorithms) running in an AudioWorklet.
+// Messages:
+//   {type:'note', t, patch, freq, vel, dur, pan, sweep}  t = AudioContext time (sec)
+//   {type:'patches', patches:{name:patch}}
+//   {type:'stop'}   release all voices
+// Patch: {alg:0-7, fb:0-7, vol, lfo:{rate,depth}, ops:[{mul,dt,lvl,ar,dr,sl,rr}, x4]}
+//   lvl: carrier = amplitude, modulator = modulation index (radians / PI)
+//   ar/dr/rr in seconds, sl 0..1
+
+// Wrapped in a function so the page can load it via <script> and hand its source
+// to audioWorklet.addModule() as a Blob URL (works from file:// too).
+function fmWorkletMain() {
+  const TWO_PI = Math.PI * 2;
+
+  // Carriers per algorithm (op indices)
+  const CARRIERS = [[3], [3], [3], [3], [1, 3], [1, 2, 3], [1, 2, 3], [0, 1, 2, 3]];
+
+  class Op {
+    constructor() { this.phase = 0; this.env = 0; this.stage = 4; this.out = 0; }
+  }
+
+  class Voice {
+    constructor() {
+      this.ops = [new Op(), new Op(), new Op(), new Op()];
+      this.active = false; this.patch = null; this.fb1 = 0; this.fb2 = 0;
+      this.freq = 440; this.age = 0; this.offAt = 0; this.released = false;
+    }
+  }
+
+  class FMProcessor extends AudioWorkletProcessor {
+    constructor(options) {
+      super();
+      const n = (options.processorOptions && options.processorOptions.voices) || 12;
+      this.voices = []; for (let i = 0; i < n; i++) this.voices.push(new Voice());
+      this.patches = {};
+      this.queue = [];
+      this.frame = 0;
+      this.lfoPhase = 0;
+      this.port.onmessage = (e) => {
+        const m = e.data;
+        if (m.type === 'patches') Object.assign(this.patches, m.patches);
+        else if (m.type === 'note') this.insertEvent(m);
+        else if (m.type === 'stop') { this.queue.length = 0; for (const v of this.voices) this.release(v); }
+        else if (m.type === 'hush') { this.queue.length = 0; for (const v of this.voices) v.active = false; }
+      };
+    }
+
+    insertEvent(m) {
+      m.f = Math.max(0, Math.round(m.t * sampleRate));
+      const q = this.queue; let i = q.length;
+      while (i > 0 && q[i - 1].f > m.f) i--;
+      q.splice(i, 0, m);
+    }
+
+    allocVoice() {
+      let best = null, bestScore = -1;
+      for (const v of this.voices) {
+        if (!v.active) return v;
+        const score = (v.released ? 1e9 : 0) + v.age;
+        if (score > bestScore) { bestScore = score; best = v; }
+      }
+      return best;
+    }
+
+    start(m) {
+      const p = this.patches[m.patch]; if (!p) return;
+      const v = this.allocVoice();
+      v.active = true; v.released = false; v.patch = p; v.age = 0;
+      v.freq = m.freq; v.vel = m.vel == null ? 1 : m.vel;
+      v.offAt = this.frame + Math.max(1, Math.round((m.dur || 0.1) * sampleRate));
+      v.pan = m.pan || 0;
+      v.gl = v.pan <= 0 ? 1 : 1 - v.pan; v.gr = v.pan >= 0 ? 1 : 1 + v.pan;
+      // pitch sweep: exponential glide to freq*sweep over dur
+      v.sweepMul = m.sweep ? Math.pow(m.sweep, 1 / Math.max(1, v.offAt - this.frame)) : 1;
+      v.fb1 = v.fb2 = 0;
+      for (let i = 0; i < 4; i++) {
+        const o = v.ops[i], op = p.ops[i];
+        o.stage = 0; o.phase = p.resetPhase === false ? o.phase : 0;
+        o.ar = Math.max(1, op.ar * sampleRate); o.dr = Math.max(1, op.dr * sampleRate);
+        o.rr = Math.max(1, op.rr * sampleRate);
+        o.decayK = Math.exp(Math.log(0.001) / o.dr);
+        o.relK = Math.exp(Math.log(0.0005) / o.rr);
+        o.out = 0;
+      }
+    }
+
+    release(v) {
+      if (!v.active || v.released) return;
+      v.released = true;
+      for (const o of v.ops) o.stage = 3;
+    }
+
+    process(inputs, outputs) {
+      const out = outputs[0]; const L = out[0]; const R = out[1] || out[0];
+      const len = L.length;
+      const voices = this.voices;
+      this.frame = currentFrame; // sync with AudioContext.currentTime
+      for (let s = 0; s < len; s++) {
+        // events
+        while (this.queue.length && this.queue[0].f <= this.frame) this.start(this.queue.shift());
+        this.lfoPhase += TWO_PI * 5.5 / sampleRate;
+        if (this.lfoPhase > TWO_PI) this.lfoPhase -= TWO_PI;
+        const lfo = Math.sin(this.lfoPhase);
+        let sl = 0, sr = 0;
+        for (let vi = 0; vi < voices.length; vi++) {
+          const v = voices[vi];
+          if (!v.active) continue;
+          if (!v.released && this.frame >= v.offAt) this.release(v);
+          v.age++;
+          const p = v.patch; const ops = v.ops; const pops = p.ops;
+          v.freq *= v.sweepMul;
+          const vib = p.vib ? 1 + lfo * p.vib * Math.min(1, v.age / (sampleRate * 0.25)) : 1;
+          const baseInc = TWO_PI * v.freq * vib / sampleRate;
+          let alive = false;
+          // envelopes & phases
+          for (let i = 0; i < 4; i++) {
+            const o = ops[i], po = pops[i];
+            switch (o.stage) {
+              case 0: o.env += 1 / o.ar; if (o.env >= 1) { o.env = 1; o.stage = 1; } break;
+              case 1: o.env = po.sl + (o.env - po.sl) * o.decayK; if (o.env - po.sl < 0.0005) { o.env = po.sl; o.stage = 2; } break;
+              case 2: break;
+              case 3: o.env *= o.relK; if (o.env < 0.0003) { o.env = 0; o.stage = 4; } break;
+            }
+            if (o.stage !== 4) alive = true;
+            o.phase += baseInc * po.mul * (1 + (po.dt || 0));
+            if (o.phase > 1e6) o.phase -= TWO_PI * Math.floor(o.phase / TWO_PI);
+          }
+          if (!alive) { v.active = false; continue; }
+          const e0 = ops[0].env * pops[0].lvl * Math.PI, e1 = ops[1].env * pops[1].lvl * Math.PI,
+                e2 = ops[2].env * pops[2].lvl * Math.PI, e3 = ops[3].env * pops[3].lvl;
+          // op1 with self feedback
+          const fbAmt = p.fb ? Math.pow(2, p.fb - 8) * Math.PI * 2 : 0;
+          const o1 = Math.sin(ops[0].phase + (v.fb1 + v.fb2) * 0.5 * fbAmt);
+          v.fb2 = v.fb1; v.fb1 = o1;
+          const m1 = o1 * e0;
+          let o2, o3, o4, outv;
+          const c1 = pops[1].lvl * ops[1].env, c2 = pops[2].lvl * ops[2].env;
+          switch (p.alg) {
+            case 0: o2 = Math.sin(ops[1].phase + m1) * e1; o3 = Math.sin(ops[2].phase + o2) * e2; outv = Math.sin(ops[3].phase + o3) * e3; break;
+            case 1: o2 = Math.sin(ops[1].phase) * e1; o3 = Math.sin(ops[2].phase + m1 + o2) * e2; outv = Math.sin(ops[3].phase + o3) * e3; break;
+            case 2: o2 = Math.sin(ops[1].phase) * e1; o3 = Math.sin(ops[2].phase + o2) * e2; outv = Math.sin(ops[3].phase + m1 + o3) * e3; break;
+            case 3: o2 = Math.sin(ops[1].phase + m1) * e1; o3 = Math.sin(ops[2].phase) * e2; outv = Math.sin(ops[3].phase + o2 + o3) * e3; break;
+            case 4: o2 = Math.sin(ops[1].phase + m1) * c1; o3 = Math.sin(ops[2].phase) * e2; outv = o2 + Math.sin(ops[3].phase + o3) * e3; break;
+            case 5: o2 = Math.sin(ops[1].phase + m1) * c1; o3 = Math.sin(ops[2].phase + m1) * c2; outv = o2 + o3 + Math.sin(ops[3].phase + m1) * e3; break;
+            case 6: o2 = Math.sin(ops[1].phase + m1) * c1; o3 = Math.sin(ops[2].phase) * c2; outv = o2 + o3 + Math.sin(ops[3].phase) * e3; break;
+            default: o2 = Math.sin(ops[1].phase) * c1; o3 = Math.sin(ops[2].phase) * c2; outv = o1 * pops[0].lvl * ops[0].env + o2 + o3 + Math.sin(ops[3].phase) * e3; break;
+          }
+          const a = outv * v.vel * (p.vol || 0.3);
+          sl += a * v.gl; sr += a * v.gr;
+        }
+        // soft clip
+        L[s] = sl / (1 + Math.abs(sl)); R[s] = sr / (1 + Math.abs(sr));
+        this.frame++;
+      }
+      return true;
+    }
+  }
+
+  registerProcessor('fm-synth', FMProcessor);
+}
+if (typeof registerProcessor === 'function') fmWorkletMain();
+
+</script>
+<script>
+/* fm-synth skill: fm-audio.js */
+// FM audio engine: patch library, step sequencer, song helpers and SFX presets.
+// Requires fm-worklet.js to be loaded first (defines fmWorkletMain).
+// Exposes a single global: FM
+'use strict';
+
+(function () {
+  const op = (mul, lvl, ar, dr, sl, rr, dt = 0) => ({ mul, lvl, ar, dr, sl, rr, dt });
+  const OFF = op(1, 0, 0.01, 0.01, 0, 0.01);
+
+  // ---- patch library ------------------------------------------------------
+  // alg: YM2612 algorithm 0-7 / fb: op1 self-feedback (7 = buzzy, 8-9 = noise)
+  // op(mul, lvl, ar, dr, sl, rr, dt): lvl = amplitude for carriers, mod index (x PI rad) for modulators
+  const PATCHES = {
+    brass: { alg: 4, fb: 5, vol: 0.22, vib: 0.006, ops: [
+      op(1, 0.9, 0.04, 0.4, 0.55, 0.12), op(1, 0.75, 0.015, 0.5, 0.8, 0.12),
+      op(1, 0.65, 0.05, 0.4, 0.5, 0.12, 0.004), op(1, 0.6, 0.02, 0.5, 0.8, 0.12, 0.004)] },
+    organ: { alg: 7, fb: 3, vol: 0.11, vib: 0.01, ops: [
+      op(1, 0.25, 0.006, 0.3, 0.7, 0.08), op(2, 0.35, 0.006, 0.4, 0.8, 0.08),
+      op(4, 0.12, 0.006, 0.2, 0.5, 0.06), op(1, 0.4, 0.006, 0.5, 0.85, 0.09, 0.003)] },
+    epiano: { alg: 4, fb: 0, vol: 0.2, ops: [
+      op(14, 0.25, 0.001, 0.3, 0, 0.2), op(1, 0.8, 0.002, 1.5, 0.2, 0.3),
+      op(1, 0.5, 0.001, 1.0, 0.1, 0.3, 0.002), op(1, 0.6, 0.002, 1.8, 0.25, 0.3, 0.002)] },
+    strings: { alg: 5, fb: 2, vol: 0.12, vib: 0.008, ops: [
+      op(1, 0.5, 0.3, 1, 0.8, 0.4), op(1, 0.6, 0.25, 1, 0.9, 0.5, 0.003),
+      op(2, 0.3, 0.25, 1, 0.9, 0.5, -0.003), op(1, 0.6, 0.25, 1, 0.9, 0.5)] },
+    lead: { alg: 0, fb: 6, vol: 0.18, vib: 0.008, ops: [
+      op(1, 0.3, 0.005, 0.3, 0.6, 0.1), op(2, 0.4, 0.005, 0.3, 0.6, 0.1),
+      op(1, 0.6, 0.005, 0.3, 0.7, 0.1), op(1, 1, 0.005, 0.5, 0.85, 0.12)] },
+    bass: { alg: 0, fb: 4, vol: 0.34, ops: [
+      op(1, 0.25, 0.005, 0.2, 0.2, 0.05), op(1, 0.45, 0.003, 0.15, 0.15, 0.05),
+      op(1, 0.8, 0.002, 0.25, 0.25, 0.05), op(1, 1.0, 0.002, 0.6, 0.6, 0.05)] },
+    slapbass: { alg: 4, fb: 5, vol: 0.32, ops: [
+      op(1, 1.2, 0.001, 0.08, 0.1, 0.05), op(1, 1, 0.001, 0.4, 0.4, 0.05),
+      op(3, 0.6, 0.001, 0.05, 0, 0.05), op(0.5, 0.6, 0.001, 0.5, 0.4, 0.05)] },
+    bell: { alg: 4, fb: 0, vol: 0.2, ops: [
+      op(3.5, 0.9, 0.001, 0.6, 0, 0.3), op(1, 0.8, 0.001, 1.2, 0, 0.4),
+      op(7, 0.3, 0.001, 0.3, 0, 0.2), op(2, 0.3, 0.001, 0.8, 0, 0.3)] },
+    kick: { alg: 7, fb: 7, vol: 0.9, ops: [
+      op(1, 0.15, 0.001, 0.012, 0, 0.01), OFF, OFF, op(1, 1, 0.001, 0.22, 0, 0.05)] },
+    snare: { alg: 7, fb: 8.5, vol: 0.5, ops: [
+      op(1, 0.7, 0.001, 0.14, 0, 0.06), OFF, OFF, op(1, 0.45, 0.001, 0.07, 0, 0.03)] },
+    hat: { alg: 0, fb: 8, vol: 0.18, ops: [
+      op(1, 1, 0.001, 0.2, 0.5, 0.1), op(3.17, 2, 0.001, 0.2, 0.5, 0.1),
+      op(5.41, 2, 0.001, 0.2, 0.5, 0.1), op(1, 1, 0.001, 0.035, 0, 0.02)] },
+    ohat: { alg: 0, fb: 8, vol: 0.14, ops: [
+      op(1, 1, 0.001, 0.2, 0.5, 0.1), op(3.17, 2, 0.001, 0.2, 0.5, 0.1),
+      op(5.41, 2, 0.001, 0.2, 0.5, 0.1), op(1, 1, 0.001, 0.25, 0, 0.1)] },
+    tom: { alg: 7, fb: 5, vol: 0.6, ops: [
+      op(1, 0.1, 0.001, 0.02, 0, 0.01), OFF, OFF, op(1, 1, 0.001, 0.3, 0, 0.08)] },
+    // --- SFX building blocks ---
+    zap: { alg: 4, fb: 3, vol: 0.18, ops: [
+      op(2, 0.6, 0.001, 0.06, 0, 0.02), op(1, 0.8, 0.001, 0.08, 0, 0.02),
+      op(3, 0.4, 0.001, 0.05, 0, 0.02), op(1, 0.4, 0.001, 0.07, 0, 0.02)] },
+    blip: { alg: 4, fb: 0, vol: 0.12, ops: [
+      op(1.5, 1.2, 0.001, 0.1, 0, 0.03), op(1, 0.8, 0.001, 0.12, 0, 0.03), OFF, OFF] },
+    boom: { alg: 0, fb: 9, vol: 0.85, ops: [
+      op(1, 1.5, 0.001, 0.7, 0, 0.3), op(0.5, 1.5, 0.001, 0.7, 0, 0.3),
+      op(1, 1.2, 0.001, 0.6, 0, 0.3), op(1, 1, 0.001, 0.6, 0, 0.3)] },
+    bigboom: { alg: 0, fb: 9, vol: 1.0, ops: [
+      op(1, 2, 0.001, 1.6, 0, 0.6), op(0.5, 2, 0.001, 1.5, 0, 0.6),
+      op(1, 1.5, 0.001, 1.4, 0, 0.6), op(1, 1, 0.005, 1.8, 0, 0.8)] },
+    clank: { alg: 2, fb: 4, vol: 0.3, ops: [
+      op(1, 0.8, 0.001, 0.1, 0, 0.05), op(4.7, 1.4, 0.001, 0.12, 0, 0.05),
+      op(2.3, 1.2, 0.001, 0.1, 0, 0.05), op(1, 0.9, 0.001, 0.12, 0, 0.05)] },
+    whistle: { alg: 4, fb: 8, vol: 0.18, vib: 0.012, ops: [
+      op(1, 0.08, 0.05, 0.5, 0.8, 0.2), op(1, 0.6, 0.06, 0.8, 0.9, 0.25),
+      op(2, 0.1, 0.06, 0.5, 0.5, 0.2), op(1.5, 0.35, 0.06, 0.8, 0.9, 0.25)] },
+    siren: { alg: 4, fb: 6, vol: 0.2, ops: [
+      op(1, 1.1, 0.01, 0.3, 0.9, 0.05), op(1, 0.8, 0.01, 0.3, 0.9, 0.05),
+      op(2, 0.5, 0.01, 0.3, 0.9, 0.05), op(1, 0.5, 0.01, 0.3, 0.9, 0.05, 0.01)] },
+    noise: { alg: 7, fb: 9, vol: 0.3, ops: [op(1, 0.6, 0.02, 0.5, 0, 0.2), OFF, OFF, OFF] },
+  };
+
+  // ---- pitch / notation helpers --------------------------------------------
+  const NOTE_IDX = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 };
+  function noteToMidi(n) {
+    if (typeof n === 'number') return n;
+    const m = /^([a-gA-G])([#b]?)(-?\d)$/.exec(n);
+    if (!m) throw new Error('bad note ' + n);
+    let v = NOTE_IDX[m[1].toLowerCase()] + (Number(m[3]) * 12 + 12);
+    if (m[2] === '#') v++; else if (m[2] === 'b') v--;
+    return v;
+  }
+  const mtof = (m) => 440 * Math.pow(2, (noteToMidi(m) - 69) / 12);
+
+  // "D5 - - . A4 -": one token per step; '-' extends the previous note, '.' is a rest
+  function parseLine(str, stepOffset = 0) {
+    const ev = []; let cur = null; let step = stepOffset;
+    for (const tok of str.trim().split(/\s+/)) {
+      if (tok === '-') { if (cur) cur.len++; }
+      else if (tok === '.') cur = null;
+      else { cur = { step, len: 1, midi: noteToMidi(tok) }; ev.push(cur); }
+      step++;
+    }
+    return { ev, steps: step - stepOffset };
+  }
+  // Array of bar strings -> events. Warns when a bar has the wrong number of steps.
+  function parseBars(bars, stepsPerBar = 16, stepOffset = 0) {
+    const ev = []; let step = stepOffset;
+    bars.forEach((b, i) => {
+      const r = parseLine(b, step);
+      if (stepsPerBar && r.steps !== stepsPerBar) console.warn(`FM.parseBars: bar ${i + 1} has ${r.steps} steps (expected ${stepsPerBar}): ${b}`);
+      ev.push(...r.ev); step += r.steps;
+    });
+    return ev;
+  }
+
+  // Chord symbols: C, Cm, C7, Cm7, Cmaj7, Cdim, Caug, Csus4, Cadd9, with # / b roots
+  const QUALITY = { '': [0, 4, 7], m: [0, 3, 7], '7': [0, 4, 7, 10], m7: [0, 3, 7, 10], maj7: [0, 4, 7, 11],
+    dim: [0, 3, 6], aug: [0, 4, 8], sus4: [0, 5, 7], sus2: [0, 2, 7], add9: [0, 4, 7, 14], m7b5: [0, 3, 6, 10] };
+  function chord(sym, low = 60, high = 72) {
+    const m = /^([A-G])([#b]?)(.*)$/.exec(sym);
+    if (!m || !QUALITY[m[3]]) throw new Error('bad chord ' + sym);
+    let root = NOTE_IDX[m[1].toLowerCase()] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
+    root = ((root % 12) + 12) % 12;
+    // close voicing folded into [low, high)
+    return QUALITY[m[3]].map((iv) => { let n = 48 + root + iv; while (n < low) n += 12; while (n >= high + 12) n -= 12; return n; }).sort((a, b) => a - b);
+  }
+  const chordRoot = (sym, octave = 2) => noteToMidi(sym.match(/^[A-G][#b]?/)[0] + octave);
+
+  // Bass + chord accompaniment from a list of chord symbols, one per `unit` steps.
+  // opts: { unit=16, bassStep=2, bassOct=true, bassOctave=2, chordSteps=[4,12], chordLen=2, low=60, high=72 }
+  function accomp(chords, opts = {}) {
+    const o = { unit: 16, bassStep: 2, bassOct: true, bassOctave: 2, chordSteps: [4, 12], chordLen: 2, low: 60, high: 72, ...opts };
+    const bass = [], pads = [];
+    chords.forEach((sym, i) => {
+      const base = i * o.unit; const r = chordRoot(sym, o.bassOctave); const ch = chord(sym, o.low, o.high);
+      for (let s = 0; s < o.unit; s += o.bassStep) {
+        const oct = o.bassOct && (s / o.bassStep) % 2 === 1 ? 12 : 0;
+        bass.push({ step: base + s, len: Math.max(1, o.bassStep - 1), midi: r + oct });
+      }
+      for (const s of o.chordSteps) if (s < o.unit) ch.forEach((m) => pads.push({ step: base + s, len: o.chordLen, midi: m }));
+    });
+    return { bass, chords: pads };
+  }
+  // Arpeggio over chord symbols: pattern indexes chord tones (index >= tones wraps up an octave)
+  function arpeggio(chords, { unit = 16, pattern = [0, 1, 2, 3, 2, 1], octave = 12, low = 60, high = 72, stepOffset = 0 } = {}) {
+    const ev = [];
+    chords.forEach((sym, i) => {
+      const ch = chord(sym, low, high);
+      for (let s = 0; s < unit; s++) {
+        const k = pattern[s % pattern.length];
+        ev.push({ step: stepOffset + i * unit + s, len: 1, midi: ch[k % ch.length] + 12 * Math.floor(k / ch.length) + octave });
+      }
+    });
+    return ev;
+  }
+
+  // Drum pattern string per bar: "k . h . s . h ." (k kick, s snare, h hat, o open hat, t tom; combine like "kh")
+  const DRUM_MAP = { k: ['kick', 150, 0.15, 0.2], s: ['snare', 220, 0.12, 0], h: ['hat', 7000, 0.04, 0],
+    o: ['ohat', 7000, 0.25, 0], t: ['tom', 180, 0.3, 0.5] };
+  function parseDrums(bar, nBars = 1, stepOffset = 0) {
+    const ev = []; const toks = bar.trim().split(/\s+/);
+    for (let b = 0; b < nBars; b++) toks.forEach((t, i) => { for (const c of t) if (DRUM_MAP[c]) ev.push({ step: stepOffset + b * toks.length + i, drum: c }); });
+    return ev;
+  }
+
+  // ---- SFX presets: [patch, Hz|'A4', delay(s), dur(s), vel, sweep, panSign] --------
+  const SFX = {
+    shot: [['zap', 1900, 0, 0.07, 0.6, 0.35]],
+    laser: [['zap', 2400, 0, 0.18, 0.6, 0.15]],
+    eshot: [['blip', 700, 0, 0.12, 0.6, 1.8]],
+    hit: [['clank', 1000, 0, 0.05, 0.4, 0]],
+    explosion: [['boom', 200, 0, 0.5, 1, 0.25]],
+    bigexplosion: [['bigboom', 120, 0, 1.4, 1, 0.2], ['boom', 300, 0.15, 0.6, 0.8, 0.2, -1], ['boom', 180, 0.35, 0.6, 0.8, 0.2]],
+    damage: [['clank', 500, 0, 0.25, 1, 0.4], ['boom', 160, 0, 0.5, 0.9, 0.3]],
+    powerup: [0, 4, 7, 12, 16].map((n, i) => ['bell', mtof(76 + n), i * 0.05, 0.25, 0.8, 0]),
+    coin: [['bell', 'B5', 0, 0.06, 0.8, 0], ['bell', 'E6', 0.06, 0.35, 0.8, 0]],
+    jump: [['blip', 300, 0, 0.18, 0.7, 2.5]],
+    extend: [0, 7, 12, 19, 24].map((n, i) => ['bell', mtof(72 + n), i * 0.08, 0.4, 0.9, 0]),
+    select: [['bell', 'C6', 0, 0.15, 0.7, 0]],
+    cancel: [['blip', 500, 0, 0.12, 0.6, 0.5]],
+    warning: [0, 1, 2, 3, 4, 5].map((i) => ['siren', i % 2 ? 660 : 880, i * 0.35, 0.33, 0.8, i % 2 ? 1.33 : 0.75]),
+    whistle: [['whistle', 'A5', 0, 0.5, 1, 0], ['whistle', 'C#6', 0, 0.5, 0.8, 0], ['whistle', 'A5', 0.6, 0.9, 1, 0], ['whistle', 'C#6', 0.6, 0.9, 0.8, 0]],
+    steam: [['noise', 2000, 0, 0.9, 1, 0.3]],
+    bomb: [['noise', 2000, 0, 0.9, 1, 0.3], ['bigboom', 90, 0, 1.2, 0.8, 0.3]],
+  };
+
+  // ---- engine ---------------------------------------------------------------
+  const FM = {
+    op, OFF, PATCHES, SFX, DRUM_MAP,
+    noteToMidi, mtof, parseLine, parseBars, chord, chordRoot, accomp, arpeggio, parseDrums,
+    ctx: null, music: null, sfx: null, ready: false, musicVol: 0.8, sfxVol: 0.9, muted: false,
+    song: null, mute: {}, timer: null, onSongEnd: null,
+
+    // Call from a user gesture (keydown / pointerdown). Safe to call repeatedly.
+    async init({ musicVoices = 16, sfxVoices = 12, echo = 0.22, echoTime = 0.31 } = {}) {
+      if (this.ctx) { if (this.ctx.state !== 'running') await this.ctx.resume(); return; }
+      if (typeof fmWorkletMain !== 'function') throw new Error('load fm-worklet.js before fm-audio.js');
+      const ctx = this.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+      // Blob URL so this works from file:// too
+      const url = URL.createObjectURL(new Blob([fmWorkletMain.toString() + '\nfmWorkletMain();'], { type: 'application/javascript' }));
+      await ctx.audioWorklet.addModule(url);
+      const mk = (voices) => new AudioWorkletNode(ctx, 'fm-synth', { numberOfInputs: 0, outputChannelCount: [2], processorOptions: { voices } });
+      this.music = mk(musicVoices); this.sfx = mk(sfxVoices);
+      this.addPatches(PATCHES);
+      const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -10; comp.ratio.value = 4; comp.connect(ctx.destination);
+      this.musicGain = ctx.createGain(); this.musicGain.gain.value = this.musicVol;
+      this.sfxGain = ctx.createGain(); this.sfxGain.gain.value = this.sfxVol;
+      this.music.connect(this.musicGain); this.musicGain.connect(comp);
+      this.sfx.connect(this.sfxGain); this.sfxGain.connect(comp);
+      if (echo > 0) {
+        const d = ctx.createDelay(2); d.delayTime.value = echoTime;
+        const fb = ctx.createGain(); fb.gain.value = 0.28; const wet = ctx.createGain(); wet.gain.value = echo;
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2500;
+        this.musicGain.connect(d); d.connect(lp); lp.connect(fb); fb.connect(d); lp.connect(wet); wet.connect(comp);
+        this.echoDelay = d;
+      }
+      this.ready = true;
+    },
+
+    addPatches(patches) {
+      Object.assign(PATCHES, patches);
+      for (const n of [this.music, this.sfx]) if (n) n.port.postMessage({ type: 'patches', patches });
+    },
+
+    // Low-level note. target: 'music' | 'sfx'. freq: Hz (number) or note name ('A4').
+    note(target, patch, freq, { t, dur = 0.2, vel = 1, pan = 0, sweep = 0 } = {}) {
+      if (!this.ready) return;
+      const node = target === 'music' ? this.music : this.sfx;
+      const f = typeof freq === 'number' ? freq : mtof(freq); // number = Hz, string = note name
+      node.port.postMessage({ type: 'note', patch, freq: f, t: t == null ? this.ctx.currentTime + 0.005 : t, dur, vel, pan, sweep });
+    },
+
+    // Play an SFX preset (or an inline array of steps). x/width give stereo position.
+    play_sfx(name, { x, width = 960, vel = 1 } = {}) {
+      if (!this.ready) return;
+      const steps = typeof name === 'string' ? SFX[name] : name;
+      if (!steps) { console.warn('FM: unknown sfx ' + name); return; }
+      const pan = x == null ? 0 : Math.max(-0.8, Math.min(0.8, (x / width) * 1.6 - 0.8));
+      const t0 = this.ctx.currentTime + 0.005;
+      for (const [patch, f, delay, dur, v, sweep, panSign = 1] of steps)
+        this.note('sfx', patch, f, { t: t0 + delay, dur, vel: v * vel, pan: pan * panSign, sweep });
+    },
+    defineSfx(name, steps) { SFX[name] = steps; },
+
+    // ---- sequencer ----
+    // song: { bpm, steps, stepsPerBeat=4, once=false, tracks:[{ name, patch, ev, vel=1, pan=0 }] }
+    play(song, { mute = {} } = {}) {
+      if (!this.ready) return;
+      this.stop(true);
+      this.song = song; this.mute = mute;
+      this.stepDur = 60 / song.bpm / (song.stepsPerBeat || 4);
+      if (this.echoDelay) this.echoDelay.delayTime.value = Math.min(2, this.stepDur * 3);
+      for (const tr of song.tracks) { tr.byStep = {}; for (const e of tr.ev) (tr.byStep[e.step] ||= []).push(e); }
+      this.songStart = this.ctx.currentTime + 0.08; this.nextStep = 0;
+      this.timer = setInterval(() => this._schedule(), 25);
+      this._schedule();
+    },
+    stop(hard = false) {
+      if (this.timer) clearInterval(this.timer);
+      this.timer = null; this.song = null;
+      if (this.music) this.music.port.postMessage({ type: hard ? 'hush' : 'stop' });
+    },
+    setMute(mute) { this.mute = mute; },
+    _schedule() {
+      const s = this.song; if (!s) return;
+      const ahead = this.ctx.currentTime + 0.15;
+      while (this.songStart + this.nextStep * this.stepDur < ahead) {
+        const abs = this.nextStep;
+        if (s.once && abs >= s.steps) { clearInterval(this.timer); this.timer = null; this.song = null; if (this.onSongEnd) this.onSongEnd(s); return; }
+        const step = abs % s.steps; const t = this.songStart + abs * this.stepDur;
+        for (const tr of s.tracks) {
+          if (this.mute[tr.name]) continue;
+          const evs = tr.byStep[step]; if (!evs) continue;
+          for (const e of evs) {
+            if (e.drum) {
+              const [p, f, d, sw] = DRUM_MAP[e.drum];
+              this.note('music', p, f, { t, dur: d, vel: (tr.vel ?? 1) * (e.vel ?? 1), pan: e.drum === 'h' ? 0.25 : 0, sweep: sw });
+            } else {
+              this.note('music', e.patch || tr.patch, mtof(e.midi), { t, dur: e.len * this.stepDur * 0.92, vel: (tr.vel ?? 1) * (e.vel ?? 1), pan: tr.pan || 0 });
+            }
+          }
+        }
+        this.nextStep++;
+      }
+    },
+
+    // ---- mixer ----
+    setVolume({ music, sfx } = {}) {
+      if (music != null) this.musicVol = music; if (sfx != null) this.sfxVol = sfx;
+      if (this.ready && !this.muted) { this.musicGain.gain.value = this.musicVol; this.sfxGain.gain.value = this.sfxVol; }
+    },
+    toggleMute() {
+      this.muted = !this.muted; if (!this.ready) return this.muted;
+      this.musicGain.gain.value = this.muted ? 0 : this.musicVol; this.sfxGain.gain.value = this.muted ? 0 : this.sfxVol;
+      return this.muted;
+    },
+    // Release everything and close the AudioContext (e.g. when leaving the page / after tests)
+    async shutdown() {
+      this.stop(true); if (this.sfx) this.sfx.port.postMessage({ type: 'hush' });
+      if (this.ctx) await this.ctx.close();
+      this.ctx = null; this.ready = false;
+    },
+
+    // Measure output level for headless verification (cannot listen -> check numbers)
+    async measure(target = 'music', ms = 1000) {
+      const an = this.ctx.createAnalyser(); an.fftSize = 2048;
+      (target === 'music' ? this.musicGain : this.sfxGain).connect(an);
+      const buf = new Float32Array(2048); let peak = 0, sum = 0, n = 0, nonFinite = 0;
+      for (let i = 0; i < ms / 50; i++) {
+        await new Promise((r) => setTimeout(r, 50)); an.getFloatTimeDomainData(buf);
+        for (const v of buf) { if (!Number.isFinite(v)) nonFinite++; else { peak = Math.max(peak, Math.abs(v)); sum += v * v; n++; } }
+      }
+      an.disconnect();
+      return { peak: +peak.toFixed(3), rms: +Math.sqrt(sum / Math.max(1, n)).toFixed(3), nonFinite };
+    },
+  };
+
+  window.FM = FM;
+})();
+
+</script>
+<script>
+(()=>{
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const W=960,H=540,GY=470,OL='#2a1f3d';
+const FONT="'Zen Maru Gothic',sans-serif";
+let scale=1,dpr=1;
+function resize(){dpr=Math.min(2,window.devicePixelRatio||1);scale=Math.min(innerWidth/W,innerHeight/H)*0.98;
+ cv.style.width=W*scale+'px';cv.style.height=H*scale+'px';cv.width=Math.round(W*scale*dpr);cv.height=Math.round(H*scale*dpr);}
+addEventListener('resize',resize);resize();
+if('ontouchstart' in window||navigator.maxTouchPoints>0)document.body.classList.add('touch');
+
+// ---------- utils ----------
+const rnd=(a,b)=>a+Math.random()*(b-a), clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), TAU=Math.PI*2;
+function seeded(s){return()=>{s=(s*16807)%2147483647;return(s-1)/2147483646;}}
+function P(fn,fill,lw=4,stroke=OL){ctx.beginPath();fn();if(fill){ctx.fillStyle=fill;ctx.fill();}if(lw){ctx.lineWidth=lw;ctx.strokeStyle=stroke;ctx.stroke();}}
+const circ=(x,y,r,f,lw=4)=>P(()=>ctx.arc(x,y,r,0,TAU),f,lw);
+const ell=(x,y,rx,ry,rot,f,lw=4)=>P(()=>ctx.ellipse(x,y,rx,ry,rot,0,TAU),f,lw);
+const rr=(x,y,w,h,r,f,lw=4)=>P(()=>ctx.roundRect(x,y,w,h,r),f,lw);
+function limb(x1,y1,x2,y2,w,col,dash){ctx.lineCap='round';ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);
+ ctx.strokeStyle=OL;ctx.lineWidth=w+7;ctx.stroke();ctx.strokeStyle=col;ctx.lineWidth=w;ctx.stroke();
+ if(dash){ctx.setLineDash([4,5]);ctx.strokeStyle=dash;ctx.stroke();ctx.setLineDash([]);}}
+function star(x,y,r,f,lw=3,rot=0){P(()=>{for(let i=0;i<10;i++){const a=rot+i*Math.PI/5-Math.PI/2,rr2=i%2?r*0.45:r;ctx.lineTo(x+Math.cos(a)*rr2,y+Math.sin(a)*rr2);}ctx.closePath();},f,lw);}
+function heart(x,y,s,f,lw=3){P(()=>{ctx.moveTo(x,y+s*0.35);ctx.bezierCurveTo(x-s*1.1,y-s*0.5,x-s*0.4,y-s*1.2,x,y-s*0.5);ctx.bezierCurveTo(x+s*0.4,y-s*1.2,x+s*1.1,y-s*0.5,x,y+s*0.35);},f,lw);}
+function text(s,x,y,size,fill='#fff',align='center',lw=8,stroke=OL){ctx.font=`900 ${size}px ${FONT}`;ctx.textAlign=align;ctx.textBaseline='middle';ctx.lineJoin='round';
+ ctx.lineWidth=lw;ctx.strokeStyle=stroke;ctx.strokeText(s,x,y);ctx.fillStyle=fill;ctx.fillText(s,x,y);}
+ctx.lineJoin='round';
+
+// ---------- audio (FM音源 / fm-synth スキル) ----------
+// FM音源が使えない環境では、従来の簡易 WebAudio 音にフォールバックする
+let AC=null,muted=false,master,fmState='none',wantMusic='title',curMusic=null;
+function legacyAudio(){try{if(!AC){AC=new(window.AudioContext||window.webkitAudioContext)();master=AC.createGain();master.gain.value=muted?0:0.9;master.connect(AC.destination);startBgm();}
+ if(AC.state==='suspended')AC.resume();}catch(e){}}
+function ensureAudio(){
+ if(fmState==='ok'){if(FM.ctx&&FM.ctx.state!=='running')FM.ctx.resume();return;}
+ if(fmState==='fail'){legacyAudio();return;}
+ if(fmState!=='none')return;
+ if(!window.FM){fmState='fail';legacyAudio();return;}
+ fmState='init';
+ fmInit().then(()=>{fmState='ok';setupFM();if(muted)FM.toggleMute();if(wantMusic)music(wantMusic,true,wantOpts);})
+  .catch(e=>{console.warn('FM init failed, fallback',e);fmState='fail';legacyAudio();});
+}
+// FM.init を試し、ローカルファイル(file://)などで Blob の読み込みが拒否されたら data: URL で読み込み直す
+async function fmInit(){
+ const opts={musicVoices:20,sfxVoices:12,echo:0.2};
+ try{await FM.init(opts);return;}catch(e){try{FM.ctx&&FM.ctx.close();}catch(_){}FM.ctx=null;FM.ready=false;}
+ const orig=URL.createObjectURL;
+ URL.createObjectURL=()=>'data:application/javascript;base64,'+btoa(unescape(encodeURIComponent(fmWorkletMain.toString()+'\nfmWorkletMain();')));
+ try{await FM.init(opts);}finally{URL.createObjectURL=orig;}
+}
+function tone(f,d,type='sine',v=0.15,delay=0,f2){if(!AC||muted)return;const t=AC.currentTime+delay,o=AC.createOscillator(),g=AC.createGain();
+ o.type=type;o.frequency.setValueAtTime(f,t);if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+d);
+ g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(v,t+0.01);g.gain.exponentialRampToValueAtTime(0.0001,t+d);o.connect(g);g.connect(master);o.start(t);o.stop(t+d+0.05);}
+function noise(d,v=0.2){if(!AC||muted)return;const b=AC.createBuffer(1,AC.sampleRate*d,AC.sampleRate),a=b.getChannelData(0);for(let i=0;i<a.length;i++)a[i]=(Math.random()*2-1)*(1-i/a.length);
+ const s=AC.createBufferSource(),g=AC.createGain();g.gain.value=v;s.buffer=b;s.connect(g);g.connect(master);s.start();}
+const OLDSFX={
+ candy:()=>{tone(1047,0.09,'triangle',0.18);tone(1568,0.14,'triangle',0.15,0.07);},
+ jump:()=>tone(400,0.18,'sine',0.15,0,800),
+ hit:()=>{tone(300,0.3,'square',0.08,0,90);noise(0.15,0.15);},
+ shoot:()=>tone(700,0.1,'triangle',0.06,0,350),
+ pop:()=>{noise(0.25,0.35);tone(900,0.12,'square',0.08,0,200);},
+ inflate:()=>tone(200,0.8,'sine',0.12,0,700),
+ puff:()=>tone(500,0.08,'sine',0.05,0,650),
+ salt:()=>[392,370,330,262].forEach((f,i)=>tone(f,0.4,'triangle',0.12,i*0.22)),
+ win:()=>[523,659,784,1047,1319,1568].forEach((f,i)=>tone(f,0.35,'triangle',0.15,i*0.11)),
+ page:()=>tone(660,0.08,'triangle',0.1)};
+// 効果音：FM が動いていれば FM、だめなら従来音
+const SFX={};for(const k of Object.keys(OLDSFX))SFX[k]=(x)=>{if(fmState==='ok'){if(FM.SFX['cs_'+k])FM.play_sfx('cs_'+k,x==null?{}:{x,width:W});}else OLDSFX[k]();};
+
+// ---- FM: 音色・効果音・曲 ----
+function setupFM(){
+ const op=FM.op;
+ FM.addPatches({
+  flute:{alg:4,fb:2,vol:0.15,vib:0.01,ops:[op(1,0.22,0.03,0.4,0.6,0.15),op(1,0.7,0.03,0.6,0.85,0.16),op(2,0.12,0.03,0.4,0.5,0.15),op(1,0.45,0.03,0.6,0.85,0.16,0.003)]},
+  musicbox:{alg:4,fb:0,vol:0.17,ops:[op(4,0.6,0.001,0.4,0,0.2),op(1,0.7,0.001,0.9,0,0.3),op(3,0.25,0.001,0.3,0,0.2),op(1,0.35,0.001,0.6,0,0.3,0.002)]},
+  pizz:{alg:4,fb:0,vol:0.2,ops:[op(1,0.8,0.001,0.08,0,0.05),op(1,0.8,0.001,0.25,0,0.08),op(2,0.3,0.001,0.08,0,0.05),op(1,0.5,0.001,0.3,0,0.08,0.002)]},
+  pad:{alg:5,fb:1,vol:0.09,vib:0.006,ops:[op(1,0.4,0.35,1,0.85,0.5),op(1,0.6,0.3,1,0.9,0.6,0.003),op(2,0.25,0.3,1,0.9,0.6,-0.003),op(1,0.6,0.3,1,0.9,0.6)]},
+ });
+ const D=(n,a)=>FM.defineSfx('cs_'+n,a);
+ D('candy',[['musicbox','E6',0,0.08,0.7,0],['musicbox','B6',0.06,0.3,0.6,0]]);
+ D('jump',[['blip',330,0,0.16,0.6,2.2]]);
+ D('hit',[['clank',700,0,0.12,0.6,0.6],['blip',420,0.02,0.25,0.6,0.45]]);
+ D('shoot',[['blip',820,0,0.1,0.4,0.55]]);
+ D('pop',[['noise',2500,0,0.14,1,0.35],['boom',500,0,0.22,0.5,0.4]]);
+ D('inflate',[['whistle',260,0,0.9,0.5,2.4]]);
+ D('puff',[['blip',520,0,0.07,0.22,1.3]]);
+ D('page',[['musicbox','C6',0,0.12,0.6,0]]);
+ D('win',[0,4,7,12,16].map((n,i)=>['musicbox',FM.mtof(72+n),i*0.06,0.3,0.7,0]));
+ D('salt',[]);
+ // エンディングのジングルが終わったら、タイトルのワルツを静かに流す
+ FM.onSongEnd=()=>{curMusic=null;if(S==='end')music('title',true,{mute:{lead:true}});};
+}
+const SONGS={};
+function buildSongs(){
+ if(SONGS.title)return;
+ const bar=(chs,len,unit)=>chs.flatMap((c,i)=>FM.chord(c,55,67).map(m=>({step:i*unit,len,midi:m})));
+ // タイトル：オルゴールのワルツ（3/4、1小節12ステップ）
+ const tProg=['F','Dm','Gm','C','F','Am','Bb','C'];
+ const tAcc=FM.accomp(tProg,{unit:12,bassStep:12,bassOct:false,chordSteps:[4,8],chordLen:3});
+ SONGS.title={bpm:100,steps:96,tracks:[
+  {name:'lead',patch:'musicbox',vel:0.9,pan:0.1,ev:FM.parseBars([
+   'A4 - - - C5 - - - F5 - - -','E5 - - - D5 - - - A4 - - -','Bb4 - - - D5 - - - G5 - - -','F5 - - - E5 - - - C5 - - -',
+   'A5 - - - G5 - F5 - C5 - - -','E5 - - - A5 - - - C6 - - -','D6 - - - Bb5 - - - F5 - G5 -','E5 - - - - - - - C5 - - -'],12)},
+  {name:'bass',patch:'pizz',vel:0.9,ev:tAcc.bass},
+  {name:'chords',patch:'epiano',vel:0.45,pan:-0.3,ev:tAcc.chords},
+  {name:'pad',patch:'pad',vel:0.5,ev:bar(tProg,12,12)}]};
+ // 前半：はずむ道中曲
+ const p1=['C','Am','F','G','C','Am','Dm','G'];
+ const a1=FM.accomp(p1,{bassStep:2,bassOct:true,chordSteps:[2,6,10,14],chordLen:1});
+ SONGS.stage1={bpm:138,steps:128,tracks:[
+  {name:'lead',patch:'flute',vel:0.9,pan:0.1,ev:FM.parseBars([
+   'E5 - G5 - C6 - G5 - E5 - G5 - A5 - G5 -','E5 - - - C5 - E5 - A5 - - - G5 - E5 -','F5 - A5 - C6 - A5 - F5 - - - G5 - A5 -','G5 - - - D5 - G5 - B5 - - - . . . .',
+   'C6 - B5 - C6 - G5 - E5 - G5 - C6 - E6 -','D6 - C6 - A5 - E5 - C6 - - - B5 - A5 -','F5 - A5 - D6 - C6 - A5 - F5 - D5 - F5 -','G5 - - - - - - - D5 - F5 - B5 - - -'])},
+  {name:'bass',patch:'bass',vel:0.75,ev:a1.bass},
+  {name:'chords',patch:'pizz',vel:0.45,pan:-0.3,ev:a1.chords},
+  {name:'arp',patch:'musicbox',vel:0.22,pan:0.4,ev:FM.arpeggio(p1,{pattern:[0,1,2,1],octave:12})},
+  {name:'drums',vel:0.55,ev:FM.parseDrums('k . h . s . h . k . k h s . h .',8)}]};
+ // 後半：ふわっと空を飛ぶ曲
+ const p2=['G','Em','C','D','Em','C','Am','D'];
+ const a2=FM.accomp(p2,{bassStep:4,bassOct:true,chordSteps:[],chordLen:1});
+ SONGS.stage2={bpm:118,steps:128,tracks:[
+  {name:'lead',patch:'flute',vel:0.9,pan:0.1,ev:FM.parseBars([
+   'D5 - - - G5 - - - B5 - - - A5 - G5 -','B4 - - - - - - - E5 - G5 - B5 - - -','C6 - - - B5 - A5 - G5 - - - E5 - - -','F#5 - - - - - - - A5 - - - D5 - - -',
+   'E5 - - - G5 - B5 - E6 - - - D6 - B5 -','C6 - - - - - - - G5 - E5 - G5 - - -','A5 - - - C6 - - - E6 - - - D6 - C6 -','D6 - - - - - - - A5 - - - F#5 - - -'])},
+  {name:'bass',patch:'bass',vel:0.65,ev:a2.bass},
+  {name:'pad',patch:'pad',vel:0.55,pan:-0.2,ev:bar(p2,16,16)},
+  {name:'arp',patch:'musicbox',vel:0.28,pan:0.4,ev:FM.arpeggio(p2,{pattern:[0,1,2,3,2,1],octave:12})},
+  {name:'drums',vel:0.4,ev:FM.parseDrums('k . h . . . h . s . h . . . h h',8)}]};
+ // ジングル
+ SONGS.ending={bpm:120,steps:32,once:true,tracks:[
+  {name:'lead',patch:'musicbox',ev:FM.parseBars(['C5 - E5 - G5 - C6 - E6 - - - D6 - C6 -','G5 - - - C6 - - - - - - - . . . .'])},
+  {name:'flute',patch:'flute',vel:0.6,ev:FM.parseBars(['. . . . . . . . C6 - - - B5 - A5 -','B5 - - - C6 - - - - - - - . . . .'])},
+  {name:'pad',patch:'pad',vel:0.6,ev:[['C',0,8],['F',8,8],['C',16,14]].flatMap(([c,st,l])=>FM.chord(c,55,67).map(m=>({step:st,len:l,midi:m})))},
+  {name:'bass',patch:'pizz',ev:[{step:0,len:8,midi:36},{step:8,len:6,midi:41},{step:16,len:12,midi:36}]}]};
+ SONGS.salty={bpm:84,steps:32,once:true,tracks:[
+  {name:'lead',patch:'flute',vel:0.8,ev:FM.parseBars(['G4 - - - F#4 - - - F4 - - - E4 - - -','D#4 - - - - - - - . . . . . . . .'])},
+  {name:'bass',patch:'pizz',vel:0.9,ev:[{step:0,len:3,midi:43},{step:4,len:3,midi:42},{step:8,len:3,midi:41},{step:12,len:3,midi:40},{step:16,len:6,midi:39}]}]};
+ SONGS.over={bpm:110,steps:32,once:true,tracks:[
+  {name:'lead',patch:'musicbox',ev:FM.parseBars(['E5 - - - C5 - - - A4 - - - G#4 - - -','A4 - - - - - - - . . . . . . . .'])},
+  {name:'pad',patch:'pad',vel:0.5,ev:FM.chord('Am',55,67).map(m=>({step:0,len:24,midi:m}))}]};
+}
+// 場面ごとの曲。opts.mute でトラックを消す（同じ曲ならミュートだけ切り替えて途切れさせない）
+function music(name,force,opts={}){
+ wantMusic=name;wantOpts=opts;
+ if(fmState!=='ok')return;
+ buildSongs();
+ if(!force&&curMusic===name&&FM.song){FM.setMute(opts.mute||{});return;}
+ curMusic=name;
+ if(!name){FM.stop();return;}
+ FM.play(SONGS[name],{mute:opts.mute||{}});
+}
+let wantOpts={};
+const MUSIC_FOR={title:['title'],s1:['title'],p1:['stage1'],s2:['stage2',{mute:{lead:true,drums:true}}],p2:['stage2'],over:['over'],end:['ending'],salty:['salty']};
+function musicForState(s){const m=MUSIC_FOR[s];if(m)music(m[0],false,m[1]||{});}
+// 旧BGM（フォールバック用）
+const MEL=[72,76,79,76,74,77,81,77,72,76,79,84,83,79,76,74, 72,76,79,76,77,81,84,81,79,76,74,79,76,74,72,-1];
+let bgmStep=0,bgmNext=0;
+function startBgm(){bgmNext=AC.currentTime+0.1;setInterval(()=>{if(!AC)return;while(bgmNext<AC.currentTime+0.3){const n=MEL[bgmStep%MEL.length];
+ const dl=bgmNext-AC.currentTime;if(n>0)tone(440*Math.pow(2,(n-69)/12),0.4,'triangle',0.045,dl);
+ if(bgmStep%4===0){const b=[48,53,55,48][(bgmStep/8|0)%4];tone(440*Math.pow(2,(b-69)/12),0.6,'sine',0.05,dl);}bgmStep++;bgmNext+=0.21;}},90);}
+const muteBtn=document.getElementById('mute');
+muteBtn.onclick=e=>{e.stopPropagation();ensureAudio();muted=!muted;
+ if(fmState==='ok'){if(FM.muted!==muted)FM.toggleMute();}
+ master&&(master.gain.value=muted?0:0.9);muteBtn.textContent=muted?'♪ OFF':'♪ ON';};
+// ---------- input ----------
+const keys={},pressed={};
+function kd(k){if(!keys[k])pressed[k]=true;keys[k]=true;ensureAudio();}
+function ku(k){keys[k]=false;}
+addEventListener('keydown',e=>{let k=e.code;if(k==='KeyA')k='ArrowLeft';if(k==='KeyD')k='ArrowRight';if(k==='KeyW'||k==='ArrowUp')k='Space';if(k==='Enter')k='Space';
+ if(k==='KeyM'){muteBtn.click();return;}kd(k);if(['Space','ArrowLeft','ArrowRight','ArrowDown'].includes(k))e.preventDefault();});
+addEventListener('keyup',e=>{let k=e.code;if(k==='KeyA')k='ArrowLeft';if(k==='KeyD')k='ArrowRight';if(k==='KeyW'||k==='ArrowUp'||k==='Enter')k='Space';ku(k);});
+document.querySelectorAll('.pad button').forEach(b=>{const k=b.dataset.k;
+ b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();kd(k);});
+ ['pointerup','pointercancel','pointerleave'].forEach(t=>b.addEventListener(t,()=>ku(k)));});
+let tapped=false;cv.addEventListener('pointerdown',()=>{ensureAudio();tapped=true;});
+const confirm=()=>pressed.Space||tapped;
+const L=()=>keys.ArrowLeft,R=()=>keys.ArrowRight,UP=()=>keys.Space;
+
+// ---------- drawing: characters ----------
+const HAIR='#7b4fe0',HAIR2='#b58cff',SKIN='#ffe2cf',DRESS='#33296e',PINK='#ff5fa8';
+function girlHead(t,front){
+ // bangs + face
+ circ(0,-32,21,SKIN);
+ P(()=>{ctx.arc(0,-34,23,Math.PI*0.92,Math.PI*2.08);for(let i=0;i<=5;i++){const x=21-i*8.4;ctx.lineTo(x,-34+(i%2?8:0));}ctx.closePath();},HAIR);
+ P(()=>{ctx.moveTo(-12,-50);ctx.quadraticCurveTo(-2,-56,10,-50);},null,3,HAIR2);
+ const ex=front?[-7,7]:[-1,10];
+ const blink=(t%4)<0.12;
+ ex.forEach(x=>{if(blink){P(()=>{ctx.moveTo(x-4,-30);ctx.lineTo(x+4,-30);},null,3);}else{
+  P(()=>{ctx.arc(x,-30,4.5,0,Math.PI);ctx.closePath();},'#5b2bb5',2.5);
+  P(()=>{ctx.moveTo(x-6,-31);ctx.lineTo(x+6,-31);},null,3.5);
+  P(()=>{ctx.moveTo(x+5,-31);ctx.lineTo(x+8,-34);},null,2.5);}});
+ ell(ex[0]-3,-22,4,2.5,0,'#ffb1cf',0);ell(ex[1]+3,-22,4,2.5,0,'#ffb1cf',0);
+ // lollipop
+ const mx=front?2:13,my=-20;
+ P(()=>{ctx.moveTo(mx,my);ctx.lineTo(mx+20,my-2);},null,4,'#fff');P(()=>{ctx.moveTo(mx,my);ctx.lineTo(mx+20,my-2);},null,1.5);
+ circ(mx+29,my-3,10,'#ff7ac0',3.5);
+ P(()=>{for(let a=0;a<TAU*2;a+=0.2){const r=a/(TAU*2)*8;ctx.lineTo(mx+29+Math.cos(a+t*3)*r,my-3+Math.sin(a+t*3)*r);}},null,2.5,'#fff');
+ star(-15,-49,6,'#ffe14d',2.5,t);
+}
+function girlTail(ax,ay,len,ph,t,down){
+ const w=Math.sin(t*6+ph)*10;
+ P(()=>{ctx.moveTo(ax,ay-6);
+  if(down){ctx.bezierCurveTo(ax-14+w*.3,ay+20,ax-6+w,ay+len*0.7,ax-4+w,ay+len);ctx.bezierCurveTo(ax+4+w,ay+len*0.7,ax+8,ay+20,ax+6,ay+4);}
+  else{ctx.bezierCurveTo(ax-25,ay-22+w*.3,ax-len*0.7,ay-6+w,ax-len,ay+4+w);ctx.bezierCurveTo(ax-len*0.7,ay+12+w,ax-25,ay+12,ax,ay+6);}
+  ctx.closePath();},HAIR);
+ ell(ax,ay,7,5,0,PINK,3);
+}
+function vGirl(x,y,t,mode,f=1){
+ ctx.save();ctx.translate(x,y);
+ if(mode==='fly'){ctx.scale(f,1);ctx.rotate(0.12);
+  // cape
+  P(()=>{const w=Math.sin(t*7)*8;ctx.moveTo(-6,-10);ctx.quadraticCurveTo(-40,0+w,-62,12+w);ctx.quadraticCurveTo(-34,26,-4,20);ctx.closePath();},'#ff7ac0');
+  girlTail(-14,-40,72,0,t);girlTail(-10,-28,62,1.5,t);
+  // legs trailing
+  limb(-4,24,-30,48+Math.sin(t*5)*3,8,'#ff9ccc','#fff');limb(4,24,-18,54+Math.sin(t*5+1)*3,8,'#ff9ccc','#fff');
+  ell(-33,51,8,6,0.4,'#1e1a33',3);ell(-21,57,8,6,0.4,'#1e1a33',3);
+  // dress
+  P(()=>{ctx.moveTo(-8,-12);ctx.lineTo(10,-12);ctx.lineTo(22,26);ctx.quadraticCurveTo(0,32,-22,26);ctx.closePath();},DRESS);
+  star(-6,10,5,'#ffe14d',2);star(10,18,4,'#ffe14d',2);
+  P(()=>{ctx.moveTo(-8,-12);ctx.lineTo(1,-2);ctx.lineTo(10,-12);ctx.closePath();},'#fff',3);
+  // arms
+  limb(4,-6,26,4+Math.sin(t*4)*4,6,SKIN);limb(-2,-6,14,14,6,DRESS);
+  girlHead(t,false);
+ }else{ // sit (front)
+  girlTail(-20,-40,62,0,t,true);girlTail(20,-40,62,1.2,t,true);
+  const sw=Math.sin(t*3)*6;
+  limb(-7,22,-9+sw,54,8,'#ff9ccc','#fff');limb(7,22,9-sw,54,8,'#ff9ccc','#fff');
+  ell(-10+sw,58,9,6,0,'#1e1a33',3);ell(10-sw,58,9,6,0,'#1e1a33',3);
+  P(()=>{ctx.moveTo(-9,-12);ctx.lineTo(9,-12);ctx.lineTo(24,24);ctx.quadraticCurveTo(0,30,-24,24);ctx.closePath();},DRESS);
+  star(-8,10,5,'#ffe14d',2);star(9,16,4,'#ffe14d',2);
+  P(()=>{ctx.moveTo(-9,-12);ctx.lineTo(0,-3);ctx.lineTo(9,-12);ctx.closePath();},'#fff',3);
+  limb(-8,-6,-22,16,6,DRESS);
+  const wave=mode==='wave'?Math.sin(t*10)*0.5:0;
+  limb(8,-6,22+Math.cos(-1+wave)*6,mode==='wave'?-28+wave*8:16,6,DRESS);
+  girlHead(t,true);
+ }
+ ctx.restore();
+}
+const JACKET='#21b3a6',HAT='#ef4157';
+function vBoy(x,y,t,o={}){
+ const f=o.f||1,walk=o.walk||0,hat=o.hat||0,hurt=o.hurt;
+ ctx.save();ctx.translate(x,y);ctx.scale(f,1);
+ if(hurt&&Math.floor(t*14)%2){ctx.globalAlpha=0.45;}
+ const sw=Math.sin(t*14)*walk,hang=hat>0.9&&!o.ground;
+ // balloon-hat
+ if(hat>0){
+  const by=-104-62*hat,r=20+22*hat,wob=Math.sin(t*3)*3*hat;
+  P(()=>{ctx.moveTo(4,-96);ctx.quadraticCurveTo(10+wob,(by+r-96)/2-10,wob,by+r+6);},null,2.5);
+  P(()=>{ctx.moveTo(wob-6,by+r+8);ctx.lineTo(wob+6,by+r+8);ctx.lineTo(wob,by+r-2);ctx.closePath();},HAT,3);
+  circ(wob,by,r,HAT);
+  P(()=>{ctx.ellipse(wob,by+r*0.25,r*0.97,r*0.28,0,0.1,Math.PI-0.1);},null,r*0.16,'#ffd84a');
+  P(()=>{ctx.ellipse(wob,by+r*0.25,r*0.97,r*0.28,0,0.1,Math.PI-0.1);},null,2);
+  ell(wob-r*0.38,by-r*0.4,r*0.18,r*0.3,0.5,'#fff',0);
+ }
+ // legs
+ const l1=hang?0.3:sw*0.6,l2=hang?-0.1:-sw*0.6;
+ [l2,l1].forEach((a,i)=>{const hx=i?4:-4;limb(hx,-28,hx+Math.sin(a)*26,-28+Math.cos(a)*26,9,'#6b3f22');ell(hx+Math.sin(a)*26+5,-28+Math.cos(a)*26+3,10,6,0,'#ff5a3c',3);});
+ // jacket
+ P(()=>{ctx.moveTo(-17,-66);ctx.lineTo(17,-66);ctx.lineTo(19,-24);ctx.lineTo(-19,-24);ctx.closePath();},JACKET);
+ P(()=>{ctx.moveTo(-5,-66);ctx.lineTo(5,-66);ctx.lineTo(0,-52);ctx.closePath();},'#fff',3);
+ P(()=>{ctx.moveTo(0,-52);ctx.lineTo(0,-25);},null,3);
+ circ(5,-46,2.6,'#ffd84a',2);circ(5,-36,2.6,'#ffd84a',2);
+ // arms
+ if(hat>0.6&&!o.ground){limb(-10,-60,-4,-96,7,JACKET);limb(10,-60,10,-96,7,JACKET);}
+ else if(o.armUp){limb(10,-60,22,-92,7,JACKET);limb(-10,-60,-16,-34,7,JACKET);}
+ else{limb(-10,-60,-14+sw*8,-36,7,JACKET);limb(10,-60,16-sw*8,-36,7,JACKET);}
+ // head
+ circ(2,-84,19,'#ffd7b5');
+ P(()=>{ctx.arc(2,-86,20,Math.PI*0.95,Math.PI*1.95);ctx.lineTo(16,-88);ctx.lineTo(8,-84);ctx.lineTo(2,-90);ctx.lineTo(-6,-84);ctx.lineTo(-14,-88);ctx.closePath();},'#8a4a24',3);
+ circ(10,-82,2.8,OL,0);circ(-1,-82,2.8,OL,0);
+ P(()=>{ctx.arc(6,-76,5,0.2,Math.PI-0.2);},null,2.5);
+ ell(15,-75,3.5,2.2,0,'#ffa0a0',0);
+ // normal hat
+ if(hat===0){ell(2,-100,27,6,0,HAT);P(()=>{ctx.moveTo(-14,-100);ctx.lineTo(-12,-124);ctx.quadraticCurveTo(2,-130,16,-124);ctx.lineTo(18,-100);ctx.closePath();},HAT);
+  P(()=>{ctx.rect(-13.5,-108,31,7);},'#ffd84a',3);}
+ ctx.restore();
+}
+const KIDCOL=[['#ffb347','#4fc3f7'],['#8be36a','#ff6fa8'],['#ffd84a','#9b6bff'],['#5fd3ff','#ff7a45']];
+function vKid(x,y,t,c,mode,f=1,wind=0){
+ ctx.save();ctx.translate(x,y);ctx.scale(f,1);
+ const [b,h]=KIDCOL[c%4],bob=mode==='run'?Math.abs(Math.sin(t*12))*-4:0;ctx.translate(0,bob);
+ const s=Math.sin(t*12);
+ if(mode==='run'){limb(-5,-10,-5-s*6,-1,6,'#3a3a5a');limb(5,-10,5+s*6,-1,6,'#3a3a5a');}else{limb(-5,-10,-6,-1,6,'#3a3a5a');limb(5,-10,6,-1,6,'#3a3a5a');}
+ ell(0,-19,14,13,0,b);
+ if(mode==='run'){limb(-10,-22,-22,-30+s*5,5,b);limb(10,-22,22,-30-s*5,5,b);}
+ else{ // slingshot
+  const pull=wind*10;limb(-8,-22,-2-pull,-26,5,b);limb(8,-22,18,-36,5,b);
+  P(()=>{ctx.moveTo(18,-36);ctx.lineTo(18,-46);ctx.moveTo(18,-46);ctx.lineTo(13,-56);ctx.moveTo(18,-46);ctx.lineTo(25,-55);},null,4,'#8a4a24');
+  P(()=>{ctx.moveTo(13,-56);ctx.lineTo(-2-pull,-30);ctx.lineTo(25,-55);},null,1.5);
+  if(wind>0)circ(-2-pull,-30,4,'#ff4f8b',2);
+ }
+ circ(0,-40,14,'#ffdcc0');
+ P(()=>{ctx.arc(0,-42,15,Math.PI,TAU);ctx.closePath();},h);circ(0,-58,5,'#fff',3);
+ P(()=>{ctx.moveTo(1,-38);ctx.lineTo(5,-41);ctx.lineTo(9,-38);},null,2.5);P(()=>{ctx.moveTo(-8,-38);ctx.lineTo(-4,-41);ctx.lineTo(0,-38);},null,2.5);
+ P(()=>{ctx.arc(2,-33,5,0,Math.PI);ctx.closePath();},'#fff',2);
+ ctx.restore();
+}
+const CANDYCOL=['#ff5fa8','#ffd84a','#4fc3f7','#8be36a','#ff8a3d','#b58cff'];
+function vCandy(x,y,rot,type,c,s=1){
+ ctx.save();ctx.translate(x,y);ctx.rotate(rot);ctx.scale(s,s);const col=CANDYCOL[c%6];
+ if(type===0){P(()=>{ctx.moveTo(-10,0);ctx.lineTo(-20,-8);ctx.lineTo(-20,8);ctx.closePath();},col,3);P(()=>{ctx.moveTo(10,0);ctx.lineTo(20,-8);ctx.lineTo(20,8);ctx.closePath();},col,3);
+  ell(0,0,12,9,0,col,3);P(()=>{ctx.moveTo(-4,-8);ctx.lineTo(-7,8);ctx.moveTo(4,-8);ctx.lineTo(1,8);},null,3,'#fff');ell(0,0,12,9,0,null,3);}
+ else if(type===1){P(()=>{ctx.moveTo(0,8);ctx.lineTo(0,24);},null,4);circ(0,0,11,col,3);
+  P(()=>{for(let a=0;a<TAU*1.6;a+=0.25){const r=a/(TAU*1.6)*9;ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);}},null,2.5,'#fff');}
+ else{star(0,0,13,col,3);circ(-3,-3,2.5,'#fff',0);}
+ ctx.restore();
+}
+
+
+// ---------- generated sprites (Unsloth) ----------
+const IM={};let loaded=0;
+const SPR=['girl_fly','girl_fly2','girl_sit','boy2','boy2_balloon','kid_run','kid_sling','candy0','candy1','candy2','candy3','house1','house2','house3','goal','houseflat','housetall'];
+const BGS=['bg_sky','title5_1','ending3_2','salty_1'];
+const ALL=[...SPR.map(n=>[n,'game_images/sprites/'+n+'.png']),...BGS.map(n=>[n,'game_images/'+n+'.jpg'])];
+const GLOW={boy2:9,boy2_balloon:9,kid_run:8,kid_sling:8};
+function glowify(im,r){ // white soft outline baked once
+ const P=r*2,w=im.width+P*2,h=im.height+P*2;
+ const sil=document.createElement('canvas');sil.width=im.width;sil.height=im.height;const sc=sil.getContext('2d');
+ sc.drawImage(im,0,0);sc.globalCompositeOperation='source-in';sc.fillStyle='#fff';sc.fillRect(0,0,im.width,im.height);
+ const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');
+ [[r*1.8,0.10],[r*1.4,0.16],[r,0.35],[r*0.6,1]].forEach(([rad,a])=>{g.globalAlpha=a;for(let i=0;i<16;i++){const t=i/16*TAU;g.drawImage(sil,P+Math.cos(t)*rad,P+Math.sin(t)*rad);}});
+ g.globalAlpha=1;g.drawImage(im,P,P);c.__pad=P;c.__ih=im.height;return c;}
+ALL.forEach(([n,src])=>{const im=new Image();im.onload=()=>{try{IM[n]=GLOW[n]?glowify(im,GLOW[n]):im;}catch(e){IM[n]=im;}loaded++;};im.onerror=()=>{loaded++;};im.src=src;});
+function spr(n,x,yb,h,f=1,rot=0,alpha=1){const im=IM[n];if(!im)return false;const k=h/(im.__ih||im.height),w=im.width*k,hh=im.height*k,pb=(im.__pad||0)*k;
+ ctx.save();ctx.translate(x,yb);ctx.rotate(rot);ctx.scale(f,1);ctx.globalAlpha*=alpha;ctx.drawImage(im,-w/2,-hh+pb,w,hh);ctx.restore();return true;}
+function sprC(n,x,y,size,rot=0){const im=IM[n];if(!im)return false;const k=size/Math.max(im.width,im.height),w=im.width*k,h=im.height*k;
+ ctx.save();ctx.translate(x,y);ctx.rotate(rot);ctx.drawImage(im,-w/2,-h/2,w,h);ctx.restore();return true;}
+function cover(n){const im=IM[n];if(!im)return false;const k=Math.max(W/im.width,H/im.height);ctx.drawImage(im,(W-im.width*k)/2,(H-im.height*k)/2,im.width*k,im.height*k);return true;}
+function sparkleTrail(x,y,t){for(let i=0;i<3;i++){const a=t*4+i*2.1;star(x+Math.cos(a)*30-20,y+Math.sin(a*1.3)*20,4+2*Math.sin(t*6+i),CANDYCOL[i*2],2,a);}}
+function drawGirl(x,y,t,mode,f=1){
+ if(mode==='fly'){if(IM.girl_fly){sparkleTrail(x-f*60,y,t);const yb=y+72+Math.sin(t*3)*3,rot=Math.sin(t*2.5)*0.05;
+   // 6秒ごとに2枚の絵を入れ替え（0.6秒かけてふわっと切り替え）
+   const ph=t%12,b=IM.girl_fly2?(ph<6?clamp((ph-5.4)/0.6,0,1):clamp((11.4-ph)/0.6,0,1)):0;
+   if(b<1)spr('girl_fly',x,yb,150,f,rot,1-b);if(b>0)spr('girl_fly2',x,yb,150,f,rot,b);return;}}
+ else if(IM.girl_sit){spr('girl_sit',x,y+64,148,1,0);if(mode==='wave'&&Math.sin(t*2)>0.6)text('♪',x+44,y-70+Math.sin(t*6)*3,24,'#ff5fa8','center',5);return;}
+ vGirl(x,y,t,mode,f);}
+function drawBoy(x,y,t,o={}){
+ const f=o.f||1,hat=o.hat||0;if(!IM.boy2||!IM.boy2_balloon)return vBoy(x,y,t,o);
+ const al=(o.hurt&&Math.floor(t*14)%2)?0.45:1;
+ if(hat>=1){spr('boy2_balloon',x,y+(o.ground?4:Math.sin(t*3)*3),195,f,o.ground?0:Math.sin(t*2)*0.04,al);return;}
+ const w=o.walk||0,bob=-Math.abs(Math.sin(t*14))*4*w,rot=(o.rot!=null?o.rot:Math.sin(t*14)*0.06*w+(o.armUp?-0.08:0));
+ if(hat>0){spr('boy2',x,y,128,f,0,al*(1-hat));spr('boy2_balloon',x,y+4,195*(0.85+0.15*hat),f,0,al*hat);return;}
+ spr('boy2',x,y+bob,128,f,rot,al);}
+const HUE=[0,140,250,60];
+function drawKid(x,y,t,c,mode,f=1,wind=0){
+ const n=mode==='run'?'kid_run':'kid_sling';if(!IM[n])return vKid(x,y,t,c,mode,f,wind);
+ ctx.save();
+ if(mode==='run')spr(n,x,y-Math.abs(Math.sin(t*12))*5,68,f,Math.sin(t*12)*0.08);
+ else spr(n,x+(wind>0?Math.sin(t*60)*1.5:0),y,74,f,wind*-0.06*f);
+ ctx.restore();}
+function drawCandy(x,y,rot,type,c,s=1){if(!sprC('candy'+((c+type)%4),x,y,38*s,rot))vCandy(x,y,rot,type,c,s);}
+function drawBG(cam,t,sunset){
+ const im=IM.bg_sky;if(!im)return vBG(cam,t,sunset);
+ const k=H/im.height*1.0,w=im.width*k,off=((cam*0.25)%(2*w)+2*w)%(2*w);
+ for(let i=-1;i<4;i++){const x=i*w-off;if(x>W||x+w<0)continue;ctx.save();ctx.translate(x+(i%2?w:0),0);if(i%2)ctx.scale(-1,1);ctx.drawImage(im,0,0,w,H);ctx.restore();}
+ if(sunset){ctx.save();ctx.globalCompositeOperation='multiply';const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#b9a6ff');g.addColorStop(1,'#ffb48a');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);ctx.restore();}
+}
+const HSPR=['house1','house2','house3','housetall','houseflat'];
+function houseS(x,base,w,h,ci,seed,flat){const n=flat?'houseflat':HSPR[(seed>>2)%4];if(!IM[n])return house(x,base,w,h,HCOL[ci][0],HCOL[ci][1],seed,flat);
+ spr(n,x+w/2,base+6,h+70);}
+
+// ---------- background ----------
+const clouds=Array.from({length:7},(_,i)=>({x:i*190+rnd(0,80),y:rnd(40,200),s:rnd(0.7,1.3)}));
+function cloud(x,y,s){ctx.save();ctx.translate(x,y);ctx.scale(s,s);
+ P(()=>{ctx.moveTo(-50,12);ctx.arc(-34,0,18,Math.PI*0.6,Math.PI*1.5);ctx.arc(-6,-12,24,Math.PI,TAU*0.94);ctx.arc(28,-2,20,Math.PI*1.3,Math.PI*0.4);ctx.closePath();},'#fff',4);ctx.restore();}
+function house(x,base,w,h,wall,roof,seed,flat){
+ const r=seeded(seed);
+ rr(x,base-h,w,h,4,wall);
+ if(flat){rr(x-8,base-h-10,w+16,14,6,roof);for(let i=0;i<w;i+=18)P(()=>{ctx.moveTo(x+i+4,base-h-10);ctx.lineTo(x+i+4,base-h-26);},null,4);P(()=>{ctx.moveTo(x-4,base-h-26);ctx.lineTo(x+w+4,base-h-26);},null,5);}
+ else{const ph=h*0.55;if(r()>0.4)rr(x+w*0.65,base-h-ph*0.75,14,ph*0.5,2,'#c96b5a');
+  P(()=>{ctx.moveTo(x-12,base-h+4);ctx.lineTo(x+w/2,base-h-ph);ctx.lineTo(x+w+12,base-h+4);ctx.closePath();},roof);
+  circ(x+w/2,base-h-ph*0.45,ph*0.12,'#fff8d6',3);}
+ const nw=Math.max(1,Math.floor(w/48));
+ for(let i=0;i<nw;i++){const wx=x+(w/(nw))*(i+0.5)-10;rr(wx,base-h+18,20,22,6,'#fff3a8',3);P(()=>{ctx.moveTo(wx+10,base-h+18);ctx.lineTo(wx+10,base-h+40);},null,2.5);}
+ if(h>70)rr(x+w/2-11,base-28,22,28,[10,10,0,0],'#a5643c',3);
+}
+const HCOL=[['#ff9ecb','#7b4fe0'],['#ffe07a','#ef4157'],['#9fe6ff','#ff8a3d'],['#c9f59a','#4a7be0'],['#ffc49e','#21b3a6'],['#e2c4ff','#ff5fa8']];
+function lolliTree(x,base,s,c){if(IM.bg_sky)return;P(()=>{ctx.moveTo(x,base);ctx.lineTo(x,base-60*s);},null,7);P(()=>{ctx.moveTo(x,base);ctx.lineTo(x,base-60*s);},null,3.5,'#fff');
+ circ(x,base-70*s,22*s,CANDYCOL[c%6]);P(()=>{for(let a=0;a<TAU*1.8;a+=0.25){const r=a/(TAU*1.8)*18*s;ctx.lineTo(x+Math.cos(a)*r,base-70*s+Math.sin(a)*r);}},null,3,'#fff');}
+function vBG(cam,t,sunset){
+ const g=ctx.createLinearGradient(0,0,0,H);
+ if(sunset){g.addColorStop(0,'#7b6cf0');g.addColorStop(0.5,'#ff9ecb');g.addColorStop(1,'#ffd27a');}
+ else{g.addColorStop(0,'#6fd0ff');g.addColorStop(0.7,'#c9f0ff');g.addColorStop(1,'#ffe8f4');}
+ ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ // sun
+ ctx.save();ctx.translate(sunset?760:840,sunset?330:80);ctx.rotate(t*0.2);
+ for(let i=0;i<12;i++){ctx.rotate(TAU/12);P(()=>{ctx.moveTo(48,-7);ctx.lineTo(66,0);ctx.lineTo(48,7);ctx.closePath();},'#ffd84a',3);}
+ ctx.restore();circ(sunset?760:840,sunset?330:80,40,sunset?'#ff9a3d':'#ffd84a');
+ for(const c of clouds){let x=((c.x-cam*0.15+t*8)%(W+260)+W+260)%(W+260)-130;cloud(x,c.y,c.s);}
+ // hills
+ [[0.25,390,'#a6e78a',60,0.004],[0.45,420,'#6cd17a',40,0.007]].forEach(([p,b,col,a,fq])=>{
+  P(()=>{ctx.moveTo(-10,H);for(let x=-10;x<=W+10;x+=10)ctx.lineTo(x,b-Math.sin((x+cam*p)*fq)*a-Math.sin((x+cam*p)*fq*2.3+1)*a*0.4);ctx.lineTo(W+10,H);ctx.closePath();},col,4);});
+}
+function drawGround(cam){
+ P(()=>{ctx.rect(-10,GY,W+20,H-GY+10);},'#7ed957',4);
+ P(()=>{ctx.rect(-10,GY+22,W+20,H);},'#f6c38b',4);
+ for(let i=-1;i<W/60+2;i++){const x=i*60-((cam)%60);ell(x,GY+40,8,4,0,'#e8a96a',0);}
+ for(let i=-1;i<W/40+2;i++){const x=i*40-((cam)%40);P(()=>{ctx.moveTo(x,GY);ctx.lineTo(x+5,GY-9);ctx.lineTo(x+10,GY);},'#5cc24a',2.5);}
+}
+// phase-1 static town
+const town=[];{let x=-20,r=seeded(7);while(x<W){const w=70+r()*60,h=70+r()*80;town.push({x,w,h,c:(r()*6)|0,s:(r()*1000)|0});x+=w+20+r()*40;}}
+
+// ---------- particles ----------
+let parts=[];
+function burst(x,y,n,kind,col){for(let i=0;i<n;i++)parts.push({x,y,vx:rnd(-160,160),vy:rnd(-260,-40),life:rnd(0.5,1),max:1,kind,col:col||CANDYCOL[(Math.random()*6)|0],r:rnd(0,TAU),s:rnd(4,9)});}
+function updParts(dt){for(const p of parts){p.vy+=p.kind==='heart'?-40*dt:500*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;p.r+=dt*6;}parts=parts.filter(p=>p.life>0);}
+function drawParts(cam=0){for(const p of parts){ctx.globalAlpha=clamp(p.life*2,0,1);const x=p.x-cam;
+ if(p.kind==='star')star(x,p.y,p.s,p.col,2,p.r);else if(p.kind==='heart')heart(x,p.y,p.s*1.4,p.col,2);else{ctx.save();ctx.translate(x,p.y);ctx.rotate(p.r);P(()=>ctx.rect(-p.s/2,-p.s/3,p.s,p.s*0.6),p.col,2);ctx.restore();}}ctx.globalAlpha=1;}
+let floaters=[];function floatText(s,x,y,col){floaters.push({s,x,y,t:0,col});}
+function updFloat(dt){floaters.forEach(f=>{f.t+=dt;f.y-=40*dt;});floaters=floaters.filter(f=>f.t<0.9);}
+function drawFloat(cam=0){floaters.forEach(f=>{ctx.globalAlpha=1-f.t/0.9;text(f.s,f.x-cam,f.y,24,f.col||'#fff',undefined,6);});ctx.globalAlpha=1;}
+
+// ---------- game state ----------
+let S='title',T=0,score=0,best=0;
+const GOAL1=20,TIME1=45;
+let boy,girl,candies,kids,kidT,shots,lives,camX,hearts2;
+function go(s){S=s;T=0;parts=[];floaters=[];musicForState(s);
+ if(s==='p1'){score=0;boy={x:200,y:GY,vx:0,vy:0,f:1,onG:true,inv:0,walk:0};girl={x:500,y:120,dir:1,drop:0.6};candies=[];kids=[];kidT=2.5;}
+ if(s==='p2')initP2();
+}
+function page(lines,x=W/2,y=H/2,w=640){
+ const h=lines.length*44+70;
+ ctx.save();ctx.translate(x,y);rr(-w/2+8,-h/2+10,w,h,24,'#0003',0);rr(-w/2,-h/2,w,h,24,'#fff8e6',5);
+ rr(-w/2+12,-h/2+12,w-24,h-24,16,null,2.5);ctx.setLineDash([]);
+ lines.forEach((l,i)=>text(l,0,-h/2+48+i*44,26,OL,'center',0));
+ if(T>0.8){ctx.globalAlpha=0.5+0.5*Math.sin(T*5);text('▶ スペース / タップで つぎへ',0,h/2-24,18,'#ef4157','center',0);ctx.globalAlpha=1;}
+ ctx.restore();}
+
+// ---------- phase 1 ----------
+function updP1(dt){
+ // boy
+ const dir=(R()?1:0)-(L()?1:0);boy.vx+=(dir*260-boy.vx)*Math.min(1,dt*12);if(dir)boy.f=dir;
+ if(pressed.Space&&boy.onG){boy.vy=-600;boy.onG=false;SFX.jump();}
+ if(!UP()&&boy.vy<-200)boy.vy+=1800*dt;
+ boy.vy+=1500*dt;boy.x=clamp(boy.x+boy.vx*dt,30,W-30);boy.y+=boy.vy*dt;
+ if(boy.y>=GY){boy.y=GY;boy.vy=0;boy.onG=true;}
+ boy.walk=boy.onG?Math.min(1,Math.abs(boy.vx)/200):0;boy.inv-=dt;
+ // girl
+ girl.x+=girl.dir*170*dt;if(girl.x>W-90)girl.dir=-1;if(girl.x<90)girl.dir=1;girl.y=125+Math.sin(T*2.2)*28;
+ girl.drop-=dt;if(girl.drop<=0&&T<TIME1-1){girl.drop=rnd(0.35,0.75);candies.push({x:girl.x+girl.dir*24,y:girl.y+18,vx:rnd(-50,50),vy:-60,r:0,type:(Math.random()*3)|0,c:(Math.random()*6)|0,life:0.8,grab:0});
+  if(Math.random()<0.3)burst(girl.x,girl.y,2,'star');}
+ // candies
+ for(const c of candies){c.grab-=dt;if(c.y<GY-12){c.vy=Math.min(c.vy+240*dt,200);c.x+=(c.vx+Math.sin(T*3+c.c)*30)*dt;c.y+=c.vy*dt;c.r+=dt*2;}else{c.y=GY-12;c.life-=dt;}
+  c.x=clamp(c.x,15,W-15);
+  if(c.grab<=0&&Math.abs(c.x-boy.x)<34&&c.y>boy.y-125&&c.y<boy.y+5){c.dead=true;score++;SFX.candy(c.x);burst(c.x,c.y,6,'star');floatText('+1',c.x,c.y-20,'#ffd84a');}}
+ candies=candies.filter(c=>!c.dead&&c.life>0);
+ // kids
+ kidT-=dt;if(kidT<=0){const fromL=Math.random()<0.5;const spd=rnd(90,150)+T*1.5;kids.push({x:fromL?-30:W+30,y:GY,vx:fromL?spd:-spd,vy:0,c:(Math.random()*4)|0,hop:Math.random()<0.35,t:rnd(0,5)});kidT=rnd(1.6,3.2)-Math.min(1,T/40);}
+ for(const k of kids){k.t+=dt;k.x+=k.vx*dt;if(k.hop){k.vy+=1200*dt;k.y+=k.vy*dt;if(k.y>=GY){k.y=GY;k.vy=-rnd(300,450);}}
+  if(boy.inv<=0&&Math.abs(k.x-boy.x)<30&&boy.y>k.y-60&&boy.y-90<k.y){boy.inv=1.6;boy.vy=-380;boy.onG=false;boy.vx=(boy.x<k.x?-1:1)*320;SFX.hit();
+   const n=Math.min(3,score);score-=n;for(let i=0;i<n;i++)candies.push({x:boy.x,y:boy.y-80,vx:rnd(-160,160),vy:-rnd(200,320),r:0,type:(Math.random()*3)|0,c:(Math.random()*6)|0,life:0.8,grab:0.7});
+   if(n)floatText('-'+n,boy.x,boy.y-130,'#ff5f5f');}}
+ kids=kids.filter(k=>k.x>-60&&k.x<W+60);
+ if(score>=GOAL1||T>=TIME1){SFX.win();go('s2');}
+}
+function drawP1(){
+ drawBG(0,T);
+ town.forEach(h=>houseS(h.x,GY,h.w,h.h,h.c,h.s));
+ lolliTree(60,GY,0.9,1);lolliTree(470,GY,1.1,4);lolliTree(900,GY,0.8,0);
+ drawGround(0);
+ for(const c of candies){ctx.globalAlpha=c.y>=GY-12?clamp(c.life/0.8,0,1):1;drawCandy(c.x,c.y,c.r,c.type,c.c);}ctx.globalAlpha=1;
+ drawGirl(girl.x,girl.y,T,'fly',girl.dir);
+ for(const k of kids)drawKid(k.x,k.y,k.t,k.c,'run',k.vx>0?1:-1);
+ drawBoy(boy.x,boy.y,T,{f:boy.f,walk:boy.walk,hurt:boy.inv>0,armUp:!boy.onG});
+ drawParts();drawFloat();
+ // HUD
+ rr(16,14,190,52,26,'#fff',4);drawCandy(46,40,0.3,0,0,1);text(`${score} / ${GOAL1}`,128,41,28,OL,'center',0);
+ const tl=Math.max(0,TIME1-T);rr(W/2-150,22,300,22,11,'#fff',4);rr(W/2-146,26,292*(tl/TIME1),14,7,tl<10?'#ff5f5f':'#8be36a',0);
+ text('じかん',W/2-190,34,18,'#fff','center',5);
+ if(T<3){ctx.globalAlpha=Math.min(1,3-T);text('キャンディを あつめよう！ こどもに ぶつからないでね',W/2,95,24,'#ffd84a');ctx.globalAlpha=1;}
+}
+
+// ---------- phase 2 ----------
+const WORLD=4200,GOAL={x:3880,w:220,h:230};GOAL.roof=GY-GOAL.h-26;
+function setGoal(){if(IM.goal){const gh=290;GOAL.w=gh*IM.goal.width/IM.goal.height;GOAL.roof=GY+6-gh*0.885;GOAL.h=GY-GOAL.roof;GOAL.spr=gh;}}
+let houses2,kids2,cand2,shotGap=0;
+let score2=0;const SALT=10;
+function initP2(){setGoal();score2=0;
+ const r=seeded(42);houses2=[];kids2=[];cand2=[];
+ let x=380;while(x<GOAL.x-250){const w=90+r()*80,h=80+r()*120;houses2.push({x,w,h,c:(r()*6)|0,s:(r()*1e3)|0,flat:r()<0.45});x+=w+90+r()*120;}
+ let rk=0;houses2.forEach((h,i)=>{if(h.flat&&i>0)kids2.push({x:h.x+h.w/2,y:IM.houseflat?GY+6-(h.h+70)*0.93:GY-h.h-10,c:i,cool:rnd(0.5,2),wind:0,t:0});});
+ for(let kx=700;kx<GOAL.x-200;kx+=rnd(400,560))kids2.push({x:kx,y:GY,c:(kx|0)%4,cool:rnd(0.5,2),wind:0,t:0});
+ for(let cx=400;cx<GOAL.x-100;cx+=rnd(140,240))cand2.push({x:cx,y:rnd(130,330),type:(Math.random()*3)|0,c:(Math.random()*6)|0});
+ boy={x:120,y:GY,vx:0,vy:0,f:1,bal:true,hat:1,inv:1.5,fall:false,wait:0};shots=[];lives=4;camX=0;
+}
+function balloonC(){return{x:boy.x,y:boy.y-BOFF};}
+const BOFF=156;
+
+// ===== 逃げ道の保証 =====
+// 弾はまっすぐ等速で飛ぶので、未来の位置は正確に計算できる。
+// 子どもが弾を放つその瞬間に（予告はしない）、「画面にある弾」＋「いま撃つ弾」のすべてに対して、
+// 主人公が「反応するまでの REACT 秒は今の入力のまま → その後9とおりの単純な操作
+// （←・なし・→ × 上昇・下降・高さ維持）のどれかを続ける」場合を、実際のゲームと同じ物理で
+// 弾がすべて消えるまで計算し、当たらずに済む操作が need 個以上残る方向にしか撃たない。
+// 弾が増えるのはこの瞬間だけなので、全員が狙ってきても逃げ道がゼロになることはない。
+const WIND=0.9,SHOT_LIFE=4,HB=34,MARGIN=12,REACT=0.3;
+const MANS=[];for(const d of[1,0,-1])for(const v of['hover','up','down'])MANS.push([d,v]);
+function projList(extra){const L=[];
+ for(const s of shots)L.push({x:s.x,y:s.y,vx:s.vx,vy:s.vy,t0:0,life:SHOT_LIFE-s.t});
+ if(extra)L.push(extra);return L;}
+function maneuverSafe(d,v,L,d0,u0){const dt=1/60,RR=HB+MARGIN;let x=boy.x,y=boy.y,vx=boy.vx,vy=boy.vy;
+ const end=L.reduce((m,p)=>Math.max(m,p.t0+p.life),0);
+ for(let t=dt;t<=end;t+=dt){const re=t<REACT,dd=re?d0:d,up=re?u0:(v==='up'||(v==='hover'&&vy>0));
+  vx+=(dd*210-vx)*Math.min(1,dt*4);vy+=(up?-760:330)*dt;vy=clamp(vy,-240,220);
+  x=clamp(x+vx*dt,30,WORLD-30);y+=vy*dt;if(y<208){y=208;vy=Math.max(0,vy);}if(y>=GY){y=GY;if(vy>0)vy=0;}
+  const bx=x,by=y-BOFF;
+  for(const p of L){const a=t-p.t0;if(a<0||a>p.life)continue;const px=p.x+p.vx*a,py=p.y+p.vy*a;
+   if(py<-20||py>H)continue;if((px-bx)*(px-bx)+(py-by)*(py-by)<RR*RR)return false;}}
+ return true;}
+function safeMask(L){const d0=(R()?1:0)-(L_()?1:0),u0=!!UP();return MANS.map(([d,v])=>maneuverSafe(d,v,L,d0,u0));}
+function L_(){return keys.ArrowLeft;}
+function planShot(k,bc,dx,prog){
+ const sp=185+prog*55;k.ax=k.x+(dx>0?6:-6);k.ay=k.y-36;const side=dx>=0?1:-1;
+ const aim=(tx,ty)=>Math.atan2(ty-k.ay,tx-k.ax);
+ // 今の速度のまま進んだ場合に、弾とちょうど出会う点（迎撃点）を計算
+ const rx=bc.x-k.ax,ry=bc.y-k.ay,vx=boy.vx,vy=boy.vy*0.5,qa=vx*vx+vy*vy-sp*sp,qb=2*(rx*vx+ry*vy),qc=rx*rx+ry*ry;
+ let ti=0;if(Math.abs(qa)<1e-6)ti=-qc/qb;else{const D=qb*qb-4*qa*qc;if(D>=0){const t1=(-qb-Math.sqrt(D))/(2*qa),t2=(-qb+Math.sqrt(D))/(2*qa);ti=Math.min(...[t1,t2].filter(t=>t>0),99);}}
+ if(!(ti>0&&ti<4))ti=0;const ix=bc.x+vx*ti,iy=bc.y+vy*ti;
+ const c=[],r=Math.random();
+ if(r<0.35)c.push({ang:aim(ix,iy),need:3});                // ねらいうち：よけ方が4つ以上残るときだけ
+ else if(r<0.75){const o=rnd(70,120)*(Math.random()<0.5?1:-1);c.push({ang:aim(ix+o*0.7,iy+o),need:2});} // わざと少し外す
+ for(let i=0;i<3;i++){const e=rnd(0.9,1.4);c.push({ang:side>0?-e:-(Math.PI-e),need:2});}           // ななめ上の決まった角度
+ for(const o of c){const p={x:k.ax,y:k.ay,vx:Math.cos(o.ang)*sp,vy:Math.sin(o.ang)*sp,t0:0,life:SHOT_LIFE};
+  const n=safeMask(projList(p)).filter(Boolean).length;
+  if(n>=o.need){k.ang=o.ang;k.sp=sp;return true;}}
+ return false;}
+function updP2(dt){
+ const dir=(R()?1:0)-(L()?1:0);if(dir)boy.f=dir;
+ if(boy.bal){
+  boy.vx+=(dir*210-boy.vx)*Math.min(1,dt*4);
+  boy.vy+=(UP()?-760:330)*dt;boy.vy=clamp(boy.vy,-240,220);
+  if(pressed.Space)SFX.puff();
+ }else if(boy.fall){boy.vx*=0.98;boy.vy+=1300*dt;}
+ else{boy.vx+=(dir*160-boy.vx)*Math.min(1,dt*10);boy.wait-=dt;boy.hat=clamp(1-boy.wait/0.9,0,1);if(boy.wait<=0){boy.bal=true;boy.inv=2.6;boy.vy=-150;}}
+ boy.x=clamp(boy.x+boy.vx*dt,30,WORLD-30);boy.y+=boy.vy*dt;
+ const minY=208;if(boy.y<minY){boy.y=minY;boy.vy=Math.max(0,boy.vy);}
+ if(boy.y>=GY){boy.y=GY;if(boy.vy>0)boy.vy=0;if(boy.fall){boy.fall=false;if(lives<=0){go('over');return;}boy.wait=1.6;boy.hat=0;SFX.inflate();setTimeout(()=>{},0);}}
+ boy.inv-=dt;
+ camX=clamp(boy.x-W*0.38,0,WORLD-W);
+ const prog=boy.x/GOAL.x;
+ // kids shoot
+ const bc=balloonC();
+ shotGap-=dt;
+ for(const k of kids2){k.t+=dt;const dx=bc.x-k.x;
+  // 見えない／遠い／通り過ぎた子どもは撃たない（ためていた弾も取りやめ＝弾が増えることはない）
+  if(dx<-500||dx>140||k.x<camX-40||k.x>camX+W+40){k.wind=0;continue;}
+  if(k.wind>0){k.wind-=dt;if(k.wind<=0){k.wind=0;
+    if(boy.bal&&planShot(k,bc,dx,prog)){shots.push({x:k.ax,y:k.ay,vx:Math.cos(k.ang)*k.sp,vy:Math.sin(k.ang)*k.sp,t:0,c:(Math.random()*6)|0});SFX.shoot();k.cool=rnd(2.0,3.2)-prog*0.7;}
+    else k.cool=rnd(0.4,0.9);}}
+  else{k.cool-=dt;if(k.cool<=0&&boy.bal&&shotGap<=0){k.wind=WIND;shotGap=0.45;}}}
+ for(const s of shots){s.t+=dt;s.x+=s.vx*dt;s.y+=s.vy*dt;
+  if(boy.bal&&boy.inv<=0&&Math.hypot(s.x-bc.x,s.y-bc.y)<34){s.dead=true;boy.bal=false;boy.fall=true;boy.hat=0;boy.vy=-120;lives--;SFX.pop();burst(bc.x,bc.y,14,'conf',HAT);floatText('パン！',bc.x,bc.y-30,'#ff5f5f');}}
+ shots=shots.filter(s=>!s.dead&&s.t<4&&s.y>-20&&s.y<H);
+ for(const c of cand2){if(!c.got&&Math.hypot(c.x-boy.x,c.y-(boy.y-60))<60||!c.got&&boy.bal&&Math.hypot(c.x-bc.x,c.y-bc.y)<50){c.got=true;score++;score2++;SFX.candy(c.x-camX);burst(c.x,c.y,6,'star');floatText('+1',c.x,c.y-20,'#ffd84a');}}
+ // goal
+ if(boy.x>GOAL.x+10&&boy.x<GOAL.x+GOAL.w-10&&boy.y<=GOAL.roof+14&&!boy.fall){boy.y=GOAL.roof;if(score2<SALT){SFX.salt();go('salty');}else{SFX.win();go('end');}}
+}
+function drawP2(){
+ drawBG(camX,T);
+ ctx.save();ctx.translate(-camX,0);
+ houses2.forEach(h=>{if(h.x+h.w>camX-200&&h.x<camX+W+200)houseS(h.x,GY,h.w,h.h,h.c,h.s,h.flat);});
+ for(let x=300;x<WORLD;x+=330)if(x>camX-60&&x<camX+W+60)lolliTree(x,GY,0.8+(x%3)*0.15,x/330|0);
+ // goal house
+ if(!(GOAL.spr&&spr('goal',GOAL.x+GOAL.w/2,GY+6,GOAL.spr)))house(GOAL.x,GY,GOAL.w,GOAL.h,'#e2c4ff','#ff5fa8',99,true);
+ for(let i=0;i<6;i++)star(GOAL.x+20+i*(GOAL.w-40)/5,GOAL.roof-40+Math.sin(T*3+i)*6,7,CANDYCOL[i],2,T);
+ drawGirl(GOAL.x+GOAL.w/2+40,GOAL.roof-30,T,'wave');
+ if(boy.x>GOAL.x-700){ctx.globalAlpha=0.6+0.4*Math.sin(T*4);heart(GOAL.x+GOAL.w/2+40,GOAL.roof-120,14,'#ff5fa8');ctx.globalAlpha=1;}
+ ctx.restore();
+ ctx.save();ctx.translate(-camX,0);
+ for(const c of cand2)if(!c.got)drawCandy(c.x,c.y+Math.sin(T*3+c.x)*5,Math.sin(T*2+c.x)*0.4,c.type,c.c);
+ for(const k of kids2)drawKid(k.x,k.y,k.t,k.c,'shoot',boy.x>k.x?1:-1,k.wind>0?1-k.wind/0.9:0);
+ for(const s of shots){circ(s.x,s.y,8,CANDYCOL[s.c],3);circ(s.x-2,s.y-2,2.5,'#fff',0);}
+
+ ctx.restore();
+ drawGround(camX);
+ ctx.save();ctx.translate(-camX,0);
+ drawBoy(boy.x,boy.y,T,{f:boy.f,hat:boy.bal?1:(boy.fall?0:boy.hat),ground:!boy.bal,walk:(!boy.bal&&!boy.fall)?Math.min(1,Math.abs(boy.vx)/150):0,hurt:boy.inv>0&&boy.bal,rot:boy.fall?Math.sin(T*18)*0.35:undefined});
+ drawParts();drawFloat();
+ ctx.restore();
+ // HUD
+ rr(16,14,150,52,26,'#fff',4);drawCandy(46,40,0.3,0,0,1);text(`${score2}`,110,41,28,OL,'center',0);
+ for(let i=0;i<4;i++)heart(196+i*34,46,13,i<lives?'#ff5fa8':'#ddd',3);
+ const px=W-400,pw=260;rr(px,24,pw,18,9,'#fff',4);rr(px+3,28,(pw-6)*clamp(boy.x/GOAL.x,0,1),10,5,'#ffd84a',0);
+ heart(px+pw+18,40,12,'#ff5fa8',3);
+ if(T<3.5){ctx.globalAlpha=Math.min(1,3.5-T);text('スペース(▲)で ふわっと うかぶ！ たまに あたらないでね',W/2,100,24,'#ffd84a');ctx.globalAlpha=1;}
+ if(!boy.bal&&!boy.fall&&boy.wait>0)text('ぼうしを ふくらませてる…',W/2,H/2-60,26,'#fff');
+}
+
+// ---------- scenes ----------
+function drawTitle(){
+ if(IM.title5_1){ctx.save();const z=1+0.03*Math.sin(T*0.3);ctx.translate(W/2,H/2);ctx.scale(z,z);ctx.translate(-W/2,-H/2);cover('title5_1');ctx.restore();
+  const g=ctx.createLinearGradient(0,350,0,H);g.addColorStop(0,'#2a1f3d00');g.addColorStop(1,'#2a1f3dbb');ctx.fillStyle=g;ctx.fillRect(0,350,W,H-350);
+  ctx.save();ctx.translate(570,412);ctx.rotate(Math.sin(T*1.5)*0.015);text('ふしぎな キャンディの そら',0,0,44,'#ffd84a','center',11);ctx.restore();
+  text('〜 ぼうしの ふうせんで あいにいこう 〜',570,451,18,'#fff','center',6);
+  if(Math.sin(T*5)>-0.3)text('スペース か タップで スタート',570,484,22,'#fff','center',7);
+  text('← → いどう　スペース ジャンプ / うかぶ　M おと',570,517,15,'#fff','center',5);return;}
+ drawBG(T*30,T);
+ town.forEach(h=>houseS(h.x,GY,h.w,h.h,h.c,h.s));
+ drawGround(T*30);
+ const gx=W/2+Math.sin(T*0.8)*300,gd=Math.cos(T*0.8)>0?1:-1;
+ drawGirl(gx,190+Math.sin(T*2)*20,T,'fly',gd);
+ drawBoy(200,GY,T,{f:1,armUp:true});drawKid(760,GY,T,1,'run',-1);drawKid(830,GY,T+1,2,'run',-1);
+ ctx.save();ctx.translate(W/2,92);ctx.rotate(Math.sin(T*1.5)*0.02);
+ text('ふしぎな キャンディの そら',0,0,58,'#ffd84a','center',12);ctx.restore();
+ text('〜 ぼうしの ふうせんで あいにいこう 〜',W/2,150,22,'#fff','center',6);
+ if(Math.sin(T*5)>-0.3)text('スペース か タップで スタート',W/2,330,28,'#fff','center',8);
+ text('← → いどう　スペース ジャンプ / うかぶ　M おと',W/2,515,16,'#fff','center',5);
+}
+function drawStory2(){
+ drawBG(0,T);town.forEach(h=>houseS(h.x,GY,h.w,h.h,h.c,h.s));drawGround(0);
+ const gx=girl.x+T*260;drawGirl(gx,girl.y-T*40,T,'fly',1);
+ const hat=clamp((T-2.2)/1.4,0,1);if(T>2.2&&T<2.3&&!S2s){S2s=true;SFX.inflate();}
+ drawBoy(W/2-40,GY,T,{f:1,hat,ground:true});
+ if(T>1.2)page([`キャンディを ${score}こ あつめたよ！`,'おんなのこは とおくの やねで ひとやすみ。','ぼうしを ふくらませて あいにいこう！','とちゅうの キャンディも わすれずにね。'],W/2,185,640);
+}
+let S2s=false;
+function drawEnd(){
+ if(IM.ending3_2){ctx.save();const z=1.02+0.04*Math.min(1,T/6);ctx.translate(W/2,H/2);ctx.scale(z,z);ctx.translate(-W/2,-H/2);cover('ending3_2');ctx.restore();
+  const g=ctx.createLinearGradient(0,380,0,H);g.addColorStop(0,'#2a1f3d00');g.addColorStop(1,'#2a1f3dcc');ctx.fillStyle=g;ctx.fillRect(0,380,W,H-380);
+  if(T>0.6&&Math.random()<0.15)burst(rnd(150,810),rnd(200,420),1,'heart','#ff5fa8');
+  if(T>0.6&&Math.random()<0.3)burst(rnd(100,860),-10,1,'conf');
+  updParts(1/60);drawParts();
+  if(T>0.8){ctx.save();ctx.translate(W/2,436);const s=Math.min(1,(T-0.8)*3);ctx.scale(s,s);text('キャンディを もらえたよ！',0,0,46,'#ffd84a','center',10);ctx.restore();
+   text(`あつめた キャンディ：${score}こ`,W/2,480,20,'#fff','center',6);}
+  if(T>2.5&&Math.sin(T*5)>-0.3)text('スペース / タップで もういちど',W/2,515,18,'#fff','center',5);return;}
+ drawBG(0,T,true);
+ // rooftop close-up
+ rr(160,370,640,260,10,'#e2c4ff',5);rr(140,352,680,26,10,'#ff5fa8',5);
+ for(let i=0;i<5;i++){rr(200+i*120,420,60,70,10,'#fff3a8',4);}
+ctx.save();ctx.translate(480,352);ctx.scale(1.3,1.3);ctx.translate(-480,-312);
+ drawGirl(540,290,T,'sit');
+ drawBoy(410,312,T,{f:1,armUp:T>2.4});
+ // giant lollipop handover
+ const k=clamp((T-1)/1.4,0,1),lx=566-k*134,ly=250-k*50-Math.sin(k*Math.PI)*60;
+ drawCandy(lx,ly,Math.sin(T*2)*0.1,1,0,2.0);ctx.restore();
+ if(T>2.4&&Math.random()<0.15)burst(rnd(150,810),rnd(160,300),1,'heart','#ff5fa8');
+ if(T>2.4&&Math.random()<0.3)burst(rnd(100,860),-10,1,'conf');
+ updParts(1/60);drawParts();
+ if(T>2.6){ctx.save();ctx.translate(W/2,90);const s=Math.min(1,(T-2.6)*3);ctx.scale(s,s);text('キャンディを もらえたよ！',0,0,52,'#ffd84a','center',11);ctx.restore();
+  text(`あつめた キャンディ：${score}こ`,W/2,150,26,'#fff','center',7);}
+ if(T>3.5&&Math.sin(T*5)>-0.3)text('スペース / タップで もういちど',W/2,515,22,'#fff','center',6);
+}
+function drawSalty(){
+ if(IM.salty_1){cover('salty_1');}else{drawBG(0,T,true);}
+ const g=ctx.createLinearGradient(0,370,0,H);g.addColorStop(0,'#2a1f3d00');g.addColorStop(1,'#2a1f3ddd');ctx.fillStyle=g;ctx.fillRect(0,370,W,H-370);
+ if(T>0.7){ctx.globalAlpha=Math.min(1,(T-0.7)*3);text('…ふーん。これだけ？',W/2,428,44,'#cfd8ff','center',10);ctx.globalAlpha=1;}
+ if(T>1.6)text(`このステージの キャンディ：${score2}こ　もっと あつめて また おいで`,W/2,476,19,'#fff','center',6);
+ if(T>2.5&&Math.sin(T*5)>-0.3)text('スペース / タップで タイトルへ',W/2,515,18,'#fff','center',5);
+}
+function drawOver(){
+ drawBG(camX,T);drawGround(camX);
+ drawBoy(W/2,GY,T,{f:1});
+ page(['ふうせんが ぜんぶ われちゃった…','もういちど ちょうせんしよう！'],W/2,220,560);
+}
+
+// ---------- loop ----------
+let last=performance.now();
+function frame(now){
+ const dt=Math.min(0.033,(now-last)/1000);last=now;T+=dt;
+ ctx.setTransform(scale*dpr,0,0,scale*dpr,0,0);ctx.lineJoin='round';ctx.lineCap='round';
+ if(loaded<ALL.length&&T<10){ctx.fillStyle='#ffe8f4';ctx.fillRect(0,0,W,H);text('よみこみちゅう… '+loaded+' / '+ALL.length,W/2,H/2,30,'#ffd84a');for(const k in pressed)delete pressed[k];tapped=false;requestAnimationFrame(frame);return;}
+ if(S==='title'){drawTitle();if(confirm()){SFX.page();go('s1');}}
+ else if(S==='s1'){drawBG(0,T);town.forEach(h=>houseS(h.x,GY,h.w,h.h,h.c,h.s));drawGround(0);
+  drawGirl(W/2+130,170+Math.sin(T*2)*12,T,'fly',-1);drawBoy(W/2-160,GY,T,{f:1,armUp:true});
+  page(['ふしぎな おんなのこが','そらから キャンディを ばらまいている！','← → で うごいて、スペースで ジャンプ。','こどもに ぶつかると おとしちゃうよ。'],W/2,250,640);
+  if(T>0.8&&confirm()){SFX.page();go('p1');}}
+ else if(S==='p1'){updP1(dt);updParts(dt);updFloat(dt);drawP1();}
+ else if(S==='s2'){if(T<0.02)S2s=false;drawStory2();if(T>2.5&&confirm()){SFX.page();go('p2');}}
+ else if(S==='p2'){updP2(dt);updParts(dt);updFloat(dt);if(S==='p2')drawP2();}
+ else if(S==='salty'){drawSalty();if(T>2.5&&confirm()){SFX.page();go('title');}}
+ else if(S==='end'){drawEnd();if(T>(IM.ending3_2?2.5:3.5)&&confirm()){SFX.page();go('title');}}
+ else if(S==='over'){drawOver();if(T>0.8&&confirm()){SFX.page();go('p2');}}
+ for(const k in pressed)delete pressed[k];tapped=false;
+ requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</html>
