@@ -4,9 +4,12 @@ https://kishida.github.io/webdemos/
 
 ## スキル
 
-[Unsloth Desktopで画像生成](skills/unsloth-media.zip)  
-[和笛](skills/wafue-sfx.zip)  
-[FM音源](skills/fm-synth.zip)  
+[Unsloth Desktopで画像生成(unsloth-media.zip)](skills/unsloth-media.zip)  
+解説こちら。  
+[Unsloth DesktopをサーバーにしてQwen Image 2.1をClaude Codeなどから使う - きしだのHatena](https://nowokay.hatenablog.com/entry/2026/10/09/153757)
+
+[和笛(wafue-sfx.zip)](skills/wafue-sfx.zip)  
+[FM音源(fm-synth.zip)](skills/fm-synth.zip)  
 
 2026/10/08
 
