@@ -11,7 +11,7 @@ https://kishida.github.io/webdemos/
 [和笛(wafue-sfx.zip)](skills/wafue-sfx.zip)  
 [FM音源(fm-synth.zip)](skills/fm-synth.zip)  
 [ローポリの木生成(procedural-lowpoly-trees.zip)](skills/procedural-lowpoly-trees.zip)  
-[ビルの窓生成(three-js-window-interiors.zip)]((skills/three-js-window-interiors.zip)  
+[ビルの窓生成(three-js-window-interiors.zip)](skills/three-js-window-interiors.zip)  
 
 2026/10/08
 
