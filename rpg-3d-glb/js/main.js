@@ -6,6 +6,7 @@ import {
   ITEMS, WEAPONS, ARMORS, SPELLS, expToNext, newHero, growth, VILLAGER_TALK, PRINCESS_TALK,
 } from './data.js';
 import { buildSongs, defineSfx } from './music.js';
+import { LANG, L, setLang } from './i18n.js';
 
 const FM = window.FM;
 const $ = (id) => document.getElementById(id);
@@ -318,7 +319,8 @@ function say(text, o = {}) {
     msgEl.innerHTML = '<span class="t"></span><span class="more hidden">▼</span>';
     const tEl = msgEl.firstChild, more = msgEl.lastChild;
     let i = 0, typing = true, autoT = null;
-    const iv = setInterval(() => { i += 1; tEl.textContent = text.slice(0, i); if (i >= text.length) done(); }, 22);
+    const step = LANG === 'en' ? 2 : 1;   // English text is longer: type two letters per tick
+    const iv = setInterval(() => { i += step; tEl.textContent = text.slice(0, i); if (i >= text.length) done(); }, 22);
     function done() {
       clearInterval(iv); typing = false; tEl.textContent = text;
       if (o.auto) autoT = setTimeout(finish, o.auto); else more.classList.remove('hidden');
@@ -375,7 +377,7 @@ function nearMsg(side = 'left') {
   const bottom = `${16 + h + 6}px`;
   return side === 'right' ? { right: `${left}px`, bottom } : { left: `${left}px`, bottom };
 }
-async function yesno(q) { await say(q, { auto: 1 }); const r = await choose(['はい', 'いいえ'], { style: nearMsg('right') }); return r === 0; }
+async function yesno(q) { await say(q, { auto: 1 }); const r = await choose([L('はい', 'Yes'), L('いいえ', 'No')], { style: nearMsg('right') }); return r === 0; }
 const fade = (v, ms = 400) => { const f = $('fade'); f.style.transition = `opacity ${ms}ms`; f.style.opacity = v; return wait(ms); };
 async function flash(times = 3) {
   const f = $('flash');
@@ -386,6 +388,7 @@ async function flash(times = 3) {
 // hero state
 // =====================================================================
 let hero = newHero();
+const HERO_NAME = L('アレン', 'Allen');
 const weapon = () => WEAPONS.find((w) => w.id === hero.weapon);
 const armor = () => ARMORS.find((w) => w.id === hero.armor);
 const atkOf = () => hero.str + weapon().atk;
@@ -393,7 +396,7 @@ const defOf = () => hero.vit + armor().def;
 const spellsKnown = () => SPELLS.filter((s) => hero.lv >= s.lv);
 function hud() {
   const el = $('hud');
-  el.innerHTML = `<div class="row"><b>${hero.name}</b><span>Lv ${hero.lv}</span></div>
+  el.innerHTML = `<div class="row"><b>${HERO_NAME}</b><span>Lv ${hero.lv}</span></div>
     <div class="row"><span>HP</span><span>${hero.hp} / ${hero.mhp}</span></div><div class="bar"><i style="width:${(hero.hp / hero.mhp) * 100}%"></i></div>
     <div class="row"><span>MP</span><span>${hero.mp} / ${hero.mmp}</span></div><div class="bar mp"><i style="width:${(hero.mp / hero.mmp) * 100}%"></i></div>
     <div class="row"><span>G</span><span style="color:var(--gold)">${hero.gold}</span></div>`;
@@ -834,13 +837,13 @@ function interact(x, z) {
   if (e) return startEncounter(e);
   if (boss && boss.x === x && boss.z === z) return script(bossEvent);
   if (world.signs[key]) return script(() => talk(world.signs[key]));
-  if (world.props.some((p) => p.x === x && p.z === z && p.model === 'well')) return script(() => talk(['いどの なかを のぞきこんだ。', 'つめたい みずが ゆれている…。']));
+  if (world.props.some((p) => p.x === x && p.z === z && p.model === 'well')) return script(() => talk(L(['いどの なかを のぞきこんだ。', 'つめたい みずが ゆれている…。'], ['You peer into the well.', 'Cold water ripples far below...'])));
 }
 
 async function building(b) {
   sfx('bump');
-  if (b.kind === 'castle') return talk(['しろの もんは かたく とざされている。', 'おうさまは しろの まえに いるようだ。']);
-  if (b.kind === 'house') return talk(['「いらっしゃい。ゆっくりしていってね」', '「オークの しょうは ほのおに よわいと きいたことが あるわ」']);
+  if (b.kind === 'castle') return talk(L(['しろの もんは かたく とざされている。', 'おうさまは しろの まえに いるようだ。'], ['The castle gate is firmly shut.', 'The king seems to be standing in front of the castle.']));
+  if (b.kind === 'house') return talk(L(['「いらっしゃい。ゆっくりしていってね」', '「オークの しょうは ほのおに よわいと きいたことが あるわ」'], ['"Welcome! Make yourself at home."', '"I heard the orc warlord is weak against fire."']));
   if (b.kind === 'inn') return inn();
   if (b.kind === 'weapon') return weaponShop();
   if (b.kind === 'item') return itemShop();
@@ -855,33 +858,38 @@ async function npcTalk(n) {
 
 async function kingTalk() {
   if (!hero.flags.metKing) {
-    await talk([
+    await talk(L([
       'おうさま「おお、ゆうしゃ アレンよ。よくぞ まいった」',
       'おうさま「きたひがしの とりでに、あかき オークの しょうが すみつき\nまちを おびやかしておる」',
       'おうさま「どうか やつを うちたおし、アストリアに へいわを とりもどしてくれ」',
       'おうさま「わずかだが したくきんじゃ。うけとるがよい」',
-    ]);
+    ], [
+      'King: "Ah, Allen the hero. Thank you for coming."',
+      'King: "A crimson orc warlord has seized the fort to the northeast\nand threatens our town."',
+      'King: "Please defeat him and bring peace back to Astria."',
+      'King: "Here is a little something for your journey. Take it."',
+    ]));
     hero.gold += 50; hero.items.herb = (hero.items.herb || 0) + 3; hero.flags.metKing = true;
     sfx('coin'); hud();
-    await talk(['アレンは 50ゴールドと やくそう 3こを うけとった！']);
+    await talk([L('アレンは 50ゴールドと やくそう 3こを うけとった！', 'Allen received 50 gold and 3 herbs!')]);
     return;
   }
   if (hero.flags.bossDown && !hero.flags.ending) return ending();
   const need = expToNext(hero.lv) - hero.exp;
-  await say(`おうさま「アレンよ。つぎの レベルまで あと ${need} の けいけんが ひつようじゃ」`);
-  if (await yesno('おうさま「ここまでの ぼうけんを きろく するかね？」')) {
+  await say(L(`おうさま「アレンよ。つぎの レベルまで あと ${need} の けいけんが ひつようじゃ」`, `King: "Allen, you need ${need} more experience for the next level."`));
+  if (await yesno(L('おうさま「ここまでの ぼうけんを きろく するかね？」', 'King: "Shall I record your adventure so far?"'))) {
     save(); sfx('powerup');
-    await say('ぼうけんの きろくを つけた。');
+    await say(L('ぼうけんの きろくを つけた。', 'Your adventure has been recorded.'));
   }
-  await say('おうさま「では ゆくがよい、ゆうしゃよ！」');
+  await say(L('おうさま「では ゆくがよい、ゆうしゃよ！」', 'King: "Now go forth, hero!"'));
   closeMsg();
 }
 
 async function inn() {
   const price = 6 + hero.lv * 2;
-  await say(`やどや「たびびとの やどやへ ようこそ。ひとばん ${price}ゴールドです」`);
-  if (!(await yesno('やどや「おとまりに なりますか？」'))) { await say('やどや「またの おこしを」'); closeMsg(); return; }
-  if (hero.gold < price) { await say('やどや「おかねが たりない ようですね…」'); closeMsg(); return; }
+  await say(L(`やどや「たびびとの やどやへ ようこそ。ひとばん ${price}ゴールドです」`, `Innkeeper: "Welcome, traveler! A night is ${price} gold."`));
+  if (!(await yesno(L('やどや「おとまりに なりますか？」', 'Innkeeper: "Will you stay the night?"')))) { await say(L('やどや「またの おこしを」', 'Innkeeper: "Please come again."')); closeMsg(); return; }
+  if (hero.gold < price) { await say(L('やどや「おかねが たりない ようですね…」', 'Innkeeper: "You don\'t seem to have enough gold..."')); closeMsg(); return; }
   hero.gold -= price; closeMsg(); hud();
   await fade(1, 600);
   const prev = curSong;
@@ -890,11 +898,11 @@ async function inn() {
   save();
   curSong = null; music(prev === 'inn' ? 'town' : prev);
   await fade(0, 600);
-  await talk(['やどや「おはようございます。ぼうけんの きろくも つけておきましたよ」']);
+  await talk([L('やどや「おはようございます。ぼうけんの きろくも つけておきましたよ」', 'Innkeeper: "Good morning! I recorded your adventure as well."')]);
 }
 
 async function weaponShop() {
-  await say('ぶきや「いらっしゃい！ ぶきと ぼうぐの みせだよ」');
+  await say(L('ぶきや「いらっしゃい！ ぶきと ぼうぐの みせだよ」', 'Smith: "Welcome! Weapons and armor, right here!"'));
   let start = 0;
   for (;;) {
     const goods = [...WEAPONS.filter((w) => w.price > 0).map((w) => ({ ...w, kind: 'weapon' })), ...ARMORS.filter((a) => a.price > 0).map((a) => ({ ...a, kind: 'armor' }))];
@@ -903,35 +911,36 @@ async function weaponShop() {
       const val = g.kind === 'weapon' ? g.atk : g.def;
       const curVal = g.kind === 'weapon' ? cur.atk : cur.def;
       const owned = cur.id === g.id;
-      return { label: g.name, right: owned ? 'そうびちゅう' : `${g.price}G`, disabled: owned || val <= curVal,
-        info: `${g.kind === 'weapon' ? 'こうげき' : 'しゅび'} +${val}　(いま ${cur.name} +${curVal})\nもちきん ${hero.gold}G` };
+      return { label: g.name, right: owned ? L('そうびちゅう', 'Equipped') : `${g.price}G`, disabled: owned || val <= curVal,
+        info: L(`${g.kind === 'weapon' ? 'こうげき' : 'しゅび'} +${val}　(いま ${cur.name} +${curVal})\nもちきん ${hero.gold}G`,
+          `${g.kind === 'weapon' ? 'Attack' : 'Defense'} +${val}  (now ${cur.name} +${curVal})\nGold ${hero.gold}G`) };
     });
-    const i = await choose(items, { title: 'なにを かう？', start, style: nearMsg('left') });
+    const i = await choose(items, { title: L('なにを かう？', 'Buy what?'), start, style: nearMsg('left') });
     if (i < 0) break;
     start = i;
     const g = goods[i];
-    if (hero.gold < g.price) { await say('ぶきや「おかねが たりないよ！」'); continue; }
-    if (!(await yesno(`ぶきや「${g.name}は ${g.price}ゴールドだ。かうかい？」`))) continue;
+    if (hero.gold < g.price) { await say(L('ぶきや「おかねが たりないよ！」', 'Smith: "Not enough gold!"')); continue; }
+    if (!(await yesno(L(`ぶきや「${g.name}は ${g.price}ゴールドだ。かうかい？」`, `Smith: "The ${g.name} is ${g.price} gold. Buy it?"`)))) continue;
     hero.gold -= g.price; hero[g.kind] = g.id; sfx('coin'); hud();
-    await say(`アレンは ${g.name}を そうびした！`);
+    await say(L(`アレンは ${g.name}を そうびした！`, `Allen equipped the ${g.name}!`));
   }
-  await say('ぶきや「まいど！ きを つけてな」'); closeMsg();
+  await say(L('ぶきや「まいど！ きを つけてな」', 'Smith: "Thanks! Take care out there."')); closeMsg();
 }
 
 async function itemShop() {
-  await say('どうぐや「いらっしゃいませ。なにに いたしましょう？」');
+  await say(L('どうぐや「いらっしゃいませ。なにに いたしましょう？」', 'Shopkeeper: "Welcome. What can I get you?"'));
   let start = 0;
   for (;;) {
     const keys = Object.keys(ITEMS);
-    const i = await choose(keys.map((k) => ({ label: ITEMS[k].name, right: `${ITEMS[k].price}G`, info: `${ITEMS[k].desc}　もっている: ${hero.items[k] || 0}\nもちきん ${hero.gold}G` })), { title: 'なにを かう？', start, style: nearMsg('left') });
+    const i = await choose(keys.map((k) => ({ label: ITEMS[k].name, right: `${ITEMS[k].price}G`, info: L(`${ITEMS[k].desc}　もっている: ${hero.items[k] || 0}\nもちきん ${hero.gold}G`, `${ITEMS[k].desc}  Have: ${hero.items[k] || 0}\nGold ${hero.gold}G`) })), { title: L('なにを かう？', 'Buy what?'), start, style: nearMsg('left') });
     if (i < 0) break;
     start = i;
     const it = ITEMS[keys[i]];
-    if (hero.gold < it.price) { sfx('cancel'); await say('どうぐや「おかねが たりない ようです」'); continue; }
+    if (hero.gold < it.price) { sfx('cancel'); await say(L('どうぐや「おかねが たりない ようです」', 'Shopkeeper: "I\'m afraid you don\'t have enough gold."')); continue; }
     hero.gold -= it.price; hero.items[keys[i]] = (hero.items[keys[i]] || 0) + 1; sfx('coin'); hud();
-    await say(`${it.name}を かった！`, { auto: 500 });
+    await say(L(`${it.name}を かった！`, `Bought ${it.name}!`), { auto: 500 });
   }
-  await say('どうぐや「ありがとう ございました」'); closeMsg();
+  await say(L('どうぐや「ありがとう ございました」', 'Shopkeeper: "Thank you very much!"')); closeMsg();
 }
 
 async function openChest(c) {
@@ -941,8 +950,8 @@ async function openChest(c) {
   burst(field, new THREE.Vector3(c.x, 0.6, c.z), 0xffe070, 24, { speed: 1.5 });
   c.root.removeFromParent(); chests.splice(chests.indexOf(c), 1);
   const ch = c.chest;
-  if (ch.gold) { hero.gold += ch.gold; hud(); await talk([`たからばこを あけた！`, `${ch.gold}ゴールドを てにいれた！`]); }
-  else { hero.items[ch.item] = (hero.items[ch.item] || 0) + ch.n; await talk(['たからばこを あけた！', `${ITEMS[ch.item].name}を ${ch.n}こ てにいれた！`]); }
+  if (ch.gold) { hero.gold += ch.gold; hud(); await talk(L([`たからばこを あけた！`, `${ch.gold}ゴールドを てにいれた！`], ['You opened the treasure chest!', `Found ${ch.gold} gold!`])); }
+  else { hero.items[ch.item] = (hero.items[ch.item] || 0) + ch.n; await talk(L(['たからばこを あけた！', `${ITEMS[ch.item].name}を ${ch.n}こ てにいれた！`], ['You opened the treasure chest!', `Found ${ITEMS[ch.item].name} x${ch.n}!`])); }
 }
 
 async function bossEvent() {
@@ -950,12 +959,13 @@ async function bossEvent() {
   music(null);
   sfx('roar');
   await flash(2);
-  await talk(['あかきオークの将「グォォォ…！ ニンゲンめ、ここまで きたか！」', 'あかきオークの将「このとりでは オレさまの ものだ。ひねりつぶして くれる！」']);
+  await talk(L(['あかきオークの将「グォォォ…！ ニンゲンめ、ここまで きたか！」', 'あかきオークの将「このとりでは オレさまの ものだ。ひねりつぶして くれる！」'],
+    ['Crimson Orc Warlord: "GRRAAAH...! So, human, you made it this far!"', 'Crimson Orc Warlord: "This fort is mine. I\'ll crush you!"']));
   const r = await battle(['orc_leader'], { boss: true });
   if (r === 'win') {
     hero.flags.bossDown = true;
     boss.root.removeFromParent(); boss = null;
-    await talk(['あかきオークの将を うちたおした！', 'オークたちは ちりぢりに にげていった…', 'おうさまに ほうこく しよう！']);
+    await talk(L(['あかきオークの将を うちたおした！', 'オークたちは ちりぢりに にげていった…', 'おうさまに ほうこく しよう！'], ['You defeated the Crimson Orc Warlord!', 'The orcs scattered and fled...', 'Report to the king!']));
     for (const e of [...enemies]) if (inRect(CAMP, e.x, e.z)) removeEnemy(e);
   }
 }
@@ -963,16 +973,17 @@ async function bossEvent() {
 async function ending() {
   hero.flags.ending = true;
   music(null);
-  await talk(['おうさま「おお、アレン！ よくぞ あかき オークの しょうを たおしてくれた！」', 'おうさま「そなたこそ まことの ゆうしゃじゃ。アストリアは すくわれた！」']);
+  await talk(L(['おうさま「おお、アレン！ よくぞ あかき オークの しょうを たおしてくれた！」', 'おうさま「そなたこそ まことの ゆうしゃじゃ。アストリアは すくわれた！」'],
+    ['King: "Oh, Allen! You have defeated the crimson orc warlord!"', 'King: "You are a true hero. Astria is saved!"']));
   await jingle('fanfare');
   await fade(1, 1200);
   const cr = $('credits');
   cr.classList.remove('hidden');
   music('title');
-  const lines = ['アストリア戦記 〜赤きオークの将〜', '', '3D MODELS', 'Qwen3.5-4B-GLB-3D-Coder + Three.js', '', 'MUSIC & SOUND', '4-OP FM SYNTH', '', 'THANK YOU FOR PLAYING!'];
+  const lines = [L('アストリア戦記 〜赤きオークの将〜', 'Chronicles of Astria: The Crimson Orc Warlord'), '', '3D MODELS', 'Qwen3.5-4B-GLB-3D-Coder + Three.js', '', 'MUSIC & SOUND', '4-OP FM SYNTH', '', 'THANK YOU FOR PLAYING!'];
   cr.innerHTML = '';
   for (const l of lines) { const d = document.createElement('div'); d.textContent = l || '　'; d.style.opacity = 0; d.style.transition = 'opacity 1s'; cr.appendChild(d); await wait(500); d.style.opacity = 1; }
-  await say('ゆうしゃの ぼうけんは つづく…（Enter で もどる）');
+  await say(L('ゆうしゃの ぼうけんは つづく…（Enter で もどる）', 'The hero\'s journey continues... (press Enter)'));
   closeMsg();
   cr.classList.add('hidden');
   save();
@@ -987,22 +998,24 @@ async function fieldMenu() {
   sfx('select');
   let start = 0;
   for (;;) {
-    const i = await choose(['つよさ', 'どうぐ', 'まほう', 'きろく', 'とじる'], { start, style: nearMsg('left') });
+    const i = await choose(L(['つよさ', 'どうぐ', 'まほう', 'きろく', 'とじる'], ['Status', 'Items', 'Magic', 'Save', 'Close']), { start, style: nearMsg('left') });
     start = i;
     if (i < 0 || i === 4) return;
     if (i === 0) {
-      await panel(`<b>${hero.name}</b>　Lv ${hero.lv}<br>HP ${hero.hp}/${hero.mhp}　MP ${hero.mp}/${hero.mmp}<br>
-        ちから ${hero.str}　たいりょく ${hero.vit}<br>すばやさ ${hero.agi}　かしこさ ${hero.int}<br>
-        こうげき ${atkOf()}　しゅび ${defOf()}<br>ぶき: ${weapon().name}<br>よろい: ${armor().name}<br>
-        けいけん ${hero.exp}　つぎまで ${expToNext(hero.lv) - hero.exp}<br>ゴールド ${hero.gold}`);
+      const st = L(['ちから', 'たいりょく', 'すばやさ', 'かしこさ', 'こうげき', 'しゅび', 'ぶき', 'よろい', 'けいけん', 'つぎまで', 'ゴールド'],
+        ['STR', 'VIT', 'AGI', 'INT', 'Attack', 'Defense', 'Weapon', 'Armor', 'EXP', 'Next', 'Gold']);
+      await panel(`<b>${HERO_NAME}</b>　Lv ${hero.lv}<br>HP ${hero.hp}/${hero.mhp}　MP ${hero.mp}/${hero.mmp}<br>
+        ${st[0]} ${hero.str}　${st[1]} ${hero.vit}<br>${st[2]} ${hero.agi}　${st[3]} ${hero.int}<br>
+        ${st[4]} ${atkOf()}　${st[5]} ${defOf()}<br>${st[6]}: ${weapon().name}<br>${st[7]}: ${armor().name}<br>
+        ${st[8]} ${hero.exp}　${st[9]} ${expToNext(hero.lv) - hero.exp}<br>${st[10]} ${hero.gold}`);
     }
     if (i === 1) await useItemMenu(false);
     if (i === 2) {
       const sp = spellsKnown();
-      const j = await choose(sp.map((s) => ({ label: s.name, right: `${s.mp}`, disabled: s.id !== 'heal' || hero.mp < s.mp, info: s.desc })), { title: 'まほう', style: nearMsg('left') });
-      if (j >= 0) { hero.mp -= sp[j].mp; const v = healHero(60 + hero.int); sfx('heal'); hud(); await talk([`アレンは ヒールを となえた！ HPが ${v} かいふくした。`]); }
+      const j = await choose(sp.map((s) => ({ label: s.name, right: `${s.mp}`, disabled: s.id !== 'heal' || hero.mp < s.mp, info: s.desc })), { title: L('まほう', 'Magic'), style: nearMsg('left') });
+      if (j >= 0) { hero.mp -= sp[j].mp; const v = healHero(60 + hero.int); sfx('heal'); hud(); await talk([L(`アレンは ヒールを となえた！ HPが ${v} かいふくした。`, `Allen cast Heal! Recovered ${v} HP.`)]); }
     }
-    if (i === 3) { save(); sfx('powerup'); await talk(['ぼうけんの きろくを つけた。']); }
+    if (i === 3) { save(); sfx('powerup'); await talk([L('ぼうけんの きろくを つけた。', 'Your adventure has been recorded.')]); }
   }
 }
 function healHero(v) { const b = hero.hp; hero.hp = Math.min(hero.mhp, hero.hp + v); return hero.hp - b; }
@@ -1011,15 +1024,15 @@ function healMp(v) { const b = hero.mp; hero.mp = Math.min(hero.mmp, hero.mp + v
 // returns true if an item was used
 async function useItemMenu(inBattle) {
   const keys = Object.keys(hero.items).filter((k) => hero.items[k] > 0);
-  if (!keys.length) { await say('どうぐを なにも もっていない。', inBattle ? { auto: 700 } : {}); if (!inBattle) closeMsg(); return false; }
-  const j = await choose(keys.map((k) => ({ label: ITEMS[k].name, right: `×${hero.items[k]}`, info: ITEMS[k].desc })), { title: 'どうぐ', style: nearMsg('left') });
+  if (!keys.length) { await say(L('どうぐを なにも もっていない。', 'You have no items.'), inBattle ? { auto: 700 } : {}); if (!inBattle) closeMsg(); return false; }
+  const j = await choose(keys.map((k) => ({ label: ITEMS[k].name, right: `×${hero.items[k]}`, info: ITEMS[k].desc })), { title: L('どうぐ', 'Items'), style: nearMsg('left') });
   if (j < 0) return false;
   const k = keys[j];
   hero.items[k]--;
   let text;
-  if (k === 'herb') text = `やくそうを つかった！ HPが ${healHero(35)} かいふくした。`;
-  if (k === 'ether') text = `まほうのみずを のんだ！ MPが ${healMp(20)} かいふくした。`;
-  if (k === 'elixir') text = `いのちのみを たべた！ HPが ${healHero(9999)} かいふくした。`;
+  if (k === 'herb') { const v = healHero(35); text = L(`やくそうを つかった！ HPが ${v} かいふくした。`, `Used a Herb! Recovered ${v} HP.`); }
+  if (k === 'ether') { const v = healMp(20); text = L(`まほうのみずを のんだ！ MPが ${v} かいふくした。`, `Drank Magic Water! Recovered ${v} MP.`); }
+  if (k === 'elixir') { const v = healHero(9999); text = L(`いのちのみを たべた！ HPが ${v} かいふくした。`, `Ate a Life Fruit! Recovered ${v} HP.`); }
   sfx('heal'); hud();
   if (inBattle) { await healFx(); await say(text, { auto: 900 }); } else await talk([text]);
   return true;
@@ -1161,7 +1174,7 @@ function setupBattle(kinds, theme) {
     label.className = 'elabel';
     labelsEl.appendChild(label);
     const letter = n > 1 && kinds.filter((x) => x === k).length > 1 ? 'ABC'[kinds.slice(0, i + 1).filter((x) => x === k).length - 1] : '';
-    return { kind: k, m, name: m.name + letter, hp: m.hp, mhp: m.hp, atk: m.atk, def: m.def, actor: a, label, alive: true, buff: 0 };
+    return { kind: k, m, name: letter ? L(m.name + letter, `${m.name} ${letter}`) : m.name, hp: m.hp, mhp: m.hp, atk: m.atk, def: m.def, actor: a, label, alive: true, buff: 0 };
   });
   // zoom out just enough for big monsters or a wide group
   bcam.userData.half = 4.3 + Math.max(0, maxBh - 2) * 0.55 + (n - 1) * Math.max(0, maxBh - 1.8) * 0.35;
@@ -1244,15 +1257,16 @@ async function battle(kinds, o = {}) {
   music(o.boss ? 'boss' : 'battle');
   await fade(0, 250);
   const names = [...new Set(foes.map((f) => f.m.name))];
-  await say(foes.length > 1 ? `${names.join('と ')}たちが あらわれた！` : `${foes[0].m.name}が あらわれた！`, { auto: 900 });
+  await say(L(foes.length > 1 ? `${names.join('と ')}たちが あらわれた！` : `${foes[0].m.name}が あらわれた！`,
+    foes.length > 1 ? `${foes.length} ${foes[0].m.plural} appear!` : `${/^[AEIOU]/.test(foes[0].m.name) ? 'An' : 'A'} ${foes[0].m.name} appears!`), { auto: 900 });
   let result = null;
   while (!result) {
     // ---- player turn ----
     const act = await playerTurn(o);
     if (act === 'run') {
-      if (o.boss) { await say('しかし まわりこまれて しまった！', { auto: 900 }); }
-      else if (Math.random() < 0.65) { sfx('jump'); await say('アレンは にげだした！', { auto: 700 }); result = 'run'; break; }
-      else await say('しかし にげられなかった！', { auto: 900 });
+      if (o.boss) { await say(L('しかし まわりこまれて しまった！', 'But you were cut off!'), { auto: 900 }); }
+      else if (Math.random() < 0.65) { sfx('jump'); await say(L('アレンは にげだした！', 'Allen ran away!'), { auto: 700 }); result = 'run'; break; }
+      else await say(L('しかし にげられなかった！', 'But you couldn\'t escape!'), { auto: 900 });
     }
     if (foes.every((f) => !f.alive)) { result = 'win'; break; }
     // ---- enemy turn ----
@@ -1261,7 +1275,7 @@ async function battle(kinds, o = {}) {
       await enemyAct(f, o);
       if (hero.hp <= 0) { result = 'lose'; break; }
       if (f.m.boss && f.hp < f.mhp / 2 && Math.random() < 0.35 && hero.hp > 0) {
-        await say(`${f.name}の いかりの れんぞくこうげき！`, { auto: 700 });
+        await say(L(`${f.name}の いかりの れんぞくこうげき！`, `The ${f.name} attacks again in a rage!`), { auto: 700 });
         await enemyAct(f, o);
         if (hero.hp <= 0) { result = 'lose'; break; }
       }
@@ -1282,8 +1296,8 @@ async function battle(kinds, o = {}) {
 
 async function playerTurn(o) {
   for (;;) {
-    await say(`アレンは どうする？`, { auto: 1 });
-    const cmd = await choose(['たたかう', 'まほう', 'どうぐ', 'にげる'], { cancel: false, style: nearMsg('left') });
+    await say(L('アレンは どうする？', 'What will Allen do?'), { auto: 1 });
+    const cmd = await choose(L(['たたかう', 'まほう', 'どうぐ', 'にげる'], ['Attack', 'Magic', 'Items', 'Run']), { cancel: false, style: nearMsg('left') });
     if (cmd === 0) {
       const f = await pickTarget();
       if (!f) continue;
@@ -1292,7 +1306,7 @@ async function playerTurn(o) {
     }
     if (cmd === 1) {
       const sp = spellsKnown();
-      const j = await choose(sp.map((s) => ({ label: s.name, right: `MP ${s.mp}`, disabled: hero.mp < s.mp, info: s.desc })), { title: 'まほう', style: nearMsg('left') });
+      const j = await choose(sp.map((s) => ({ label: s.name, right: `MP ${s.mp}`, disabled: hero.mp < s.mp, info: s.desc })), { title: L('まほう', 'Magic'), style: nearMsg('left') });
       if (j < 0) continue;
       const s = sp[j];
       let targets;
@@ -1311,7 +1325,7 @@ async function pickTarget() {
   const alive = foes.filter((f) => f.alive);
   if (alive.length === 1) return alive[0];
   const j = await choose(alive.map((f) => ({ label: f.name, right: '' })), {
-    title: 'だれを？', style: nearMsg('left'),
+    title: L('だれを？', 'Target?'), style: nearMsg('left'),
     onMove: (i) => alive.forEach((f, k) => f.label.classList.toggle('target', k === i)),
   });
   alive.forEach((f) => f.label.classList.remove('target'));
@@ -1319,18 +1333,18 @@ async function pickTarget() {
 }
 
 async function heroAttack(f) {
-  await say(`アレンの こうげき！`, { auto: 350 });
+  await say(L('アレンの こうげき！', 'Allen attacks!'), { auto: 350 });
   const lung = lunge(bHero, f.actor.root.position, 1.6);
   await wait(170);
   sfx('slash');
-  if (Math.random() < 0.05) { sfx('miss'); popNumber(f.actor.root.position.clone().setY(1.2), 'MISS'); await lung; await say(`ミス！ ${f.name}は ひらりと かわした。`, { auto: 700 }); return; }
+  if (Math.random() < 0.05) { sfx('miss'); popNumber(f.actor.root.position.clone().setY(1.2), 'MISS'); await lung; await say(L(`ミス！ ${f.name}は ひらりと かわした。`, `Miss! The ${f.name} dodged nimbly.`), { auto: 700 }); return; }
   const crit = Math.random() < 0.07;
   const dmg = crit ? Math.round(atkOf() * 1.6 * variance()) : physDamage(atkOf(), f.def);
   if (crit) { sfx('crit'); flash(1); }
   else sfx('hit');
   await damageFoe(f, dmg, crit);
   await lung;
-  await say(crit ? `かいしんの いちげき！ ${f.name}に ${dmg}の ダメージ！` : `${f.name}に ${dmg}の ダメージ！`, { auto: 650 });
+  await say(crit ? L(`かいしんの いちげき！ ${f.name}に ${dmg}の ダメージ！`, `Critical hit! ${dmg} damage to the ${f.name}!`) : L(`${f.name}に ${dmg}の ダメージ！`, `${dmg} damage to the ${f.name}!`), { auto: 650 });
   if (f.hp <= 0) await killFoe(f);
 }
 
@@ -1343,16 +1357,16 @@ async function damageFoe(f, dmg, crit) {
 async function killFoe(f) {
   f.alive = false;
   await dieFx(f);
-  await say(`${f.name}を たおした！`, { auto: 600 });
+  await say(L(`${f.name}を たおした！`, `Defeated the ${f.name}!`), { auto: 600 });
 }
 
 async function castSpell(s, targets) {
-  await say(`アレンは ${s.name}を となえた！`, { auto: 450 });
+  await say(L(`アレンは ${s.name}を となえた！`, `Allen cast ${s.name}!`), { auto: 450 });
   await tween(300, (t) => { bHero.root.position.y = Math.sin(t * Math.PI) * 0.4; });
   if (s.id === 'heal') {
     sfx('heal'); await healFx();
     const v = healHero(60 + hero.int); hud();
-    await say(`HPが ${v} かいふくした！`, { auto: 700 });
+    await say(L(`HPが ${v} かいふくした！`, `Recovered ${v} HP!`), { auto: 700 });
     return;
   }
   sfx(s.id === 'thunder' ? 'thunder' : s.id === 'blaze' ? 'blaze' : 'fire');
@@ -1362,30 +1376,30 @@ async function castSpell(s, targets) {
     const weak = f.kind === 'orc_leader' && (s.id === 'fire' || s.id === 'blaze') ? 1.35 : 1;
     const dmg = Math.max(1, Math.round((base - f.def / 4) * variance() * weak));
     await damageFoe(f, dmg, false);
-    await say(`${f.name}に ${dmg}の ダメージ！`, { auto: 550 });
+    await say(L(`${f.name}に ${dmg}の ダメージ！`, `${dmg} damage to the ${f.name}!`), { auto: 550 });
     if (f.hp <= 0) await killFoe(f);
   }
 }
 
 async function enemyAct(f, o) {
   const m = f.m;
-  let mult = 1, verb = `${f.name}の こうげき！`;
+  let mult = 1, verb = L(`${f.name}の こうげき！`, `The ${f.name} attacks!`);
   if (m.boss) {
     const r = Math.random();
     if (r < 0.15 && f.buff < 2) {
       f.buff++; f.atk = Math.round(f.atk * 1.2);
       sfx('roar');
       await tween(500, (t) => f.actor.body.scale.setScalar(1 + Math.sin(t * Math.PI) * 0.15));
-      await say(`${f.name}は おたけびを あげた！ こうげきりょくが あがった！`, { auto: 900 });
+      await say(L(`${f.name}は おたけびを あげた！ こうげきりょくが あがった！`, `The ${f.name} lets out a war cry! Its attack rose!`), { auto: 900 });
       return;
     }
-    if (r < 0.45) { mult = 1.6; verb = `${f.name}の ちからため なぎはらい！`; }
-  } else if (f.kind === 'wolf' && Math.random() < 0.25) { mult = 1.3; verb = `${f.name}は するどく かみついた！`; }
-  else if (f.kind === 'skeleton' && Math.random() < 0.2) { mult = 1.4; verb = `${f.name}の きりさき こうげき！`; }
+    if (r < 0.45) { mult = 1.6; verb = L(`${f.name}の ちからため なぎはらい！`, `The ${f.name} winds up a mighty sweep!`); }
+  } else if (f.kind === 'wolf' && Math.random() < 0.25) { mult = 1.3; verb = L(`${f.name}は するどく かみついた！`, `The ${f.name} bites fiercely!`); }
+  else if (f.kind === 'skeleton' && Math.random() < 0.2) { mult = 1.4; verb = L(`${f.name}の きりさき こうげき！`, `The ${f.name} slashes wildly!`); }
   await say(verb, { auto: 400 });
   const lung = lunge(f.actor, bHero.root.position, m.boss ? 1.8 : 1.4);
   await wait(170);
-  if (Math.random() < 0.06 + hero.agi * 0.002) { sfx('miss'); popNumber(bHero.root.position.clone().setY(1.2), 'MISS'); await lung; await say('アレンは ひらりと みを かわした！', { auto: 600 }); return; }
+  if (Math.random() < 0.06 + hero.agi * 0.002) { sfx('miss'); popNumber(bHero.root.position.clone().setY(1.2), 'MISS'); await lung; await say(L('アレンは ひらりと みを かわした！', 'Allen nimbly dodged!'), { auto: 600 }); return; }
   const dmg = Math.max(1, Math.round(physDamage(f.atk, defOf()) * mult));
   sfx('damage');
   hero.hp = Math.max(0, hero.hp - dmg); hud();
@@ -1393,7 +1407,7 @@ async function enemyAct(f, o) {
   if (mult > 1.2) { flash(1); }
   shakeScreen(mult > 1.2 ? 12 : 6);
   await Promise.all([hitFx(bHero), lung]);
-  await say(`アレンは ${dmg}の ダメージを うけた！`, { auto: 600 });
+  await say(L(`アレンは ${dmg}の ダメージを うけた！`, `Allen took ${dmg} damage!`), { auto: 600 });
 }
 
 function shakeScreen(px) {
@@ -1409,7 +1423,7 @@ async function victory() {
   jingle('victory');
   bHero.forceAnim = false;
   tween(500, (t) => { bHero.root.position.y = Math.sin(t * Math.PI) * 0.5; });
-  await say(`まものたちを やっつけた！\n${exp}ポイントの けいけんちを かくとく。${gold}ゴールドを てにいれた！`);
+  await say(L(`まものたちを やっつけた！\n${exp}ポイントの けいけんちを かくとく。${gold}ゴールドを てにいれた！`, `Victory!\nGained ${exp} EXP and ${gold} gold!`));
   while (hero.exp >= expToNext(hero.lv)) {
     hero.exp -= expToNext(hero.lv);
     hero.lv++;
@@ -1419,9 +1433,10 @@ async function victory() {
     hud();
     burst(bscene, bHero.root.position.clone().setY(0.2), 0xffe070, 30, { speed: 0.8, up: [2, 4], g: 1 });
     jingle('levelup');
-    await say(`アレンは レベル ${hero.lv} に あがった！\nHP+${g.mhp} MP+${g.mmp} ちから+${g.str} たいりょく+${g.vit} すばやさ+${g.agi} かしこさ+${g.int}`);
+    await say(L(`アレンは レベル ${hero.lv} に あがった！\nHP+${g.mhp} MP+${g.mmp} ちから+${g.str} たいりょく+${g.vit} すばやさ+${g.agi} かしこさ+${g.int}`,
+      `Allen reached level ${hero.lv}!\nHP+${g.mhp} MP+${g.mmp} STR+${g.str} VIT+${g.vit} AGI+${g.agi} INT+${g.int}`));
     const sp = spellsKnown();
-    if (sp.length > before) await say(`アレンは ${sp[sp.length - 1].name}の まほうを おぼえた！`);
+    if (sp.length > before) await say(L(`アレンは ${sp[sp.length - 1].name}の まほうを おぼえた！`, `Allen learned ${sp[sp.length - 1].name}!`));
   }
 }
 
@@ -1429,13 +1444,13 @@ async function defeat() {
   music(null);
   await tween(700, (t) => { bHero.body.rotation.z = -t * Math.PI / 2; bHero.body.position.y = -t * 0.2; });
   jingle('gameover');
-  await say('アレンは ちからつきた…');
+  await say(L('アレンは ちからつきた…', 'Allen has fallen...'));
   await fade(1, 800);
   hero.gold = Math.floor(hero.gold / 2);
   hero.hp = hero.mhp; hero.mp = hero.mmp;
   placePlayer(5, 35);
   hud();
-  await say('…きがつくと やどやの まえに いた。\nもちきんが はんぶんに なってしまった。');
+  await say(L('…きがつくと やどやの まえに いた。\nもちきんが はんぶんに なってしまった。', '...You wake up in front of the inn.\nHalf of your gold is gone.'));
 }
 
 function placePlayer(x, z) {
@@ -1467,10 +1482,10 @@ function startEncounter(e) {
 // =====================================================================
 let zoneName = '';
 function zoneOf(x, z) {
-  if (inRect(TOWN, x, z)) return ['アストリアの まち', 'town'];
-  if (inRect(CAMP, x, z) || (z < 16 && x > 33)) return ['オークの とりで', 'camp'];
-  if (z < 19 && x < 26) return ['まよいの もり', 'field'];
-  return ['アストリア へいげん', 'field'];
+  if (inRect(TOWN, x, z)) return [L('アストリアの まち', 'Town of Astria'), 'town'];
+  if (inRect(CAMP, x, z) || (z < 16 && x > 33)) return [L('オークの とりで', 'Orc Fort'), 'camp'];
+  if (z < 19 && x < 26) return [L('まよいの もり', 'Lost Woods'), 'field'];
+  return [L('アストリア へいげん', 'Astria Plains'), 'field'];
 }
 function updateZone() {
   const [name, song] = zoneOf(player.x, player.z);
@@ -1491,7 +1506,15 @@ async function titleKey(k, rep) {
   music('title');
   document.querySelector('#title .press').classList.add('hidden');
   const saved = loadSave();
-  const i = await choose([{ label: 'はじめから' }, { label: 'つづきから', disabled: !saved }], { cancel: false, start: saved ? 1 : 0, style: { left: '50%', bottom: '18%', transform: 'translateX(-50%)' } });
+  let i;
+  for (;;) {
+    i = await choose([{ label: L('はじめから', 'New Game') }, { label: L('つづきから', 'Continue'), disabled: !saved },
+      { label: LANG === 'en' ? '日本語' : 'English' }], { cancel: false, start: saved ? 1 : 0, style: { left: '50%', bottom: '18%', transform: 'translateX(-50%)' } });
+    if (i !== 2) break;
+    await FM.shutdown();
+    setLang(LANG === 'en' ? 'ja' : 'en');   // reloads the page
+    return;
+  }
   await fade(1, 600);
   $('title').classList.add('hidden');
   if (i === 1 && saved) hero = Object.assign(newHero(), saved);
@@ -1601,8 +1624,22 @@ window.__game = {
 // =====================================================================
 // boot
 // =====================================================================
+// static page text in the chosen language
+function localizePage() {
+  document.documentElement.lang = LANG;
+  document.title = L('アストリア戦記 〜赤きオークの将〜', 'Chronicles of Astria: The Crimson Orc Warlord');
+  $('title-main').textContent = L('アストリア戦記', 'Chronicles of Astria');
+  $('title-sub').textContent = L('〜 赤きオークの将 〜', '~ The Crimson Orc Warlord ~');
+  $('title-sound').innerHTML = L('M: おと <span class="snd"></span>', 'M: Sound <span class="snd"></span>');
+  $('help').innerHTML = L('矢印/WASD: いどう　Z/Enter: しらべる・けってい<br>X/Esc: メニュー・キャンセル　M: おと <span class="snd"></span>',
+    'Arrows/WASD: Move　Z/Enter: Talk / OK<br>X/Esc: Menu / Cancel　M: Sound <span class="snd"></span>');
+  $('loading').textContent = L('3Dモデルを よみこみちゅう…', 'Loading 3D models...');
+  showSound();
+}
+
 (async () => {
-  await loadModels((n, total) => { $('loading').textContent = `3Dモデルを よみこみちゅう… ${n} / ${total}`; });
+  localizePage();
+  await loadModels((n, total) => { $('loading').textContent = L(`3Dモデルを よみこみちゅう… ${n} / ${total}`, `Loading 3D models... ${n} / ${total}`); });
   buildTerrain();
   spawnWorldActors();
   mode = 'title';

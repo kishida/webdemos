@@ -1,5 +1,7 @@
 // World map, monsters, items and growth tables.
 
+import { L } from './i18n.js';
+
 export const W = 48, H = 40;
 
 // tile codes
@@ -136,8 +138,8 @@ export function buildWorld() {
     { kind: 'villager', x: 12, z: 35, wander: true, talk: 2 },
   ];
   const signs = {
-    '21,31': ['ひがし：はし をこえて きたへ → オークの とりで', 'にし：アストリアじょう'],
-    '38,16': ['ここから きた　オークの とりで', 'きけん！　よわい ものは たちいるべからず'],
+    '21,31': L(['ひがし：はし をこえて きたへ → オークの とりで', 'にし：アストリアじょう'], ['East: cross the bridge, then north → Orc Fort', 'West: Astria Castle']),
+    '38,16': L(['ここから きた　オークの とりで', 'きけん！　よわい ものは たちいるべからず'], ['North: the Orc Fort', 'DANGER! The weak shall not pass.']),
   };
 
   return { tiles: t, get, buildings, owner, props, chests, npcs, signs, boss: { x: 40, z: 4 }, start: { x: 12, z: 30 } };
@@ -146,12 +148,12 @@ export function buildWorld() {
 // ---- monsters ----
 // h: height on the field, bh: height on the battle screen
 export const MONSTERS = {
-  slime: { name: 'スライム', hp: 9, atk: 6, def: 2, agi: 3, exp: 3, gold: 4, h: 0.55, bh: 1.5 },
-  wolf: { name: 'グレイウルフ', hp: 18, atk: 10, def: 4, agi: 9, exp: 7, gold: 6, h: 0.8, bh: 1.8 },
-  goblin: { name: 'ゴブリン', hp: 26, atk: 14, def: 6, agi: 6, exp: 13, gold: 14, h: 0.85, bh: 2.0 },
-  skeleton: { name: 'がいこつけんし', hp: 40, atk: 20, def: 11, agi: 7, exp: 24, gold: 22, h: 1.05, bh: 2.6 },
-  orc_warrior: { name: 'オークせんし', hp: 62, atk: 27, def: 15, agi: 6, exp: 42, gold: 38, h: 1.2, bh: 2.7 },
-  orc_leader: { name: 'あかきオークの将', hp: 320, atk: 38, def: 20, agi: 10, exp: 400, gold: 600, h: 1.7, boss: true, bh: 3.9 },
+  slime: { name: L('スライム', 'Slime'), plural: 'Slimes', hp: 9, atk: 6, def: 2, agi: 3, exp: 3, gold: 4, h: 0.55, bh: 1.5 },
+  wolf: { name: L('グレイウルフ', 'Gray Wolf'), plural: 'Gray Wolves', hp: 18, atk: 10, def: 4, agi: 9, exp: 7, gold: 6, h: 0.8, bh: 1.8 },
+  goblin: { name: L('ゴブリン', 'Goblin'), plural: 'Goblins', hp: 26, atk: 14, def: 6, agi: 6, exp: 13, gold: 14, h: 0.85, bh: 2.0 },
+  skeleton: { name: L('がいこつけんし', 'Skeleton Knight'), plural: 'Skeleton Knights', hp: 40, atk: 20, def: 11, agi: 7, exp: 24, gold: 22, h: 1.05, bh: 2.6 },
+  orc_warrior: { name: L('オークせんし', 'Orc Warrior'), plural: 'Orc Warriors', hp: 62, atk: 27, def: 15, agi: 6, exp: 42, gold: 38, h: 1.2, bh: 2.7 },
+  orc_leader: { name: L('あかきオークの将', 'Crimson Orc Warlord'), hp: 320, atk: 38, def: 20, agi: 10, exp: 400, gold: 600, h: 1.7, boss: true, bh: 3.9 },
 };
 
 // fixed enemy posts: kind, group size (shown on the map), home tile. Each group wanders near
@@ -181,29 +183,29 @@ export const ENEMY_POSTS = [
 
 // ---- items / equipment ----
 export const ITEMS = {
-  herb: { name: 'やくそう', price: 8, desc: 'HPを 35 かいふく' },
-  ether: { name: 'まほうのみず', price: 25, desc: 'MPを 20 かいふく' },
-  elixir: { name: 'いのちのみ', price: 90, desc: 'HPを ぜんかいふく' },
+  herb: { name: L('やくそう', 'Herb'), price: 8, desc: L('HPを 35 かいふく', 'Restores 35 HP') },
+  ether: { name: L('まほうのみず', 'Magic Water'), price: 25, desc: L('MPを 20 かいふく', 'Restores 20 MP') },
+  elixir: { name: L('いのちのみ', 'Life Fruit'), price: 90, desc: L('HPを ぜんかいふく', 'Fully restores HP') },
 };
 export const WEAPONS = [
-  { id: 'stick', name: 'こんぼう', atk: 2, price: 0 },
-  { id: 'copper', name: 'どうのつるぎ', atk: 6, price: 40 },
-  { id: 'iron', name: 'てつのつるぎ', atk: 13, price: 160 },
-  { id: 'steel', name: 'はがねのつるぎ', atk: 21, price: 420 },
-  { id: 'mithril', name: 'ミスリルソード', atk: 30, price: 900 },
+  { id: 'stick', name: L('こんぼう', 'Club'), atk: 2, price: 0 },
+  { id: 'copper', name: L('どうのつるぎ', 'Copper Sword'), atk: 6, price: 40 },
+  { id: 'iron', name: L('てつのつるぎ', 'Iron Sword'), atk: 13, price: 160 },
+  { id: 'steel', name: L('はがねのつるぎ', 'Steel Sword'), atk: 21, price: 420 },
+  { id: 'mithril', name: L('ミスリルソード', 'Mithril Sword'), atk: 30, price: 900 },
 ];
 export const ARMORS = [
-  { id: 'cloth', name: 'ぬののふく', def: 1, price: 0 },
-  { id: 'leather', name: 'かわのよろい', def: 5, price: 50 },
-  { id: 'chain', name: 'くさりかたびら', def: 11, price: 180 },
-  { id: 'plate', name: 'はがねのよろい', def: 18, price: 480 },
-  { id: 'dragon', name: 'ドラゴンメイル', def: 26, price: 1000 },
+  { id: 'cloth', name: L('ぬののふく', 'Cloth Tunic'), def: 1, price: 0 },
+  { id: 'leather', name: L('かわのよろい', 'Leather Armor'), def: 5, price: 50 },
+  { id: 'chain', name: L('くさりかたびら', 'Chain Mail'), def: 11, price: 180 },
+  { id: 'plate', name: L('はがねのよろい', 'Steel Armor'), def: 18, price: 480 },
+  { id: 'dragon', name: L('ドラゴンメイル', 'Dragon Mail'), def: 26, price: 1000 },
 ];
 export const SPELLS = [
-  { id: 'fire', name: 'ファイア', mp: 3, lv: 1, desc: 'てき1たいに ほのおの ダメージ' },
-  { id: 'heal', name: 'ヒール', mp: 4, lv: 3, desc: 'HPを 60 かいふく' },
-  { id: 'thunder', name: 'サンダー', mp: 7, lv: 6, desc: 'てき ぜんたいに いかずち' },
-  { id: 'blaze', name: 'フレア', mp: 12, lv: 10, desc: 'てき1たいに おおきな ほのお' },
+  { id: 'fire', name: L('ファイア', 'Fire'), mp: 3, lv: 1, desc: L('てき1たいに ほのおの ダメージ', 'Fire damage to one enemy') },
+  { id: 'heal', name: L('ヒール', 'Heal'), mp: 4, lv: 3, desc: L('HPを 60 かいふく', 'Restores 60 HP') },
+  { id: 'thunder', name: L('サンダー', 'Thunder'), mp: 7, lv: 6, desc: L('てき ぜんたいに いかずち', 'Lightning on all enemies') },
+  { id: 'blaze', name: L('フレア', 'Flare'), mp: 12, lv: 10, desc: L('てき1たいに おおきな ほのお', 'Huge flames on one enemy') },
 ];
 
 export const expToNext = (lv) => Math.floor(8 * Math.pow(lv, 1.75));
@@ -226,12 +228,15 @@ export function growth(h) {
 }
 
 export const PRINCESS_TALK = {
-  before: ['ひめ「アレンさま…。どうか ごぶじで おかえりくださいね」'],
-  after: ['ひめ「アレンさま！ ほんとうに ありがとうございました」'],
+  before: L(['ひめ「アレンさま…。どうか ごぶじで おかえりくださいね」'], ['Princess: "Sir Allen... please come back safely."']),
+  after: L(['ひめ「アレンさま！ ほんとうに ありがとうございました」'], ['Princess: "Sir Allen! Thank you, truly."']),
 };
 
 export const VILLAGER_TALK = [
-  ['ここは アストリアの まち。', 'まちの そとには まものが うろついているわ。', 'まずは みなみの くさはらで きたえると いいわよ。'],
-  ['きたひがしの とりでに あかい オークが すみついたんだ。', 'あいつは とても つよい。', 'はがねの ぶきと よろいくらいは ほしいところだね。'],
-  ['やどやで やすめば HPも MPも ぜんかいふく！', 'ぼうけんの きろくも つけておいて くれるのよ。'],
+  L(['ここは アストリアの まち。', 'まちの そとには まものが うろついているわ。', 'まずは みなみの くさはらで きたえると いいわよ。'],
+    ['This is the town of Astria.', 'Monsters roam outside the walls.', 'Train on the grassland near town first.']),
+  L(['きたひがしの とりでに あかい オークが すみついたんだ。', 'あいつは とても つよい。', 'はがねの ぶきと よろいくらいは ほしいところだね。'],
+    ['A red orc has taken over the fort to the northeast.', 'He is very strong.', 'You will want steel weapons and armor at least.']),
+  L(['やどやで やすめば HPも MPも ぜんかいふく！', 'ぼうけんの きろくも つけておいて くれるのよ。'],
+    ['Rest at the inn to fully restore HP and MP!', 'They will record your adventure, too.']),
 ];
