@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="アストリア戦記 〜赤きオークの将〜">
+<meta property="og:description" content="アストリア戦記 / Qwen3.5-4B-GLB-3D-Coderで作った3Dモデルを使ったRPG">
+<meta property="og:image" content="https://kishida.github.io/webdemos/rpg-3d-glb/ogp.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/rpg-3d-glb/index.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<title>アストリア戦記 〜赤きオークの将〜</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+  :root { --win: rgba(14, 18, 48, 0.92); --line: #e8e8f8; --gold: #ffd75e; --hp: #6fe07a; --mp: #6fb8ff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #fff;
+    font-family: 'DotGothic16', 'MS Gothic', monospace; user-select: none; }
+  canvas { display: block; }
+  .win { position: absolute; background: var(--win); border: 3px solid var(--line); border-radius: 8px;
+    box-shadow: 0 0 0 2px #000, 0 6px 18px rgba(0,0,0,.5); padding: 12px 16px; font-size: 20px; line-height: 1.55; }
+  .hidden { display: none !important; }
+  #hud { top: 12px; left: 12px; min-width: 190px; font-size: 17px; line-height: 1.4; padding: 8px 14px; }
+  #hud .row { display: flex; justify-content: space-between; gap: 14px; }
+  .bar { height: 5px; background: #333; border-radius: 3px; margin: 1px 0 4px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--hp); transition: width .25s; }
+  .bar.mp > i { background: var(--mp); }
+  #zone { top: 12px; right: 12px; font-size: 16px; padding: 6px 14px; }
+  #msg { left: 50%; transform: translateX(-50%); bottom: 16px; width: min(760px, calc(100% - 32px)); min-height: 128px; white-space: pre-wrap; }
+  #msg .more { position: absolute; right: 14px; bottom: 6px; animation: blink .7s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .menu { padding: 8px 10px; }
+  .menu .title { font-size: 15px; color: #aab; padding: 0 8px 4px; }
+  .menu .it { padding: 1px 8px 1px 26px; position: relative; white-space: nowrap; display: flex; justify-content: space-between; gap: 22px; }
+  .menu .it.dis { color: #778; }
+  .menu .it.sel::before { content: '▶'; position: absolute; left: 4px; animation: blink .8s steps(2) infinite; }
+  .menu .info { font-size: 15px; color: #ccd; border-top: 1px solid #556; margin-top: 6px; padding: 4px 8px 0; white-space: pre-wrap; }
+  #panel { left: 50%; top: 50%; transform: translate(-50%, -50%); min-width: 320px; }
+  #ui { position: fixed; inset: 0; pointer-events: none; z-index: 11; }
+  #msg { z-index: 12; }
+  #credits { z-index: 6; }
+  #fade { z-index: 5; position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .4s; }
+  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  .dmg { position: absolute; font-size: 30px; font-weight: bold; color: #fff; text-shadow: 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
+    pointer-events: none; transform: translate(-50%, -50%); animation: dmg 1s ease-out forwards; }
+  .dmg.heal { color: var(--hp); } .dmg.crit { color: #ff6; font-size: 38px; } .dmg.player { color: #ff7070; }
+  @keyframes dmg { 0% { margin-top: 10px; opacity: 0; } 15% { margin-top: -18px; opacity: 1; } 70% { margin-top: -26px; opacity: 1; } 100% { margin-top: -40px; opacity: 0; } }
+  .elabel { position: absolute; transform: translate(-50%, 0); font-size: 15px; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000; pointer-events: none; text-align: center; }
+  .elabel .bar { width: 70px; margin: 2px auto; }
+  .elabel.target { color: var(--gold); }
+  #title { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,.05), rgba(0,0,0,.55)); }
+  #title h1 { font-size: clamp(34px, 6vw, 64px); margin: 0; letter-spacing: 4px; color: #fff;
+    text-shadow: 0 0 2px #000, 4px 4px 0 #8b1a1a, 0 0 24px rgba(255,80,40,.6); }
+  #title h2 { font-size: clamp(18px, 3vw, 28px); margin: 6px 0 40px; color: var(--gold); text-shadow: 2px 2px 0 #000; }
+  #title .press { font-size: 22px; animation: blink 1s steps(2) infinite; text-shadow: 2px 2px 0 #000; }
+  #title .loading { font-size: 16px; color: #ccd; margin-top: 18px; text-shadow: 1px 1px 0 #000; }
+  #help { bottom: 12px; right: 12px; font-size: 13px; padding: 6px 12px; line-height: 1.5; opacity: .85; }
+  #credits { position: absolute; inset: 0; background: #000; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 22px; line-height: 2; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+} }
+</script>
+<script src="js/fm-worklet.js"></script>
+<script src="js/fm-audio.js"></script>
+</head>
+<body>
+<div id="app"></div>
+<div id="hud" class="win hidden"></div>
+<div id="zone" class="win hidden"></div>
+<div id="help" class="win hidden">矢印/WASD: いどう　Z/Enter: しらべる・けってい<br>X/Esc: メニュー・キャンセル　M: おと <span class="snd"></span></div>
+<div id="labels"></div>
+<div id="fx"></div>
+<div id="ui"></div>
+<div id="msg" class="win hidden"></div>
+<div id="flash"></div>
+<div id="fade"></div>
+<div id="title">
+  <h1>アストリア戦記</h1>
+  <h2>〜 赤きオークの将 〜</h2>
+  <div class="press">PRESS ENTER</div>
+  <div class="loading">M: おと <span class="snd"></span></div>
+  <div class="loading" id="loading">3Dモデルを よみこみちゅう…</div>
+</div>
+<div id="credits" class="hidden"></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

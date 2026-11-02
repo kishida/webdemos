@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FM Synth Demo</title>
+<style>
+  :root { --bg: #16120e; --panel: #241c15; --fg: #f1e2c6; --muted: #b9a585; --accent: #e0a64a; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 22px; margin: 0 0 4px; } p { color: var(--muted); margin: 0 0 16px; }
+  section { background: var(--panel); border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+  h2 { font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }
+  button { background: #3a2c1f; color: var(--fg); border: 1px solid #5a4430; border-radius: 6px; padding: 6px 12px; margin: 3px; cursor: pointer; font: inherit; }
+  button:hover { background: #4a3828; } button.on { background: var(--accent); color: #1a1208; }
+  #meter { font-family: ui-monospace, monospace; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>FM Synth Demo</h1>
+  <p>4オペレータFM音源の音色・効果音・サンプル曲の試聴。最初のクリックで音声が有効になります。</p>
+  <section><h2>Songs</h2><div id="songs"></div><div id="meter"></div></section>
+  <section><h2>SFX</h2><div id="sfx"></div></section>
+  <section><h2>Patches (C major arpeggio)</h2><div id="patches"></div></section>
+</main>
+<script src="fm-worklet.js"></script>
+<script src="fm-audio.js"></script>
+<script>
+// ---- example song: shows every helper -------------------------------------
+function buildDemoSong() {
+  const prog = ['Am', 'F', 'C', 'G', 'Am', 'F', 'G', 'E7'];          // one chord per bar
+  const lead = FM.parseBars([
+    'A4 - - . C5 - E5 - A5 - - - G5 - E5 -',
+    'F5 - - - - - E5 - D5 - C5 - A4 - - -',
+    'G4 - - . C5 - E5 - G5 - - - F5 - E5 -',
+    'D5 - - - - - - - B4 - - - G4 - - -',
+    'A4 - - . C5 - E5 - A5 - - - B5 - C6 -',
+    'C6 - - - A5 - F5 - A5 - - - C6 - - -',
+    'B5 - - - G5 - D5 - B5 - - - D6 - - -',
+    'E6 - - - - - - - G#5 - - - B5 - - -',
+  ]);
+  const acc = FM.accomp(prog, { bassStep: 2, bassOct: true, chordSteps: [2, 6, 10, 14], chordLen: 2 });
+  const arp = FM.arpeggio(prog, { pattern: [0, 1, 2, 3, 4, 3, 2, 1], octave: 12 });
+  const drums = FM.parseDrums('k . h . s . h . k . k h s . h o', 8);
+  return { bpm: 132, steps: 128, tracks: [
+    { name: 'bass', patch: 'bass', ev: acc.bass },
+    { name: 'chords', patch: 'organ', ev: acc.chords, pan: -0.3 },
+    { name: 'arp', patch: 'bell', ev: arp, vel: 0.35, pan: 0.4 },
+    { name: 'lead', patch: 'brass', ev: lead, pan: 0.1 },
+    { name: 'drums', ev: drums },
+  ] };
+}
+function buildJingle() {
+  return { bpm: 150, steps: 32, once: true, tracks: [
+    { patch: 'brass', ev: FM.parseBars(['C5 - E5 - G5 - C6 - - - B5 - C6 - - -', 'E6 - - - - - - - - - - - . . . .']) },
+    { patch: 'organ', ev: [['C', 0, 8], ['F', 8, 4], ['C', 16, 12]].flatMap(([c, s, l]) => FM.chord(c).map((m) => ({ step: s, len: l, midi: m }))) },
+    { patch: 'bass', ev: [{ step: 0, len: 8, midi: 36 }, { step: 8, len: 6, midi: 41 }, { step: 16, len: 12, midi: 36 }] },
+  ] };
+}
+
+const ensure = () => FM.init();
+function btn(parent, label, fn) {
+  const b = document.createElement('button'); b.textContent = label;
+  b.onclick = async () => { await ensure(); fn(b); }; document.getElementById(parent).appendChild(b); return b;
+}
+let playing = null;
+const songs = { 'Demo song': buildDemoSong, 'Jingle (once)': buildJingle };
+for (const [name, build] of Object.entries(songs)) btn('songs', name, (b) => {
+  document.querySelectorAll('#songs button').forEach((x) => x.classList.remove('on'));
+  if (playing === name) { FM.stop(); playing = null; return; }
+  FM.play(build()); playing = name; b.classList.add('on');
+});
+btn('songs', 'Stop', () => { FM.stop(); playing = null; document.querySelectorAll('#songs button').forEach((x) => x.classList.remove('on')); });
+btn('songs', 'Measure level', async () => { const m = await FM.measure('music', 800); document.getElementById('meter').textContent = JSON.stringify(m); });
+FM.onSongEnd = () => { playing = null; document.querySelectorAll('#songs button').forEach((x) => x.classList.remove('on')); };
+
+for (const name of Object.keys(FM.SFX)) btn('sfx', name, () => FM.play_sfx(name));
+const DRUMS = { kick: 150, snare: 220, hat: 7000, ohat: 7000, tom: 180 };
+for (const name of Object.keys(FM.PATCHES)) btn('patches', name, () => {
+  if (DRUMS[name]) { FM.note('sfx', name, DRUMS[name], { dur: 0.25, sweep: name === 'kick' ? 0.2 : name === 'tom' ? 0.5 : 0 }); return; }
+  const t = FM.ctx.currentTime + 0.02;
+  ['C4', 'E4', 'G4', 'C5'].forEach((n, i) => FM.note('sfx', name, n, { t: t + i * 0.18, dur: 0.16 }));
+  FM.chord('C').forEach((m) => FM.note('sfx', name, FM.mtof(m), { t: t + 0.8, dur: 0.7, vel: 0.6 }));
+});
+</script>
+</body>
+</html>
