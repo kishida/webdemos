@@ -55,20 +55,22 @@
   /* ===== Header / Master panel ===== */
   header {
     display: flex; justify-content: space-between; align-items: stretch;
-    gap: 18px; flex-wrap: wrap; margin-bottom: 22px;
+    gap: 12px; flex-wrap: wrap; margin-bottom: 22px;
   }
-  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand { display: flex; flex-direction: column; justify-content: center; align-items: stretch; gap: 10px; }
+  .brand-logo { display: flex; align-items: center; gap: 8px; }
+  .brand .power { justify-content: center; }
   .brand-mark {
-    font-size: 30px; color: var(--brass);
-    text-shadow: 0 1px 0 #000, 0 0 18px rgba(201,161,74,0.35);
-    letter-spacing: -4px;
+    font-size: 18px; color: var(--brass);
+    text-shadow: 0 1px 0 #000, 0 0 12px rgba(201,161,74,0.35);
+    letter-spacing: -3px;
   }
   .brand-text h1 {
-    font-size: 26px; font-weight: 800; letter-spacing: 3px;
+    font-size: 14px; font-weight: 800; letter-spacing: 1px; line-height: 1.1; white-space: nowrap;
     color: var(--text);
     text-shadow: 0 1px 0 #000, 0 2px 3px rgba(0,0,0,0.6);
   }
-  .subtitle { font-size: 10px; letter-spacing: 3px; color: var(--text-dim); margin-top: 3px; }
+  .subtitle { font-size: 7px; letter-spacing: 1px; color: var(--text-dim); margin-top: 2px; max-width: 100px; line-height: 1.3; }
 
   .master-panel {
     display: flex; align-items: center; gap: 20px;
@@ -104,7 +106,7 @@
   }
   .sig-dot.sig-on { background: var(--on); box-shadow: 0 0 9px var(--on), inset 0 0 2px #fff; }
   .sig-dot.clip-on { background: #ff3b3b; box-shadow: 0 0 10px #ff3b3b, inset 0 0 2px #fff; }
-  .status-text { font-size: 9px; letter-spacing: 1.5px; color: var(--brass); margin-left: auto; }
+  .status-text { font-size: 9px; letter-spacing: 1.5px; color: var(--brass); white-space: nowrap; }
 
   .master-knob { display: flex; align-items: flex-end; }
 
@@ -196,6 +198,7 @@
     padding: 5px 6px; font-size: 10px; letter-spacing: 1px;
   }
   .select-wrap { width: 64px; }
+  .knob-wrap.nam-route { flex-direction: row; width: auto; gap: 8px; margin-top: 6px; align-self: flex-start; }
 
   /* ===== Foot / power switch ===== */
   .foot-switch {
@@ -337,7 +340,14 @@
     background:
       linear-gradient(180deg, #34302a, #211d19);
   }
-  .amp-brand { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding-right: 100px; }
+  .knob-bank.wah-bank { display: grid; grid-template-columns: repeat(2, 58px); gap: 8px 14px; justify-content: center; }
+  .wah-bank > :first-child { grid-column: 1 / 3; justify-self: center; }
+  .knob-bank.dist-bank { display: grid; grid-template-columns: repeat(3, 64px); gap: 8px 14px; justify-content: center; justify-items: center; }
+  .unit.amp .amp-grid {
+    display: grid; grid-template-columns: repeat(4, 64px); gap: 12px 14px;
+    justify-items: center; align-items: center; justify-content: center;
+  }
+  .amp-brand { display: flex; align-items: center; gap: 8px; grid-column: 1 / 4; justify-self: start; }
   .amp-brand .led {
     width: 8px; height: 8px; border-radius: 50%; background: #401612;
     box-shadow: inset 0 0 2px #000;
@@ -345,7 +355,7 @@
   .unit.amp:not(.off) .amp-brand .led { background: var(--led-on); box-shadow: 0 0 8px var(--led-on); }
   .amp-logo { font-size: 13px; font-weight: 800; letter-spacing: 3px; color: var(--brass); text-shadow: 0 1px 1px #000; }
   .amp-panel { position: relative; }
-  .amp-panel .amp-power { position: absolute; top: 12px; right: 18px; width: 80px; }
+  .amp-panel .amp-power { width: 58px; }
 
   /* ===== Cabinet ===== */
   .unit.cab {
@@ -473,6 +483,22 @@
   .metro-led.accent.on { background: var(--led-on); box-shadow: 0 0 10px var(--led-on); }
   .util-title .util-btn { margin-left: auto; padding: 4px 12px; }
   .looper-status { font-size: 9px; letter-spacing: 1.5px; color: var(--brass); min-height: 12px; }
+  .drum-name {
+    flex: 1; min-width: 0; max-width: 100px; font-size: 10px; color: var(--text-dim);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center;
+  }
+  .util-num.wide input { width: 48px; }
+  .util-num.wide button { width: 26px; font-size: 10px; }
+  #drumUnit { gap: 10px; padding: 10px 12px; }
+  #drumUnit .metro-cols { gap: 6px; }
+  #drumUnit .metro-line { align-items: flex-end; gap: 8px; }
+  #drumUnit .util-btn { margin-left: 0; padding: 6px 10px; }
+  #drumUnit .looper-status { min-height: 0; }
+  .drum-side { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .drum-side .knob-wrap { width: 50px; gap: 3px; }
+  .drum-side .knob { width: 36px; height: 36px; }
+  .drum-side .knob::before { inset: 7px; }
+  .drum-side .knob-pointer { height: 11px; top: 3px; transform-origin: 50% 15px; }
 
   /* ヘッダー内のコンパクトなメトロノーム（ロゴの右） */
   .metro-panel {
@@ -513,7 +539,6 @@
   .unit.pedal { }
   .unit.pedal > .vu { position: absolute; top: 9px; right: 22px; }
   /* アンプ: ブランド行の右端に寄せる */
-  .amp-brand .vu { margin-left: auto; }
   /* キャビ: ロゴ行内、コントロールの左 */
   .cab-bottom .vu { width: 30px; height: 16px; margin: 0 6px; }
 
@@ -528,11 +553,14 @@
 <body>
 <header>
   <div class="brand">
-    <div class="brand-mark">◢◤</div>
-    <div class="brand-text">
-      <h1>VALVE STACK</h1>
-      <div class="subtitle">REALTIME GUITAR RIG · WEB AUDIO</div>
+    <div class="brand-logo">
+      <div class="brand-mark">◢◤</div>
+      <div class="brand-text">
+        <h1>VALVE STACK</h1>
+        <div class="subtitle">REALTIME GUITAR RIG · WEB AUDIO</div>
+      </div>
     </div>
+    <button class="power" id="powerBtn"><span class="power-dot"></span>POWER</button>
   </div>
 
   <div class="master-panel">
@@ -542,15 +570,14 @@
       <div class="sig-row">
         <span class="sig-lamp"><span class="sig-dot" id="sigDot"></span>SIGNAL</span>
         <span class="sig-lamp"><span class="sig-dot" id="clipDot"></span>CLIP</span>
-        <span class="status-text" id="status">STANDBY</span>
       </div>
+      <div class="status-text" id="status">STANDBY</div>
     </div>
     <div class="master-knob" id="masterKnob"></div>
     <div class="scene-box">
       <div class="scene-label">SCENE</div>
       <div class="scene-buttons" id="sceneButtons"></div>
     </div>
-    <button class="power" id="powerBtn"><span class="power-dot"></span>POWER</button>
   </div>
 </header>
 
@@ -1011,7 +1038,7 @@ const pedals = [
       { id: 'mid', label: 'Mid', min: -15, max: 15, val: 0, unit: 'dB' },
       { id: 'treble', label: 'Treble', min: -15, max: 15, val: 3, unit: 'dB' },
       { id: 'presence', label: 'Presence', min: -15, max: 15, val: 4, unit: 'dB' },
-      { id: 'power', label: 'Power', min: 0, max: 100, val: 40, unit: '' },
+      { id: 'power', label: 'Master', min: 0, max: 100, val: 40, unit: '' }, // パワー管の押し込み（マスターボリューム）
     ],
     select: { id: 'model', label: 'Model', options: ['classic', 'clean', 'crunch', 'lead'], val: 'classic' }
   },
@@ -1050,8 +1077,8 @@ const pedals = [
 
 // 3段レイアウト定義
 const rows = [
-  { label: 'INPUT STAGE', ids: ['tuner', 'gate', 'comp', 'autowah', 'nam'] },
-  { label: 'AMP STACK', ids: ['drive', 'amp', 'cab'] },
+  { label: 'INPUT STAGE', ids: ['tuner', 'gate', 'comp', 'autowah'] },
+  { label: 'AMP STACK', ids: ['drive', 'nam', 'amp', 'cab'] },
   { label: 'TIME & SPACE', ids: ['chorus', 'delay', 'reverb'] },
 ];
 
@@ -1086,8 +1113,12 @@ function refreshAllUI() {
 const pedalMap = {};
 pedals.forEach(p => pedalMap[p.id] = p);
 
-// 共通ノブ生成
-function buildKnob(p, k) {
+// 共通ノブ生成。io を渡すとシーンの state の代わりにその get/set で値を読み書きする
+function buildKnob(p, k, io = null) {
+  io ??= {
+    get: () => state[p.id][k.id],
+    set: v => { state[p.id][k.id] = v; applyParam(p.id, k.id); },
+  };
   const wrap = document.createElement('div');
   wrap.className = 'knob-wrap';
   const knob = document.createElement('div');
@@ -1098,7 +1129,7 @@ function buildKnob(p, k) {
 
   const fmt = v => (Math.abs(v) >= 100 || Number.isInteger(v)) ? Math.round(v) : v.toFixed(2);
   const render = () => {
-    const v = state[p.id][k.id];
+    const v = io.get();
     const t = (v - k.min) / (k.max - k.min);
     knob.style.setProperty('--rot', (-135 + t * 270) + 'deg');
     valEl.textContent = fmt(v) + (k.unit ? ' ' + k.unit : '');
@@ -1112,18 +1143,17 @@ function buildKnob(p, k) {
     const y = e.touches ? e.touches[0].clientY : e.clientY;
     const dy = startY - y;
     const range = k.max - k.min;
-    state[p.id][k.id] = Math.max(k.min, Math.min(k.max, startV + (dy / 150) * range));
+    io.set(Math.max(k.min, Math.min(k.max, startV + (dy / 150) * range)));
     render();
-    applyParam(p.id, k.id);
     e.preventDefault();
   };
   const onUp = () => { dragging = false; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
   knob.addEventListener('mousedown', e => {
-    dragging = true; startY = e.clientY; startV = state[p.id][k.id];
+    dragging = true; startY = e.clientY; startV = io.get();
     document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
   });
-  knob.addEventListener('dblclick', () => { state[p.id][k.id] = k.val; render(); applyParam(p.id, k.id); });
-  knob.addEventListener('touchstart', e => { dragging = true; startY = e.touches[0].clientY; startV = state[p.id][k.id]; }, {passive:false});
+  knob.addEventListener('dblclick', () => { io.set(k.val); render(); });
+  knob.addEventListener('touchstart', e => { dragging = true; startY = e.touches[0].clientY; startV = io.get(); }, {passive:false});
   knob.addEventListener('touchmove', onMove, {passive:false});
   knob.addEventListener('touchend', () => dragging = false);
 
@@ -1273,7 +1303,22 @@ function buildUnit(p) {
     const bank = el.querySelector('.knob-bank');
     p.knobs.forEach(k => bank.appendChild(buildKnob(p, k)));
     if (p.select) bank.appendChild(buildSelect(p));
-    if (p.id === 'nam') namSlots.forEach(slot => el.appendChild(buildNamSlot(slot)));
+    if (p.id === 'autowah') bank.classList.add('wah-bank'); // SENS を上、RANGE と Q を下に
+    if (p.id === 'drive') { // 1段目 TONE / LO CUT / LEVEL、2段目 GAIN / DRIVE / TYPE
+      bank.classList.add('dist-bank');
+      const [gain, drive, locut, tone] = bank.children;
+      bank.insertBefore(gain, bank.lastElementChild);
+      bank.insertBefore(drive, bank.lastElementChild);
+      bank.insertBefore(tone, locut);
+    }
+    if (p.id === 'nam') {
+      namSlots.forEach(slot => el.appendChild(buildNamSlot(slot)));
+      // ROUTE は LOAD B の下に、ラベルを左に置いて1行で
+      const route = bank.querySelector('.select-wrap');
+      route.classList.add('nam-route');
+      route.prepend(route.lastElementChild);
+      el.appendChild(route);
+    }
     el.appendChild(buildSwitch(p, el));
     el.appendChild(buildMiniVU(p)); // 右上(LED横)に絶対配置
 
@@ -1281,19 +1326,23 @@ function buildUnit(p) {
     el.innerHTML = `
       <div class="amp-grille"></div>
       <div class="amp-panel">
-        <div class="amp-brand">
-          <span class="led"></span>
-          <span class="amp-logo">${p.name}</span>
+        <div class="knob-bank amp-grid">
+          <div class="amp-brand">
+            <span class="led"></span>
+            <span class="amp-logo">${p.name}</span>
+          </div>
         </div>
-        <div class="knob-bank"></div>
       </div>`;
-    const bank = el.querySelector('.knob-bank');
-    p.knobs.forEach(k => bank.appendChild(buildKnob(p, k)));
+    // 4列のグリッド: ロゴ行(右端にメーター) / トーン / MODEL → GAIN → MASTER → ON（音の流れの順）
+    const bank = el.querySelector('.amp-grid');
+    bank.appendChild(buildMiniVU(p));
+    const drive = ['gain', 'power'];
+    p.knobs.filter(k => !drive.includes(k.id)).forEach(k => bank.appendChild(buildKnob(p, k)));
     bank.appendChild(buildSelect(p));
+    drive.forEach(id => bank.appendChild(buildKnob(p, p.knobs.find(k => k.id === id))));
     const pwr = buildSwitch(p, el);
     pwr.classList.add('amp-power');
-    el.querySelector('.amp-panel').appendChild(pwr);
-    el.querySelector('.amp-brand').appendChild(buildMiniVU(p)); // ロゴ行の右端
+    bank.appendChild(pwr);
 
   } else if (p.kind === 'tuner') {
     el.innerHTML = `
@@ -2129,6 +2178,7 @@ function stop() {
   });
   // ルーパーは電源に依存するので停止（メトロノームは独立して継続）
   stopPlayback();
+  looper.pendingPlay = false;
   looper.state = 'empty'; looper.recId++;
   looper.buffer = null;
   resetLooperUI();
@@ -2143,6 +2193,13 @@ const looper = {
   buffer: null, source: null, gain: null,
   recId: 0,
   phaseBeat: 0, targetBeats: 0,
+  capTime: 0, capLen: 0, pendingPlay: false,
+};
+// ドラムループ: 打音ごとのスライスを今のテンポの拍位置に並べ直して鳴らす（ピッチは変わらない）
+const drum = {
+  on: false, buffer: null, name: null, level: 0.8, out: null,
+  bpm: 0, beats: 0, onsets: [], slices: [], byBeat: [],
+  beat: 0, waiting: true, voices: new Set(),
 };
 const clock = { running: false, timer: null, nextTime: 0, barBeat: 0 };
 
@@ -2192,6 +2249,46 @@ let utilDom = {};
   const brand = document.querySelector('header .brand');
   brand.insertAdjacentElement('afterend', metroEl);
 
+  // --- ドラムループ: ヘッダーのメトロノームの右に挿入 ---
+  const drumEl = document.createElement('div');
+  drumEl.className = 'metro-panel';
+  drumEl.id = 'drumUnit';
+  drumEl.innerHTML = `
+    <span class="metro-tag">DRUMS</span>
+    <div class="metro-cols">
+      <div class="metro-line">
+        <button class="util-btn" id="dLoad">LOAD WAV</button>
+        <span class="drum-name" id="dName">NO LOOP</span>
+        <input type="file" id="dFile" accept="audio/*,.wav" hidden>
+      </div>
+      <div class="metro-line">
+        <div class="util-field">
+          <label>Original BPM</label>
+          <div class="util-num wide">
+            <button id="dHalf" title="解析が倍になっていたら半分に">÷2</button>
+            <input type="text" id="dBpm" value="---" readonly title="ループ本来のテンポ（解析結果）。再生テンポはメトロノームの Tempo で決まる">
+            <button id="dDouble" title="解析が半分になっていたら倍に">×2</button>
+          </div>
+        </div>
+        <button class="util-btn" id="dSync" title="メトロノームの Tempo をループ本来のテンポに戻す">↺ ORIG</button>
+      </div>
+      <div class="looper-status" id="dStatus">LOAD A DRUM LOOP</div>
+    </div>
+    <div class="drum-side">
+      <div id="dLevelKnob"></div>
+      <button class="util-btn" id="dToggle">OFF</button>
+    </div>`;
+  metroEl.insertAdjacentElement('afterend', drumEl);
+  document.getElementById('dLevelKnob').appendChild(buildKnob({ id: 'drum' },
+    { id: 'level', label: 'Level', min: 0, max: 1.5, val: 0.8 },
+    {
+      get: () => drum.level,
+      set: v => {
+        drum.level = v;
+        if (drum.out) drum.out.gain.setTargetAtTime(v, metroCtx.currentTime, 0.02);
+      },
+    }));
+
   // --- ルーパー: 3段目(TIME & SPACE 行)に追加 ---
   const wrap = document.createElement('div');
   wrap.innerHTML = `
@@ -2238,6 +2335,7 @@ let utilDom = {};
 
   const q = sel => units.querySelector(sel);   // ルーパー用(3段目)
   const m = sel => metroEl.querySelector(sel); // メトロノーム用(ヘッダー)
+  const d = sel => drumEl.querySelector(sel);  // ドラム用(ヘッダー)
   utilDom = {
     mLed: null, mBpm: m('#mBpm'), mBeats: m('#mBeats'),
     mToggle: m('#mToggle'), mDots: m('#mDots'),
@@ -2245,19 +2343,27 @@ let utilDom = {};
     lRecScene: q('#lRecScene'), lPlayScene: q('#lPlayScene'),
     lRec: q('#lRec'), lPlayStop: q('#lPlayStop'), lClear: q('#lClear'),
     lStatus: q('#lStatus'), lCount: q('#lCount'), lBars: q('#lBars'),
+    dToggle: d('#dToggle'), dLoad: d('#dLoad'), dFile: d('#dFile'), dName: d('#dName'),
+    dBpm: d('#dBpm'), dStatus: d('#dStatus'),
   };
   utilDom.lPlayScene.value = '1';
 
-  // --- メトロノーム操作 ---
-  metroEl.querySelectorAll('[data-mbpm]').forEach(b => b.onclick = () => {
-    metro.bpm = Math.max(40, Math.min(240, metro.bpm + Number(b.dataset.mbpm)));
-    utilDom.mBpm.value = metro.bpm;
-  });
-  utilDom.mBpm.onchange = () => {
-    metro.bpm = Math.max(40, Math.min(240, Math.round(Number(utilDom.mBpm.value) || 120)));
-    utilDom.mBpm.value = metro.bpm;
+  // --- ドラムループ操作 ---
+  utilDom.dLoad.onclick = () => utilDom.dFile.click();
+  utilDom.dFile.onchange = () => {
+    const f = utilDom.dFile.files[0];
+    utilDom.dFile.value = '';
+    if (f) loadDrumFile(f);
   };
-  utilDom.mBeats.onchange = () => { metro.beats = Number(utilDom.mBeats.value); renderDots(-1); };
+  utilDom.dToggle.onclick = () => setDrumOn(!drum.on);
+  d('#dHalf').onclick = () => setDrumBpm(drum.bpm / 2);
+  d('#dDouble').onclick = () => setDrumBpm(drum.bpm * 2);
+  d('#dSync').onclick = () => { if (drum.buffer) setMetroBpm(drum.bpm); };
+
+  // --- メトロノーム操作 ---
+  metroEl.querySelectorAll('[data-mbpm]').forEach(b => b.onclick = () => setMetroBpm(metro.bpm + Number(b.dataset.mbpm)));
+  utilDom.mBpm.onchange = () => setMetroBpm(Number(utilDom.mBpm.value) || 120);
+  utilDom.mBeats.onchange = () => { metro.beats = Number(utilDom.mBeats.value); renderDots(-1); updateDrumStatus(); };
   utilDom.mToggle.onclick = () => {
     metro.on = !metro.on;
     utilDom.mToggle.textContent = metro.on ? 'STOP' : 'START';
@@ -2292,16 +2398,22 @@ let utilDom = {};
 
 function setStatus(t) { if (utilDom.lStatus) utilDom.lStatus.textContent = t; }
 
+function setMetroBpm(v) {
+  metro.bpm = Math.max(40, Math.min(240, Math.round(v)));
+  utilDom.mBpm.value = metro.bpm;
+}
+
 // PLAY/STOP 兼用ボタンの表示更新
 function updatePlayStopBtn() {
   const b = utilDom.lPlayStop;
   if (!b) return;
   if (looper.state === 'playing') { b.textContent = '■ STOP'; b.classList.add('active'); }
-  else if (looper.state === 'countin' || looper.state === 'recording') { b.textContent = '■ STOP'; b.classList.remove('active'); }
+  else if (looperArmed()) { b.textContent = '■ STOP'; b.classList.remove('active'); }
   else { b.textContent = '▶ PLAY'; b.classList.remove('active'); }
 }
+function looperArmed() { return ['countwait', 'countin', 'recording'].includes(looper.state); }
 function togglePlayStop() {
-  if (looper.state === 'playing' || looper.state === 'countin' || looper.state === 'recording') stopLooper();
+  if (looper.state === 'playing' || looperArmed()) stopLooper();
   else playLoop();
 }
 
@@ -2327,7 +2439,7 @@ function renderDots(active) {
 
 // ---- クロック（metroCtx ベースの先読みスケジューラ）----
 function updateClock() {
-  const need = metro.on || looper.state === 'countin' || looper.state === 'recording';
+  const need = metro.on || drum.on || looperArmed();
   if (need && !clock.running) {
     ensureMetroCtx();
     clock.running = true;
@@ -2336,6 +2448,11 @@ function updateClock() {
     clock.timer = setInterval(clockTick, 25);
   } else if (!need && clock.running) {
     stopClock();
+  }
+  // 小節頭待ちのままクロックが止まったらすぐ再生する
+  if (!clock.running && looper.pendingPlay) {
+    looper.pendingPlay = false;
+    startPlayback();
   }
 }
 function stopClock() {
@@ -2356,12 +2473,25 @@ function handleBeat(time) {
   const beatInBar = clock.barBeat % metro.beats;
   const accent = beatInBar === 0;
 
+  // 鳴っているドラム/メトロノームに途中から入るときは、録音がちょうど小節頭から始まる拍でカウントインを始める
+  if (looper.state === 'countwait' && (beatInBar + Math.max(1, looper.countBeats)) % metro.beats === 0) {
+    looper.state = 'countin';
+    looper.phaseBeat = 0;
+  }
+
   let doClick;
   if (looper.state === 'countin') doClick = true;          // カウントは常に鳴らす
   else if (looper.state === 'recording') doClick = looper.recMetro;
   else doClick = metro.on;
   if (doClick) scheduleClick(time, accent);
   scheduleDot(time, beatInBar);
+
+  if (accent && drum.waiting) { drum.waiting = false; drum.beat = 0; } // ドラムは小節頭から
+  if (drum.on && drum.buffer && !drum.waiting) scheduleDrumBeat(time, 60 / metro.bpm);
+  if (accent && looper.pendingPlay) {
+    looper.pendingPlay = false;
+    startPlayback(metroToCtx(time) - roundTripLatency());
+  }
 
   if (looper.state === 'countin') {
     looper.phaseBeat++;
@@ -2395,17 +2525,225 @@ function scheduleClick(time, accent) {
 function scheduleDot(time, idx) {
   setTimeout(() => renderDots(idx), Math.max(0, (time - metroCtx.currentTime) * 1000));
 }
+// ---- ドラムループ ----
+const DRUM_HOP = 256, DRUM_FFT = 1024;
+
+async function loadDrumFile(file) {
+  const c = ensureMetroCtx();
+  utilDom.dStatus.textContent = 'ANALYZING...';
+  let buf;
+  try {
+    buf = await c.decodeAudioData(await file.arrayBuffer());
+  } catch (err) {
+    utilDom.dStatus.textContent = 'UNSUPPORTED FILE';
+    return;
+  }
+  const hint = Number((file.name.match(/(\d+(?:\.\d+)?)\s*bpm/i) || [])[1]) || 0;
+  const { bpm, onsets } = analyzeDrum(buf, hint);
+  stopDrumVoices();
+  drum.buffer = buf; drum.name = file.name.replace(/\.[^.]+$/, ''); drum.onsets = onsets;
+  utilDom.dName.textContent = drum.name; utilDom.dName.title = file.name;
+  setDrumBpm(bpm);
+  setMetroBpm(drum.bpm); // 読み込んだらテンポをループに合わせる
+  drum.waiting = true;
+  if (!drum.on) setDrumOn(true);
+}
+
+// モノラルにして、帯域ごとの対数振幅の増え方(スペクトルフラックス)をフレームごとに求める
+function drumOnsetEnvelope(buf) {
+  const n = buf.length, ch = buf.numberOfChannels;
+  const x = new Float32Array(n);
+  for (let c = 0; c < ch; c++) { const d = buf.getChannelData(c); for (let i = 0; i < n; i++) x[i] += d[i] / ch; }
+  const N = DRUM_FFT, frames = Math.max(1, Math.floor((n - N) / DRUM_HOP) + 1);
+  const win = new Float32Array(N).map((_, i) => 0.5 - 0.5 * Math.cos(2 * Math.PI * i / N));
+  const re = new Float32Array(N), im = new Float32Array(N);
+  let prev = new Float32Array(N / 2), cur = new Float32Array(N / 2);
+  const env = new Float32Array(frames);
+  for (let f = 0; f < frames; f++) {
+    const o = f * DRUM_HOP;
+    for (let i = 0; i < N; i++) { re[i] = (x[o + i] || 0) * win[i]; im[i] = 0; }
+    fft(re, im);
+    let flux = 0;
+    for (let k = 0; k < N / 2; k++) {
+      cur[k] = Math.log1p(100 * Math.hypot(re[k], im[k]));
+      if (f > 0 && cur[k] > prev[k]) flux += cur[k] - prev[k];
+    }
+    env[f] = flux;
+    [prev, cur] = [cur, prev];
+  }
+  // ゆっくりした変化を引いて、立ち上がりだけ残す
+  const out = new Float32Array(frames);
+  for (let f = 0; f < frames; f++) {
+    let s = 0, k = 0;
+    for (let j = Math.max(0, f - 8); j < Math.min(frames, f + 8); j++, k++) s += env[j];
+    out[f] = Math.max(0, env[f] - s / k);
+  }
+  return { x, env: out };
+}
+
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const a = -2 * Math.PI / len, wr = Math.cos(a), wi = Math.sin(a);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const p = i + k, q = p + len / 2;
+        const tr = re[q] * cr - im[q] * ci, ti = re[q] * ci + im[q] * cr;
+        re[q] = re[p] - tr; im[q] = im[p] - ti; re[p] += tr; im[p] += ti;
+        [cr, ci] = [cr * wr - ci * wi, cr * wi + ci * wr];
+      }
+    }
+  }
+}
+
+// 拍の周期 per(フレーム)のグリッドに乗るオンセットの強さ。位相は全探索
+function drumCombScore(env, per, mean) {
+  let best = 0;
+  for (let ph = 0; ph < per; ph += 0.5) {
+    let s = 0, k = 0;
+    for (let t = ph; t < env.length; t += per, k++) {
+      const i = Math.round(t);
+      s += Math.max(env[i - 1] || 0, env[i] || 0, env[i + 1] || 0);
+    }
+    if (k) best = Math.max(best, s / k);
+  }
+  return best / (mean + 1e-9);
+}
+
+// ループは整数拍で切ってあるはずなので「全体で N 拍」の候補から拍のグリッドに一番乗るものを選ぶ。
+// ファイル名の BPM はずれていることがあるので、ほぼ同点の候補から選ぶときだけ使う
+function analyzeDrum(buf, hintBpm) {
+  const sr = buf.sampleRate, dur = buf.length / sr, fr = sr / DRUM_HOP;
+  const { x, env } = drumOnsetEnvelope(buf);
+  const mean = env.reduce((a, b) => a + b, 0) / env.length;
+  const cands = [];
+  for (let beats = 1; beats <= 128; beats++) {
+    const bpm = beats * 60 / dur;
+    // 半分・倍のテンポも同じグリッドに乗るので範囲で絞る（外れたら ÷2 / ×2）
+    if (bpm >= 70 && bpm <= 190) cands.push({ bpm, score: drumCombScore(env, fr * 60 / bpm, mean) });
+  }
+  let pick = cands.reduce((a, b) => (b.score > a.score ? b : a), cands[0] || { bpm: 120, score: 0 });
+  if (hintBpm && cands.length) {
+    const near = cands.filter(c => c.score >= pick.score * 0.85);
+    pick = near.reduce((a, b) => (Math.abs(b.bpm - hintBpm) < Math.abs(a.bpm - hintBpm) ? b : a));
+  }
+  return { bpm: pick.bpm, onsets: drumOnsets(x, env, sr) };
+}
+
+// 打音の頭(秒)。オンセットのフレーム内で振幅が立ち上がるサンプルを探し、少し手前から切る
+function drumOnsets(x, env, sr) {
+  const max = env.reduce((a, b) => Math.max(a, b), 0);
+  const minGap = 0.04, lead = DRUM_LEAD;
+  const out = [0];
+  for (let f = 2; f < env.length - 2; f++) {
+    const v = env[f];
+    if (v < max * 0.1 || v < env[f - 1] || v < env[f - 2] || v <= env[f + 1] || v <= env[f + 2]) continue;
+    const a = Math.max(0, (f - 2) * DRUM_HOP), b = Math.min(x.length, f * DRUM_HOP + DRUM_FFT);
+    let peak = 0;
+    for (let i = a; i < b; i++) peak = Math.max(peak, Math.abs(x[i]));
+    let s = a;
+    while (s < b && Math.abs(x[s]) < peak * 0.4) s++;
+    const t = Math.max(0, s / sr - lead);
+    if (t - out[out.length - 1] >= minGap) out.push(t);
+  }
+  return out;
+}
+
+// BPM が決まったらループの拍数とスライス(拍位置・元の長さ)を作り直す
+function setDrumBpm(v) {
+  if (!drum.buffer || !(v > 0)) return;
+  const dur = drum.buffer.duration;
+  drum.bpm = Math.max(30, Math.min(300, v));
+  const spb = 60 / drum.bpm;
+  drum.beats = Math.max(1, Math.round(dur / spb));
+  const loopLen = Math.min(dur, drum.beats * spb);
+  const starts = drum.onsets.filter(t => t < loopLen - 0.01);
+  drum.slices = starts.map((t, i) => {
+    const end = i + 1 < starts.length ? starts[i + 1] : loopLen;
+    return { off: t, len: end - t, pos: t / spb, gap: (i + 1 < starts.length ? end / spb : drum.beats) - t / spb };
+  });
+  drum.byBeat = Array.from({ length: drum.beats }, () => []);
+  for (const s of drum.slices) drum.byBeat[Math.min(drum.beats - 1, Math.floor(s.pos))].push(s);
+  drum.beat %= drum.beats;
+  utilDom.dBpm.value = drum.bpm.toFixed(1);
+  updateDrumStatus();
+}
+
+function updateDrumStatus() {
+  if (!drum.buffer) { utilDom.dStatus.textContent = 'LOAD A DRUM LOOP'; return; }
+  const bars = drum.beats / metro.beats;
+  utilDom.dStatus.textContent = `${drum.beats} BEATS (${Number.isInteger(bars) ? bars : bars.toFixed(1)} BARS) · ${drum.slices.length} SLICES`;
+}
+
+function setDrumOn(on) {
+  drum.on = on && !!drum.buffer;
+  utilDom.dToggle.textContent = drum.on ? 'ON' : 'OFF';
+  utilDom.dToggle.classList.toggle('active', drum.on);
+  if (drum.on) drum.waiting = true; // 次の小節頭から
+  else stopDrumVoices();
+  updateClock();
+}
+
+function stopDrumVoices() {
+  for (const v of drum.voices) { try { v.stop(); } catch (e) {} }
+  drum.voices.clear();
+}
+
+// 1拍分のスライスを予約する。各スライスは元の速さで鳴らし、次のスライスと短くクロスフェードする。
+// 前のスライスは次の打音の手前(DRUM_LEAD)の部分へ伸ばすので、元のテンポなら継ぎ目なく元の波形に戻る
+const DRUM_LEAD = 0.005, DRUM_XFADE = 0.003;
+function scheduleDrumBeat(time, spb) {
+  const c = metroCtx;
+  if (!drum.out) {
+    drum.out = c.createGain();
+    drum.out.gain.value = drum.level;
+    drum.out.connect(c.destination);
+  }
+  const k = drum.beat % drum.beats;
+  drum.beat = (k + 1) % drum.beats;
+  for (const s of drum.byBeat[k]) {
+    const t = time + (s.pos - k) * spb;
+    const dur = Math.min(s.len, s.gap * spb);
+    const src = c.createBufferSource(), g = c.createGain();
+    src.buffer = drum.buffer;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(1, t + DRUM_XFADE);
+    g.gain.setValueAtTime(1, t + dur);
+    g.gain.linearRampToValueAtTime(0, t + dur + DRUM_XFADE);
+    src.connect(g); g.connect(drum.out);
+    src.start(t, s.off);
+    src.stop(t + dur + DRUM_XFADE);
+    drum.voices.add(src);
+    src.onended = () => { drum.voices.delete(src); g.disconnect(); };
+  }
+}
+
 // ---- ルーパー本体（録音はギターの ctx を使うので電源ONが必要）----
 function armRecord() {
   if (!running) { setStatus('POWER OFF'); return; }
   switchScene(looper.recScene);
-  looper.state = 'countin';
   looper.phaseBeat = 0;
   cancelCapture();
-  clock.barBeat = 0; // カウントインを小節頭から
+  looper.pendingPlay = false;
+  if (clock.running) {
+    // 拍を巻き戻さず、今の小節の流れに合わせて入る（ドラムはそのまま）
+    looper.state = 'countwait';
+    setStatus('WAIT BAR');
+  } else {
+    looper.state = 'countin';
+    clock.barBeat = 0; // カウントインを小節頭から
+    drum.waiting = true; // ドラムもカウントインと一緒に頭から
+    setStatus('COUNT-IN');
+  }
   utilDom.lRec.classList.add('armed');
   updatePlayStopBtn();
-  setStatus('COUNT-IN');
   updateClock();
 }
 
@@ -2414,7 +2752,16 @@ function startCapture(time) {
   const startFrame = Math.round((ctx.currentTime + time - metroCtx.currentTime) * ctx.sampleRate);
   const len = Math.round(looper.bars * metro.beats * 60 / metro.bpm * ctx.sampleRate);
   const data = new Float32Array(len);
+  looper.capTime = time; looper.capLen = len / ctx.sampleRate;
   nodes.looperRec.port.postMessage({ id: ++looper.recId, startFrame, data }, [data.buffer]);
+}
+
+// metroCtx の時刻を ctx の時刻に換算する
+function metroToCtx(t) { return ctx.currentTime + (t - metroCtx.currentTime); }
+// 入力→出力の往復遅延の見積もり。クリックやドラムに合わせて弾いた録音はこの分だけ遅れて入っている
+function roundTripLatency() {
+  const input = stream?.getAudioTracks()[0]?.getSettings().latency || 0;
+  return input + (ctx.baseLatency || 0) + (ctx.outputLatency || 0);
 }
 function cancelCapture() {
   looper.recId++;
@@ -2432,21 +2779,26 @@ function finalizeLoop({ id, data: d }) {
   looper.buffer = buf;
   looper.state = 'playing';
   switchScene(looper.playScene);   // 再生シーンへ切替
-  startPlayback();
+  // クロックが動いていれば録音終了の拍に頭を合わせる（メッセージの遅れ分は途中から再生）
+  if (clock.running) startPlayback(metroToCtx(looper.capTime + looper.capLen) - roundTripLatency());
+  else startPlayback();
   utilDom.lRec.classList.remove('armed');
   updatePlayStopBtn();
   setStatus('▶ PLAYING (' + looper.bars + ' bars)');
   updateClock();
 }
 
-function startPlayback() {
+// when (ctx の時刻) にループの頭が来るように再生する。過ぎていればその分だけ進めた位置から
+function startPlayback(when = 0) {
   stopPlayback();
   if (!looper.buffer) return;
   const src = ctx.createBufferSource();
   src.buffer = looper.buffer; src.loop = true;
   const g = ctx.createGain(); g.gain.value = 1;
   src.connect(g); g.connect(ctx.destination);
-  src.start();
+  const now = ctx.currentTime + 0.005, dur = looper.buffer.duration;
+  if (when >= now) src.start(when);
+  else src.start(now, (((now - when) % dur) + dur) % dur);
   looper.source = src; looper.gain = g;
 }
 function stopPlayback() {
@@ -2458,13 +2810,16 @@ function playLoop() {
   if (!running || !looper.buffer) { setStatus(looper.buffer ? 'POWER OFF' : 'EMPTY'); return; }
   switchScene(looper.playScene);
   looper.state = 'playing';
-  startPlayback();
+  // メトロノームやドラムが鳴っていれば次の小節頭から
+  if (clock.running) looper.pendingPlay = true;
+  else startPlayback();
   updatePlayStopBtn();
   setStatus('▶ PLAYING');
   updateClock();
 }
 function stopLooper() {
   const had = looper.buffer;
+  looper.pendingPlay = false;
   cancelCapture();
   stopPlayback();
   looper.state = had ? 'stopped' : 'empty';
@@ -2475,6 +2830,7 @@ function stopLooper() {
   updateClock();
 }
 function clearLoop() {
+  looper.pendingPlay = false;
   cancelCapture();
   stopPlayback();
   looper.buffer = null;
