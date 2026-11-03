@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
@@ -22,8 +24,6 @@
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:site" content="@kis"/>
 
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Guitar Amp & FX Simulator</title>
 <style>
   :root {
@@ -559,14 +559,402 @@
 <div class="hint">
   <b>使い方:</b> POWER を押してオーディオインターフェース/マイクへのアクセスを許可してください。ペダルはフットスイッチ、アンプ/キャビは電源スイッチでON/OFF。ノブは上下ドラッグで調整、ダブルクリックで初期値に戻ります。<br>
   <b>シーン:</b> 上部の 1〜5 ボタン（または数字キー 1〜5）で5つの音色を切り替え。各シーンは離れる直前の状態を自動で記憶します。<br>
-  <b>ハウリング対策:</b> スピーカーではなく<b>ヘッドホン</b>を。レイテンシを下げるにはオーディオインターフェース（48kHz）を推奨します。
+  <b>ハウリング対策:</b> スピーカーではなく<b>ヘッドホン</b>を。レイテンシを下げるにはオーディオインターフェース（48kHz）を推奨します。<br>
+  <b>起動方法:</b> 基本は <code>python serve.py</code> で起動し <code>http://localhost:8000/</code> を開いてください。<span id="fileModeNote" hidden> 現在はローカルファイルで開いているため、Neural Amp（NAM）は使えません。</span>
 </div>
 
+<script type="text/plain" id="dspWorklet">
+// ---- オーディオスレッド側のDSP（メインスレッドが止まっても動き続ける）----
+// ハーフバンドIIR（2本のオールパス列）。線形位相FIRより遅延がはるかに短い
+class Halfband {
+  constructor(coefs) {
+    this.c = coefs;
+    this.x1 = new Float64Array(coefs.length);
+    this.y1 = new Float64Array(coefs.length);
+    this.o0 = 0; this.o1 = 0;
+  }
+  step(a, b) {
+    const { c, x1, y1 } = this;
+    for (let i = 0; i < c.length; i++) {
+      const x = i & 1 ? b : a;
+      const y = c[i] * (x - y1[i]) + x1[i];
+      x1[i] = x; y1[i] = y;
+      if (i & 1) b = y; else a = y;
+    }
+    this.o0 = a; this.o1 = b;
+  }
+}
+const HB_2X = [0.040633, 0.150505, 0.300757, 0.460775, 0.609524, 0.738504, 0.849224, 0.949743];
+const HB_4X = [0.070224, 0.285086, 0.684541];
+
+class Oversampler4x {
+  constructor() {
+    this.up1 = new Halfband(HB_2X); this.up2 = new Halfband(HB_4X);
+    this.dn1 = new Halfband(HB_2X); this.dn2 = new Halfband(HB_4X);
+  }
+  up(x, buf) {
+    const { up1, up2 } = this;
+    up1.step(x, x);
+    const u0 = up1.o0, u1 = up1.o1;
+    up2.step(u0, u0); buf[0] = up2.o0; buf[1] = up2.o1;
+    up2.step(u1, u1); buf[2] = up2.o0; buf[3] = up2.o1;
+  }
+  down(buf) {
+    const { dn1, dn2 } = this;
+    dn2.step(buf[1], buf[0]); const d0 = (dn2.o0 + dn2.o1) * 0.5;
+    dn2.step(buf[3], buf[2]); const d1 = (dn2.o0 + dn2.o1) * 0.5;
+    dn1.step(d1, d0);
+    return (dn1.o0 + dn1.o1) * 0.5;
+  }
+}
+
+// 4倍オーバーサンプリングのカーブ波形整形（WaveShaperNode の 4x より低遅延）
+class ShaperProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.os = new Oversampler4x();
+    this.curve = null; this.prev = null; this.fade = 0;
+    this.buf = new Float64Array(4);
+    this.port.onmessage = e => {
+      this.prev = this.curve; this.curve = e.data;
+      this.fade = this.prev ? 1 : 0; // カーブ切替は短くクロスフェード
+    };
+  }
+  lookup(curve, x) {
+    const v = (curve.length - 1) * 0.5 * (x + 1);
+    if (v <= 0) return curve[0];
+    if (v >= curve.length - 1) return curve[curve.length - 1];
+    const i = v | 0;
+    return curve[i] + (curve[i + 1] - curve[i]) * (v - i);
+  }
+  shape(x) {
+    const y = this.lookup(this.curve, x);
+    if (this.fade <= 0) return y;
+    const old = this.lookup(this.prev, x);
+    const f = this.fade;
+    this.fade -= 1 / 256;
+    return old * f + y * (1 - f);
+  }
+  process(inputs, outputs) {
+    const inp = inputs[0][0], out = outputs[0][0];
+    if (!inp || !this.curve) { out.fill(0); return true; }
+    const { os, buf } = this;
+    for (let n = 0; n < inp.length; n++) {
+      os.up(inp[n], buf);
+      for (let i = 0; i < 4; i++) buf[i] = this.shape(buf[i]);
+      out[n] = os.down(buf);
+    }
+    return true;
+  }
+}
+registerProcessor('vs-shaper', ShaperProcessor);
+
+// ---- 真空管アンプモデル ----
+// stages: g=増幅率 b=バイアス(偶数次倍音) hp/lp=段間フィルター(Hz) blk=ブロッキング量
+// stack: FMVトーンスタックの [R1, R2, R3, R4, C1, C2, C3]
+const AMP_MODELS = {
+  clean: {
+    inHp: 70, bright: 0.5, pre: 1.6, range: 14,
+    stages: [
+      { g: 1.5, b: 0.16, hp: 25, lp: 11000, blk: 0 },
+      { g: 2.2, b: 0.12, hp: 30, lp: 12000, blk: 0.3 },
+    ],
+    stackAfter: 0, stackGain: 6, stack: [250e3, 250e3, 10e3, 100e3, 250e-12, 100e-9, 47e-9],
+    powerGain: 1, sag: 0.3, res: 2, trim: 1,
+  },
+  crunch: {
+    inHp: 90, bright: 0.7, pre: 2.5, range: 20,
+    stages: [
+      { g: 3, b: 0.22, hp: 30, lp: 12000, blk: 0.2 },
+      { g: 6, b: 0.35, hp: 140, lp: 6000, blk: 0.6 },
+      { g: 2.2, b: 0.12, hp: 40, lp: 8000, blk: 0.3 },
+    ],
+    stackAfter: 2, stackGain: 1.6, stack: [220e3, 1e6, 22e3, 33e3, 470e-12, 22e-9, 22e-9],
+    powerGain: 1.4, sag: 0.5, res: 3, trim: 0.38,
+  },
+  lead: {
+    inHp: 170, bright: 0.2, pre: 4, range: 24,
+    stages: [
+      { g: 4, b: 0.28, hp: 30, lp: 12000, blk: 0.2 },
+      { g: 7, b: 0.4, hp: 170, lp: 7000, blk: 0.6 },
+      { g: 7, b: 0.32, hp: 120, lp: 6000, blk: 0.6 },
+      { g: 3, b: 0.1, hp: 40, lp: 7500, blk: 0.3 },
+    ],
+    stackAfter: 3, stackGain: 1.8, stack: [250e3, 1e6, 25e3, 47e3, 250e-12, 20e-9, 20e-9],
+    powerGain: 1.6, sag: 0.35, res: 4, trim: 0.45,
+  },
+};
+
+// RBJシェルフ。[b0, b1, b2, a1, a2]
+function shelfCoefs(high, freq, db) {
+  const A = Math.pow(10, db / 40), w = 2 * Math.PI * freq / sampleRate;
+  const c = Math.cos(w), al = Math.sin(w) / Math.SQRT2, r = 2 * Math.sqrt(A) * al, sgn = high ? -1 : 1;
+  const a0 = (A + 1) + sgn * (A - 1) * c + r;
+  return [
+    A * ((A + 1) - sgn * (A - 1) * c + r) / a0, 2 * sgn * A * ((A - 1) - sgn * (A + 1) * c) / a0,
+    A * ((A + 1) - sgn * (A - 1) * c - r) / a0, -2 * sgn * ((A - 1) + sgn * (A + 1) * c) / a0,
+    ((A + 1) + sgn * (A - 1) * c - r) / a0,
+  ];
+}
+class Biquad {
+  constructor() { this.c = [1, 0, 0, 0, 0]; this.z1 = 0; this.z2 = 0; }
+  tick(x) {
+    const c = this.c, y = c[0] * x + this.z1;
+    this.z1 = c[1] * x - c[3] * y + this.z2;
+    this.z2 = c[2] * x - c[4] * y;
+    return y;
+  }
+}
+
+class AmpProcessor extends AudioWorkletProcessor {
+  static get parameterDescriptors() {
+    const knob = (name, min, max, def) => ({ name, defaultValue: def, minValue: min, maxValue: max, automationRate: 'k-rate' });
+    return [
+      knob('gain', 0, 100, 50), knob('power', 0, 100, 40),
+      knob('bass', -15, 15, 0), knob('mid', -15, 15, 0), knob('treble', -15, 15, 0), knob('presence', -15, 15, 0),
+    ];
+  }
+  constructor() {
+    super();
+    this.os = new Oversampler4x();
+    this.buf = new Float64Array(4);
+    this.fs = sampleRate * 4;
+    this.model = null; this.pending = null; this.fade = 0;
+    this.presShelf = new Biquad(); this.resShelf = new Biquad();
+    this.st = new Float64Array(7); // トーンスタック [b0..b3, a1..a3]
+    this.sz = new Float64Array(3);
+    this.tone = ''; this.pres = NaN;
+    this.pre = 0; this.preC = Math.exp(-1 / (0.01 * sampleRate));
+    this.port.onmessage = e => { this.pending = AMP_MODELS[e.data]; };
+  }
+  load(m) {
+    const fs = this.fs, lpK = f => Math.exp(-2 * Math.PI * f / fs);
+    this.model = m;
+    this.stages = m.stages.map(s => ({
+      g: s.g, b: s.b, t0: Math.tanh(s.g * s.b), blk: s.blk,
+      ka: 1 / (0.002 * fs * s.g), kr: Math.exp(-1 / (0.08 * fs)),
+      hpA: lpK(s.hp), lpA: lpK(s.lp), hpZ: 0, lpZ: 0, bias: 0,
+    }));
+    this.inA = Math.exp(-2 * Math.PI * m.inHp / sampleRate); this.inZ = 0;
+    this.brA = Math.exp(-2 * Math.PI * 640 / sampleRate); this.brZ = 0;
+    this.sagEnv = 0;
+    this.sagA = Math.exp(-1 / (0.005 * fs)); this.sagR = Math.exp(-1 / (0.15 * fs));
+    this.sz.fill(0);
+    this.resShelf.c = shelfCoefs(false, 100, m.res);
+    this.tone = ''; this.pres = NaN;
+  }
+  // Yeh の FMV トーンスタックを双一次変換して3次IIRにする
+  updateStack(bass, mid, treble) {
+    const [R1, R2, R3, R4, C1, C2, C3] = this.model.stack;
+    const l = Math.exp(((bass + 15) / 30 - 1) * 3.4), m = (mid + 15) / 30, t = (treble + 15) / 30;
+    const k = C1 * C2 * C3;
+    const b1 = t * C1 * R1 + m * C3 * R3 + l * (C1 * R2 + C2 * R2) + (C1 * R3 + C2 * R3);
+    const b2 = t * (C1 * C2 * R1 * R4 + C1 * C3 * R1 * R4) - m * m * (C1 * C3 * R3 * R3 + C2 * C3 * R3 * R3)
+      + m * (C1 * C3 * R1 * R3 + C1 * C3 * R3 * R3 + C2 * C3 * R3 * R3)
+      + l * (C1 * C2 * R1 * R2 + C1 * C2 * R2 * R4 + C1 * C3 * R2 * R4)
+      + l * m * (C1 * C3 * R2 * R3 + C2 * C3 * R2 * R3)
+      + (C1 * C2 * R1 * R3 + C1 * C2 * R3 * R4 + C1 * C3 * R3 * R4);
+    const b3 = l * m * k * (R1 * R2 * R3 + R2 * R3 * R4) - m * m * k * (R1 * R3 * R3 + R3 * R3 * R4)
+      + m * k * (R1 * R3 * R3 + R3 * R3 * R4) + t * k * R1 * R3 * R4 - t * m * k * R1 * R3 * R4 + t * l * k * R1 * R2 * R4;
+    const a1 = (C1 * R1 + C1 * R3 + C2 * R3 + C2 * R4 + C3 * R4) + m * C3 * R3 + l * (C1 * R2 + C2 * R2);
+    const a2 = m * (C1 * C3 * R1 * R3 - C2 * C3 * R3 * R4 + C1 * C3 * R3 * R3 + C2 * C3 * R3 * R3)
+      + l * m * (C1 * C3 * R2 * R3 + C2 * C3 * R2 * R3) - m * m * (C1 * C3 * R3 * R3 + C2 * C3 * R3 * R3)
+      + l * (C1 * C2 * R2 * R4 + C1 * C2 * R1 * R2 + C1 * C3 * R2 * R4 + C2 * C3 * R2 * R4)
+      + (C1 * C2 * R1 * R4 + C1 * C3 * R1 * R4 + C1 * C2 * R3 * R4 + C1 * C2 * R1 * R3 + C1 * C3 * R3 * R4 + C2 * C3 * R3 * R4);
+    const a3 = l * m * k * (R1 * R2 * R3 + R2 * R3 * R4) - m * m * k * (R1 * R3 * R3 + R3 * R3 * R4)
+      + m * k * (R3 * R3 * R4 + R1 * R3 * R3 - R1 * R3 * R4) + l * k * R1 * R2 * R4 + k * R1 * R3 * R4;
+    const c = 2 * this.fs, c2 = c * c, c3 = c2 * c;
+    const B1 = b1 * c, B2 = b2 * c2, B3 = b3 * c3, A1 = a1 * c, A2 = a2 * c2, A3 = a3 * c3;
+    const a0 = 1 + A1 + A2 + A3, st = this.st;
+    st[0] = (B1 + B2 + B3) / a0;
+    st[1] = (B1 - B2 - 3 * B3) / a0;
+    st[2] = (-B1 - B2 + 3 * B3) / a0;
+    st[3] = (-B1 + B2 - B3) / a0;
+    st[4] = (3 + A1 - A2 - 3 * A3) / a0;
+    st[5] = (3 - A1 - A2 + 3 * A3) / a0;
+    st[6] = (1 - A1 + A2 - A3) / a0;
+  }
+  stack(x) {
+    const st = this.st, z = this.sz, y = st[0] * x + z[0];
+    z[0] = st[1] * x - st[4] * y + z[1];
+    z[1] = st[2] * x - st[5] * y + z[2];
+    z[2] = st[3] * x - st[6] * y;
+    return y * this.model.stackGain;
+  }
+  stage(s, x) {
+    const v = x - s.bias, u = s.g * (v + s.b);
+    // グリッド電流でカップリングコンデンサが充電され、強い入力でバイアスがずれる
+    if (u > 1) s.bias += (u - 1) * s.blk * s.ka;
+    s.bias *= s.kr;
+    const y = Math.tanh(u) - s.t0;
+    s.hpZ = y + (s.hpZ - y) * s.hpA;
+    const h = y - s.hpZ;
+    s.lpZ = h + (s.lpZ - h) * s.lpA;
+    return s.lpZ;
+  }
+  tick(x, powerGain) {
+    const { stages, model } = this;
+    for (let i = 0; i < stages.length; i++) {
+      x = this.stage(stages[i], x);
+      if (i === model.stackAfter) x = this.stack(x);
+    }
+    // パワー段: 出力が大きいほど電源が沈み(サグ)、音が圧縮される
+    const y = Math.tanh(x * powerGain / (1 + model.sag * this.sagEnv));
+    const a = Math.abs(y);
+    this.sagEnv = a + (this.sagEnv - a) * (a > this.sagEnv ? this.sagA : this.sagR);
+    return y;
+  }
+  process(inputs, outputs, params) {
+    const inp = inputs[0][0], out = outputs[0][0];
+    if (!inp || (!this.model && !this.pending)) { out.fill(0); return true; }
+    if (!this.model) { this.load(this.pending); this.pending = null; }
+    const { os, buf } = this;
+    for (let n = 0; n < inp.length; n++) {
+      // モデル切替は一度フェードアウトしてから内部状態を入れ替える
+      if (this.pending) {
+        this.fade -= 1 / 128;
+        if (this.fade <= 0) { this.fade = 0; this.load(this.pending); this.pending = null; }
+      } else if (this.fade < 1) this.fade = Math.min(1, this.fade + 1 / 128);
+      if (n === 0 || this.tone === '') {
+        const key = params.bass[0] + '|' + params.mid[0] + '|' + params.treble[0];
+        if (key !== this.tone) { this.tone = key; this.updateStack(params.bass[0], params.mid[0], params.treble[0]); }
+        if (params.presence[0] !== this.pres) {
+          this.pres = params.presence[0];
+          this.presShelf.c = shelfCoefs(true, 3500, this.pres * 0.5);
+        }
+      }
+      const m = this.model, gain = params.gain[0];
+      const preTarget = m.pre * Math.pow(10, (gain - 50) / 50 * m.range / 20);
+      this.pre = preTarget + (this.pre - preTarget) * this.preC;
+      const powerGain = m.powerGain * Math.pow(10, (params.power[0] - 40) / 60 * 9 / 20);
+      let x = inp[n];
+      this.inZ = x + (this.inZ - x) * this.inA;
+      x -= this.inZ;
+      // Marshall/Fender のブライトキャップ: ゲインが低いほど高域が多く通る
+      this.brZ = x + (this.brZ - x) * this.brA;
+      x = (x + (x - this.brZ) * m.bright * (1 - gain / 100)) * this.pre;
+      os.up(x, buf);
+      for (let i = 0; i < 4; i++) buf[i] = this.tick(buf[i], powerGain);
+      const y = os.down(buf);
+      out[n] = this.resShelf.tick(this.presShelf.tick(y)) * m.trim * this.fade;
+    }
+    return true;
+  }
+}
+registerProcessor('vs-amp', AmpProcessor);
+
+// ノイズゲート: 開くのは速く、閉じるのはホールド後にゆっくり（アタックを潰さない）
+class GateProcessor extends AudioWorkletProcessor {
+  static get parameterDescriptors() {
+    return [{ name: 'thresh', defaultValue: -65, minValue: -120, maxValue: 0, automationRate: 'k-rate' }];
+  }
+  constructor() {
+    super();
+    this.env = 0; this.gain = 1; this.open = true; this.hold = 0;
+    this.envRel = Math.exp(-1 / (0.015 * sampleRate));
+    this.gainAtk = Math.exp(-1 / (0.0005 * sampleRate));
+    this.gainRel = Math.exp(-1 / (0.03 * sampleRate));
+    this.holdLen = Math.round(0.06 * sampleRate);
+  }
+  process(inputs, outputs, params) {
+    const inp = inputs[0][0], out = outputs[0][0];
+    if (!inp) { out.fill(0); return true; }
+    const openAt = Math.pow(10, (params.thresh[0] + 3) / 20);
+    const closeAt = Math.pow(10, (params.thresh[0] - 3) / 20);
+    for (let n = 0; n < inp.length; n++) {
+      const a = Math.abs(inp[n]);
+      this.env = a > this.env ? a : this.env * this.envRel;
+      if (this.env > openAt) { this.open = true; this.hold = this.holdLen; }
+      else if (this.env < closeAt) {
+        if (this.hold > 0) this.hold--; else this.open = false;
+      }
+      const target = this.open ? 1 : 0;
+      const c = target > this.gain ? this.gainAtk : this.gainRel;
+      this.gain = target + (this.gain - target) * c;
+      out[n] = inp[n] * this.gain;
+    }
+    return true;
+  }
+}
+registerProcessor('vs-gate', GateProcessor);
+
+// オートワウ: 入力2(チェーン前の原音)でエンベロープを取り、SVFのバンドパスを動かす
+class AutoWahProcessor extends AudioWorkletProcessor {
+  static get parameterDescriptors() {
+    return [
+      { name: 'sens', defaultValue: 55, minValue: 0, maxValue: 100, automationRate: 'k-rate' },
+      { name: 'range', defaultValue: 1600, minValue: 0, maxValue: 20000, automationRate: 'k-rate' },
+      { name: 'q', defaultValue: 6, minValue: 0.1, maxValue: 50, automationRate: 'k-rate' },
+    ];
+  }
+  constructor() {
+    super();
+    this.pow = 0; this.freq = 250; this.ic1 = 0; this.ic2 = 0;
+    this.powC = Math.exp(-1 / (0.01 * sampleRate));
+    this.atk = Math.exp(-1 / (0.024 * sampleRate));
+    this.rel = Math.exp(-1 / (0.2 * sampleRate));
+  }
+  process(inputs, outputs, params) {
+    const inp = inputs[0][0], side = inputs[1][0] || inp, out = outputs[0][0];
+    if (!inp) { out.fill(0); return true; }
+    const k = 1 / params.q[0], sens = 1 + params.sens[0] / 10, range = params.range[0];
+    const fMax = sampleRate * 0.45;
+    let a1 = 0, a2 = 0, a3 = 0;
+    for (let n = 0; n < inp.length; n++) {
+      const s = side[n];
+      this.pow = s * s + (this.pow - s * s) * this.powC;
+      const target = 250 + Math.min(1, Math.sqrt(this.pow) * sens) * range;
+      const c = target > this.freq ? this.atk : this.rel;
+      this.freq = target + (this.freq - target) * c;
+      if ((n & 15) === 0) { // 係数更新は16サンプルごと
+        const g = Math.tan(Math.PI * Math.min(this.freq, fMax) / sampleRate);
+        a1 = 1 / (1 + g * (g + k)); a2 = g * a1; a3 = g * a2;
+      }
+      const v3 = inp[n] - this.ic2;
+      const v1 = a1 * this.ic1 + a2 * v3;
+      const v2 = this.ic2 + a2 * this.ic1 + a3 * v3;
+      this.ic1 = 2 * v1 - this.ic1;
+      this.ic2 = 2 * v2 - this.ic2;
+      out[n] = k * v1;
+    }
+    return true;
+  }
+}
+registerProcessor('vs-autowah', AutoWahProcessor);
+
+// ルーパー録音: 指定フレームからサンプル単位で取り込み、終わったらメインへ返す
+class RecorderProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.job = null;
+    this.port.onmessage = e => {
+      this.job = e.data.cancel ? null : { ...e.data, count: 0 };
+    };
+  }
+  process(inputs) {
+    const job = this.job, inp = inputs[0][0];
+    if (!job) return true;
+    const len = inp ? inp.length : 128;
+    const skip = Math.max(0, job.startFrame - currentFrame);
+    for (let n = skip; n < len && job.count < job.data.length; n++) {
+      job.data[job.count++] = inp ? inp[n] : 0;
+    }
+    if (job.count >= job.data.length) {
+      this.port.postMessage({ id: job.id, data: job.data }, [job.data.buffer]);
+      this.job = null;
+    }
+    return true;
+  }
+}
+registerProcessor('vs-recorder', RecorderProcessor);
+</script>
 <script>
 let ctx, source, stream, analyser, rafId;
 let running = false;
 const nodes = {};
 let cabIRBuffer = null, cabIRName = null, cabIRGainValue = 1;
+// COOP/COEP 付きで配信されていないと SharedArrayBuffer 前提の機能は使えない
+document.getElementById('fileModeNote').hidden = location.protocol !== 'file:';
 
 // ---- エフェクトチェーン定義 ----
 // 信号順: input -> noiseGate -> compressor -> overdrive -> tone(amp EQ) -> cabinet(IR) -> delay -> reverb -> output
@@ -607,13 +995,25 @@ const pedals = [
     select: { id: 'type', label: 'Type', options: ['soft', 'hard', 'fuzz', 'metal'], val: 'soft' }
   },
   {
+    id: 'nam', name: 'Neural Amp', kind: 'pedal', color: '#2e5e4e', defaultOn: false,
+    knobs: [
+      { id: 'input', label: 'Input', min: -12, max: 12, val: 0, unit: 'dB' },
+      { id: 'levelA', label: 'A Level', min: -24, max: 12, val: 0, unit: 'dB' },
+      { id: 'levelB', label: 'B Level', min: -24, max: 12, val: 0, unit: 'dB' },
+    ],
+    select: { id: 'route', label: 'Route', options: ['a', 'b', 'a>b', 'a+b'], val: 'a>b' }
+  },
+  {
     id: 'amp', name: 'Amplifier', kind: 'amp', defaultOn: true,
     knobs: [
+      { id: 'gain', label: 'Gain', min: 0, max: 100, val: 50, unit: '' },
       { id: 'bass', label: 'Bass', min: -15, max: 15, val: 2, unit: 'dB' },
       { id: 'mid', label: 'Mid', min: -15, max: 15, val: 0, unit: 'dB' },
       { id: 'treble', label: 'Treble', min: -15, max: 15, val: 3, unit: 'dB' },
       { id: 'presence', label: 'Presence', min: -15, max: 15, val: 4, unit: 'dB' },
-    ]
+      { id: 'power', label: 'Power', min: 0, max: 100, val: 40, unit: '' },
+    ],
+    select: { id: 'model', label: 'Model', options: ['classic', 'clean', 'crunch', 'lead'], val: 'classic' }
   },
   {
     id: 'cab', name: 'Cabinet', kind: 'cab', defaultOn: true,
@@ -650,7 +1050,7 @@ const pedals = [
 
 // 3段レイアウト定義
 const rows = [
-  { label: 'INPUT STAGE', ids: ['tuner', 'gate', 'comp', 'autowah'] },
+  { label: 'INPUT STAGE', ids: ['tuner', 'gate', 'comp', 'autowah', 'nam'] },
   { label: 'AMP STACK', ids: ['drive', 'amp', 'cab'] },
   { label: 'TIME & SPACE', ids: ['chorus', 'delay', 'reverb'] },
 ];
@@ -762,7 +1162,7 @@ function buildSwitch(p, el) {
     state[p.id].on = !state[p.id].on;
     sw.classList.toggle('on', state[p.id].on);
     el.classList.toggle('off', !state[p.id].on);
-    if (running) rebuildChain();
+    if (running) syncChain();
   };
   switchRefreshers.push(() => {
     const on = state[p.id].on;
@@ -777,6 +1177,83 @@ function buildMiniVU(p) {
   const vu = document.createElement('canvas');
   vu.className = 'vu'; vu.width = 40; vu.height = 18; vu.dataset.vu = p.id;
   return vu;
+}
+
+// NAMの2系統。モデルはシーン共通で、シーンごとに Route とレベルで使い分ける
+const namSlots = [
+  { key: 'A', json: null, name: null, rate: null, loudness: null, token: 0, lite: false, slimmable: false, invert: false },
+  { key: 'B', json: null, name: null, rate: null, loudness: null, token: 0, lite: false, slimmable: false, invert: false },
+];
+
+function updateNamSlotUI(slot, text) {
+  const rateNote = slot.rate && ctx && slot.rate !== ctx.sampleRate ? ` (${slot.rate / 1000}kHz用)` : '';
+  slot.nameEl.textContent = text || (slot.name ? slot.name + rateNote : `${slot.key}: — no model —`);
+  slot.btn.classList.toggle('ir-loaded', !!slot.json);
+  slot.clear.classList.toggle('visible', !!slot.json);
+  // A2の軽量サイズ。2系統同時でCPUが足りないときに使う
+  slot.size.style.display = slot.json && slot.slimmable ? '' : 'none';
+  slot.size.textContent = slot.lite ? 'LITE' : 'FULL';
+  slot.size.classList.toggle('ir-loaded', slot.lite);
+  slot.phase.style.display = slot.json ? '' : 'none';
+  slot.phase.classList.toggle('ir-loaded', slot.invert);
+}
+
+function buildNamSlot(slot) {
+  const row = document.createElement('div');
+  row.className = 'ir-row';
+  row.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:6px;';
+  row.innerHTML = `
+    <input type="file" accept=".nam" style="display:none">
+    <button class="ir-btn">LOAD ${slot.key}</button>
+    <span class="ir-name" style="flex:1;min-width:0;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+    <button class="ir-btn" title="FULL: 標準サイズ / LITE: 軽量サイズ（CPU負荷が約1/6）">FULL</button>
+    <button class="ir-btn" title="位相反転（A+B で音が痩せるときに使う）">Ø</button>
+    <button class="ir-clear" title="Clear">✕</button>`;
+  const input = row.querySelector('input');
+  [slot.btn, slot.size, slot.phase] = row.querySelectorAll('.ir-btn');
+  slot.nameEl = row.querySelector('.ir-name');
+  slot.clear = row.querySelector('.ir-clear');
+  slot.btn.onclick = () => input.click();
+  slot.phase.onclick = () => {
+    slot.invert = !slot.invert;
+    updateNamSlotUI(slot);
+    if (running) applyParam('nam', 'route');
+  };
+  slot.size.onclick = () => {
+    slot.lite = !slot.lite;
+    updateNamSlotUI(slot);
+    if (running && slot.node) slot.node.port.postMessage({ slim: slot.lite ? 0 : 1 });
+  };
+  input.onchange = async () => {
+    const file = input.files[0];
+    input.value = '';
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const meta = JSON.parse(text);
+      slot.json = text;
+      slot.slimmable = false;
+      slot.invert = false;
+      slot.name = file.name.replace(/\.[^.]+$/, '');
+      slot.rate = meta.sample_rate || null;
+      slot.loudness = meta.metadata && typeof meta.metadata.loudness === 'number' ? meta.metadata.loudness : null;
+      updateNamSlotUI(slot);
+      if (running) sendNamModel(slot);
+    } catch (err) {
+      console.error(err);
+      updateNamSlotUI(slot, 'error loading');
+    }
+  };
+  slot.clear.onclick = () => {
+    slot.json = slot.name = slot.rate = slot.loudness = null;
+    updateNamSlotUI(slot);
+    if (running && slot.node) {
+      slot.node.port.postMessage({ unload: true });
+      applyParam('nam', 'route');
+    }
+  };
+  updateNamSlotUI(slot);
+  return row;
 }
 
 // 各機材の見た目を生成
@@ -796,6 +1273,7 @@ function buildUnit(p) {
     const bank = el.querySelector('.knob-bank');
     p.knobs.forEach(k => bank.appendChild(buildKnob(p, k)));
     if (p.select) bank.appendChild(buildSelect(p));
+    if (p.id === 'nam') namSlots.forEach(slot => el.appendChild(buildNamSlot(slot)));
     el.appendChild(buildSwitch(p, el));
     el.appendChild(buildMiniVU(p)); // 右上(LED横)に絶対配置
 
@@ -811,6 +1289,7 @@ function buildUnit(p) {
       </div>`;
     const bank = el.querySelector('.knob-bank');
     p.knobs.forEach(k => bank.appendChild(buildKnob(p, k)));
+    bank.appendChild(buildSelect(p));
     const pwr = buildSwitch(p, el);
     pwr.classList.add('amp-power');
     el.querySelector('.amp-panel').appendChild(pwr);
@@ -887,7 +1366,7 @@ function buildUnit(p) {
         irBtn.textContent = 'LOAD IR';
         irBtn.classList.add('ir-loaded');
         irClear.classList.add('visible');
-        if (running) { nodes.cabIR.buffer = cabIRBuffer; nodes.cabIRGain.gain.value = cabIRGainValue; rebuildChain(); }
+        if (running) { nodes.cabIR.buffer = cabIRBuffer; syncChain(); }
       } catch (err) {
         irBtn.textContent = 'LOAD IR';
         irName.textContent = 'error loading';
@@ -901,7 +1380,7 @@ function buildUnit(p) {
       irName.textContent = '— no IR —';
       irBtn.classList.remove('ir-loaded');
       irClear.classList.remove('visible');
-      if (running) { nodes.cabIR.buffer = null; rebuildChain(); }
+      if (running) { nodes.cabIR.buffer = null; syncChain(); }
     };
   }
   return el;
@@ -952,7 +1431,7 @@ function switchScene(idx) {
   // 新しいシーンの状態を読み込んで反映
   applyStateObj(scenes[idx]);
   refreshAllUI();
-  if (running) rebuildChain();
+  if (running) syncChain();
   sceneBtns.forEach((b, i) => b.classList.toggle('active', i === idx));
 }
 
@@ -1008,18 +1487,28 @@ function makeImpulse(seconds) {
   return imp;
 }
 
+// channelCount 1: ギター入力はモノラルとして処理する
+function makeWorklet(name, opts) {
+  return new AudioWorkletNode(ctx, name, { channelCount: 1, channelCountMode: 'explicit', ...opts });
+}
+
 function buildNodes() {
-  // Gate (simple via dynamics-ish: use a gain controlled later; here use a high-ratio compressor as expander approximation)
-  nodes.gateGain = ctx.createGain();
-  nodes.gateGain.gain.value = 1; // 初期は開いた状態
+  nodes.gate = makeWorklet('vs-gate');
 
   nodes.comp = ctx.createDynamicsCompressor();
 
-  // Auto Wah: envelope-following bandpass
-  nodes.wah = ctx.createBiquadFilter();
-  nodes.wah.type = 'bandpass';
-  nodes.wah.frequency.value = 500;
-  nodes.wah.Q.value = 6;
+  nodes.wah = makeWorklet('vs-autowah', { numberOfInputs: 2 });
+
+  nodes.namIn = ctx.createGain();
+  nodes.namOut = ctx.createGain();
+  ['namFeedA', 'namFeedB', 'namAtoB', 'namOutA', 'namOutB'].forEach(k => { nodes[k] = ctx.createGain(); nodes[k].gain.value = 0; });
+  namSlots[0].node = namReady ? makeWorklet('vs-nam') : null;
+  namSlots[1].node = namReady ? makeWorklet('vs-nam') : null;
+
+  nodes.ampModel = makeWorklet('vs-amp');
+  nodes.ampModelKey = null;
+  nodes.ampModelGain = ctx.createGain();
+  nodes.ampClassicGain = ctx.createGain();
 
   nodes.driveIn = ctx.createGain();
   // プリEQ: 歪ませる前にローをカット・ミッドを持ち上げる（ヌケの核心）
@@ -1035,8 +1524,8 @@ function buildNodes() {
   nodes.driveLoCut = ctx.createBiquadFilter();
   nodes.driveLoCut.type = 'highpass';
   nodes.driveLoCut.Q.value = 0.7;
-  nodes.shaper = ctx.createWaveShaper();
-  nodes.shaper.oversample = '4x';
+  nodes.shaper = makeWorklet('vs-shaper');
+  nodes.shaperKey = null;
   nodes.driveTone = ctx.createBiquadFilter();
   nodes.driveTone.type = 'lowpass';
   nodes.driveLevel = ctx.createGain();
@@ -1063,10 +1552,11 @@ function buildNodes() {
   nodes.cabIR.normalize = false; // 手動でゲイン補正するので自動正規化は無効
   if (cabIRBuffer) nodes.cabIR.buffer = cabIRBuffer;
   nodes.cabIRGain = ctx.createGain();
-  nodes.cabIRGain.gain.value = cabIRGainValue;
+  nodes.cabFilterGain = ctx.createGain();
 
   // delay
   nodes.delay = ctx.createDelay(2.0);
+  nodes.delaySend = ctx.createGain();
   nodes.delayFb = ctx.createGain();
   nodes.delayWet = ctx.createGain();
   nodes.delayDry = ctx.createGain();
@@ -1092,6 +1582,7 @@ function buildNodes() {
 
   // reverb
   nodes.reverb = ctx.createConvolver();
+  nodes.reverbSend = ctx.createGain();
   nodes.reverbWet = ctx.createGain();
   nodes.reverbDry = ctx.createGain();
 
@@ -1109,107 +1600,95 @@ function buildNodes() {
   nodes.tunerAnalyser.fftSize = 4096;
 
   // ルーパー録音用: マスター出力をタップしてサンプル単位で取り込む
-  nodes.looperRec = ctx.createScriptProcessor(2048, 1, 1);
-  nodes.looperSilent = ctx.createGain();
-  nodes.looperSilent.gain.value = 0; // 録音タップは音を出さない
-  nodes.looperRec.onaudioprocess = (e) => {
-    if (!looper.recActive) return;
-    const inp = e.inputBuffer.getChannelData(0);
-    const remain = looper.recNeeded - looper.recCount;
-    const n = Math.min(inp.length, remain);
-    looper.recData.push(inp.slice(0, n));
-    looper.recCount += n;
-    if (looper.recCount >= looper.recNeeded) {
-      looper.recActive = false;
-      finalizeLoop();
-    }
-  };
+  nodes.looperRec = makeWorklet('vs-recorder', { numberOfOutputs: 0 });
+  nodes.looperRec.port.onmessage = e => finalizeLoop(e.data);
 
   // 各エフェクト出力監視用 tap アナライザー（ユニット内バーグラフ用）
   nodes.taps = {};
-  ['gate','comp','autowah','drive','amp','cab','chorus','delay','reverb','master'].forEach(id => {
+  ['gate','comp','autowah','drive','nam','amp','cab','chorus','delay','reverb','master'].forEach(id => {
     const a = ctx.createAnalyser();
     a.fftSize = 512;
     nodes.taps[id] = a;
   });
 }
 
-function disconnectAll() {
-  Object.values(nodes).forEach(n => { try { n.disconnect(); } catch(e){} });
-  nodes.delay.connect(nodes.delayFb); nodes.delayFb.connect(nodes.delay);
-  // chorus LFO の内部変調接続を復元
-  nodes.chorusLfo1.connect(nodes.chorusDepth1); nodes.chorusDepth1.connect(nodes.chorusD1.delayTime);
-  nodes.chorusLfo2.connect(nodes.chorusDepth2); nodes.chorusDepth2.connect(nodes.chorusD2.delayTime);
+// オン/オフを持つ区間を配線する。経路は固定で、切替はゲインのクロスフェードだけ
+function addUnit(id, head, input, output) {
+  const wet = ctx.createGain(), thru = ctx.createGain(), sum = ctx.createGain();
+  head.connect(input); output.connect(wet); wet.connect(sum);
+  head.connect(thru); thru.connect(sum);
+  sum.connect(nodes.taps[id]);
+  nodes.units[id] = { wet, thru };
+  return sum;
 }
 
-function rebuildChain() {
-  disconnectAll();
+// 空間系: 原音と残響を並列に。オフは送りだけ止めるので残響は自然に消える
+function addSendUnit(id, head, dry, send, input, wet) {
+  const sum = ctx.createGain();
+  head.connect(dry); dry.connect(sum);
+  head.connect(send); send.connect(input);
+  wet.connect(sum);
+  sum.connect(nodes.taps[id]);
+  return sum;
+}
+
+// グラフは起動時に1回だけ組む（切替で繋ぎ直さないのでノイズや残響切れが出ない）
+function connectGraph() {
+  nodes.units = {};
   let head = source;
   source.connect(nodes.inAnalyser); // 入力監視（チェーンと独立）
   source.connect(nodes.tunerAnalyser); // チューナー用（チェーンと独立・常時接続）
+  source.connect(nodes.wah, 0, 1); // オートワウのエンベロープ検出用
 
-  if (state.gate.on) { head.connect(nodes.gateGain); head = nodes.gateGain; head.connect(nodes.taps.gate); }
-  if (state.comp.on) { head.connect(nodes.comp); head = nodes.comp; head.connect(nodes.taps.comp); }
-  if (state.autowah.on) { head.connect(nodes.wah); head = nodes.wah; head.connect(nodes.taps.autowah); }
-  if (state.drive.on) {
-    head.connect(nodes.driveIn);
-    nodes.driveIn.connect(nodes.drivePreHp);  // HPF（歪み前のロー処理）
-    nodes.drivePreHp.connect(nodes.drivePre); // ミッドブースト
-    nodes.drivePre.connect(nodes.driveLoCut); // 既存Lo Cut
-    nodes.driveLoCut.connect(nodes.shaper);
-    nodes.shaper.connect(nodes.driveTone);
-    nodes.driveTone.connect(nodes.driveLevel);
-    nodes.driveLevel.connect(nodes.drivePostLm); // ローミッド整理
-    nodes.drivePostLm.connect(nodes.drivePostAir); // 抜け帯域ブースト
-    head = nodes.drivePostAir; head.connect(nodes.taps.drive);
+  head = addUnit('gate', head, nodes.gate, nodes.gate);
+  head = addUnit('comp', head, nodes.comp, nodes.comp);
+  head = addUnit('autowah', head, nodes.wah, nodes.wah);
+
+  nodes.driveIn.connect(nodes.drivePreHp);  // HPF（歪み前のロー処理）
+  nodes.drivePreHp.connect(nodes.drivePre); // ミッドブースト
+  nodes.drivePre.connect(nodes.driveLoCut); // 既存Lo Cut
+  nodes.driveLoCut.connect(nodes.shaper);
+  nodes.shaper.connect(nodes.driveTone);
+  nodes.driveTone.connect(nodes.driveLevel);
+  nodes.driveLevel.connect(nodes.drivePostLm); // ローミッド整理
+  nodes.drivePostLm.connect(nodes.drivePostAir); // 抜け帯域ブースト
+  head = addUnit('drive', head, nodes.driveIn, nodes.drivePostAir);
+
+  nodes.bass.connect(nodes.mid); nodes.mid.connect(nodes.treble); nodes.treble.connect(nodes.presence);
+  if (namReady) {
+    const [a, b] = namSlots.map(slot => slot.node);
+    nodes.namIn.connect(nodes.namFeedA); nodes.namFeedA.connect(a);
+    nodes.namIn.connect(nodes.namFeedB); nodes.namFeedB.connect(b);
+    a.connect(nodes.namAtoB); nodes.namAtoB.connect(b); // 直列: A→B
+    a.connect(nodes.namOutA); nodes.namOutA.connect(nodes.namOut);
+    b.connect(nodes.namOutB); nodes.namOutB.connect(nodes.namOut);
+    head = addUnit('nam', head, nodes.namIn, nodes.namOut);
   }
-  if (state.amp.on) {
-    head.connect(nodes.bass); nodes.bass.connect(nodes.mid);
-    nodes.mid.connect(nodes.treble); nodes.treble.connect(nodes.presence);
-    head = nodes.presence; head.connect(nodes.taps.amp);
-  }
-  if (state.cab.on) {
-    head.connect(nodes.cabHp);
-    if (cabIRBuffer && nodes.cabIR.buffer) {
-      nodes.cabHp.connect(nodes.cabIR);
-      nodes.cabIR.connect(nodes.cabIRGain);
-      head = nodes.cabIRGain;
-    } else {
-      nodes.cabHp.connect(nodes.cab);
-      head = nodes.cab;
-    }
-    head.connect(nodes.taps.cab);
-  }
-  if (state.chorus.on) {
-    head.connect(nodes.chorusDry);
-    head.connect(nodes.chorusD1);
-    head.connect(nodes.chorusD2);
-    nodes.chorusD1.connect(nodes.chorusWet);
-    nodes.chorusD2.connect(nodes.chorusWet);
-    const sum = ctx.createGain();
-    nodes.chorusDry.connect(sum); nodes.chorusWet.connect(sum);
-    nodes._chorusSum = sum;
-    head = sum; head.connect(nodes.taps.chorus);
-  }
-  if (state.delay.on) {
-    head.connect(nodes.delayDry);
-    head.connect(nodes.delay);
-    nodes.delay.connect(nodes.delayWet);
-    const sum = ctx.createGain();
-    nodes.delayDry.connect(sum); nodes.delayWet.connect(sum);
-    nodes._delaySum = sum;
-    head = sum; head.connect(nodes.taps.delay);
-  }
-  if (state.reverb.on) {
-    nodes.reverb.buffer = makeImpulse(state.reverb.size);
-    head.connect(nodes.reverbDry);
-    head.connect(nodes.reverb);
-    nodes.reverb.connect(nodes.reverbWet);
-    const sum = ctx.createGain();
-    nodes.reverbDry.connect(sum); nodes.reverbWet.connect(sum);
-    nodes._reverbSum = sum;
-    head = sum; head.connect(nodes.taps.reverb);
-  }
+
+  // classic はEQのみ、それ以外は真空管モデル。並列に置いてゲインで選ぶ
+  const ampIn = ctx.createGain(), ampOut = ctx.createGain();
+  ampIn.connect(nodes.bass); nodes.presence.connect(nodes.ampClassicGain); nodes.ampClassicGain.connect(ampOut);
+  ampIn.connect(nodes.ampModel); nodes.ampModel.connect(nodes.ampModelGain); nodes.ampModelGain.connect(ampOut);
+  head = addUnit('amp', head, ampIn, ampOut);
+
+  // キャビネット: IRとフィルターは並列に置き、ゲインで選ぶ
+  const cabOut = ctx.createGain();
+  nodes.cabHp.connect(nodes.cabIR); nodes.cabIR.connect(nodes.cabIRGain); nodes.cabIRGain.connect(cabOut);
+  nodes.cabHp.connect(nodes.cabFilterGain); nodes.cabFilterGain.connect(nodes.cab); nodes.cab.connect(cabOut);
+  head = addUnit('cab', head, nodes.cabHp, cabOut);
+
+  const chorusSum = ctx.createGain();
+  head.connect(nodes.chorusDry); nodes.chorusDry.connect(chorusSum);
+  head.connect(nodes.chorusD1); head.connect(nodes.chorusD2);
+  nodes.chorusD1.connect(nodes.chorusWet); nodes.chorusD2.connect(nodes.chorusWet);
+  nodes.chorusWet.connect(chorusSum);
+  chorusSum.connect(nodes.taps.chorus);
+  head = chorusSum;
+
+  nodes.delay.connect(nodes.delayWet);
+  head = addSendUnit('delay', head, nodes.delayDry, nodes.delaySend, nodes.delay, nodes.delayWet);
+  nodes.reverb.connect(nodes.reverbWet);
+  head = addSendUnit('reverb', head, nodes.reverbDry, nodes.reverbSend, nodes.reverb, nodes.reverbWet);
 
   head.connect(nodes.master);
   nodes.master.connect(nodes.analyser);
@@ -1218,75 +1697,171 @@ function rebuildChain() {
 
   // ルーパー録音タップ（マスター＝加工済み出力を録る）
   nodes.master.connect(nodes.looperRec);
-  nodes.looperRec.connect(nodes.looperSilent);
-  nodes.looperSilent.connect(ctx.destination);
+}
 
-  // apply all params
+// 値の飛びによるクリックを防ぐため、パラメータは短い時定数で追従させる
+function smooth(param, value, tau = 0.01) {
+  param.setTargetAtTime(value, ctx.currentTime, tau);
+}
+
+// 現在の state（オン/オフとノブ）をオーディオグラフへ反映する
+function syncChain() {
+  Object.entries(nodes.units).forEach(([id, u]) => {
+    smooth(u.wet.gain, state[id].on ? 1 : 0, 0.005);
+    smooth(u.thru.gain, state[id].on ? 0 : 1, 0.005);
+  });
+  smooth(nodes.delaySend.gain, state.delay.on ? 1 : 0, 0.005);
+  smooth(nodes.reverbSend.gain, state.reverb.on ? 1 : 0, 0.005);
+  const useIR = cabIRBuffer && nodes.cabIR.buffer;
+  smooth(nodes.cabIRGain.gain, useIR ? cabIRGainValue : 0, 0.005);
+  smooth(nodes.cabFilterGain.gain, useIR ? 0 : 1, 0.005);
   pedals.forEach(p => p.knobs.forEach(k => applyParam(p.id, k.id)));
-  applyParam('drive', 'type');
+}
+
+// リバーブ長が変わったときだけIRを作り直す。差し替えのノイズはウェットを絞って隠す
+let reverbIRSize = 0, reverbIRTimer = null;
+function updateReverbIR(size) {
+  if (size === reverbIRSize) return;
+  reverbIRSize = size;
+  clearTimeout(reverbIRTimer);
+  if (!nodes.reverb.buffer) { nodes.reverb.buffer = makeImpulse(size); return; }
+  smooth(nodes.reverbWet.gain, 0);
+  const target = nodes.reverb;
+  reverbIRTimer = setTimeout(() => {
+    reverbIRTimer = null;
+    if (target !== nodes.reverb) return;
+    target.buffer = makeImpulse(reverbIRSize);
+    applyParam('reverb', 'mix');
+  }, 60);
 }
 
 function applyParam(pedal, param) {
+  if (!nodes.master) return;
   const s = state[pedal];
   switch (pedal) {
     case 'gate':
-      // crude gate threshold mapping to a fixed gain reduction floor handled in meter loop
+      smooth(nodes.gate.parameters.get('thresh'), s.thresh);
       break;
     case 'comp':
-      nodes.comp.threshold.value = s.thresh;
-      nodes.comp.ratio.value = s.ratio;
+      smooth(nodes.comp.threshold, s.thresh);
+      smooth(nodes.comp.ratio, s.ratio);
       nodes.comp.knee.value = 6;
       nodes.comp.attack.value = 0.003;
       nodes.comp.release.value = 0.25;
       break;
     case 'autowah':
-      nodes.wah.Q.value = s.q;
+      smooth(nodes.wah.parameters.get('sens'), s.sens);
+      smooth(nodes.wah.parameters.get('range'), s.range);
+      smooth(nodes.wah.parameters.get('q'), s.q);
       break;
     case 'drive':
-      nodes.shaper.curve = makeDistortionCurve(s.gain, s.type);
-      nodes.driveTone.frequency.value = s.tone;
-      nodes.driveLoCut.frequency.value = s.locut;
+      if (nodes.shaperKey !== s.gain + s.type) {
+        nodes.shaperKey = s.gain + s.type;
+        nodes.shaper.port.postMessage(makeDistortionCurve(s.gain, s.type));
+      }
+      smooth(nodes.driveTone.frequency, s.tone);
+      smooth(nodes.driveLoCut.frequency, s.locut);
       // Drive: 歪みへの突っ込み量。大きいほど深く歪む
-      nodes.driveIn.gain.value = s.drive;
+      smooth(nodes.driveIn.gain, s.drive);
       // 高ゲイン時は出力が暴れるのでLevelで補正（Driveが上がるほど自動で少し下げる）
       // プリのミッドブースト(+8dB)分、全体が持ち上がるので係数を 1.2→1.0 に軽く絞る
-      nodes.driveLevel.gain.value = (s.level / 100) * 1.0 / Math.sqrt(s.drive);
+      smooth(nodes.driveLevel.gain, (s.level / 100) * 1.0 / Math.sqrt(s.drive));
       break;
-    case 'amp':
-      nodes.bass.gain.value = s.bass;
-      nodes.mid.gain.value = s.mid;
-      nodes.treble.gain.value = s.treble;
-      nodes.presence.gain.value = s.presence;
+    case 'nam': {
+      if (!namReady) break;
+      const [a, b] = namSlots;
+      // 片方しかモデルがなければ、Route に関係なくその系統だけを使う
+      const route = !b.json && a.json ? 'a' : !a.json && b.json ? 'b' : !a.json ? 'a' : s.route;
+      const gainA = namSlotGain(a, s.levelA), gainB = namSlotGain(b, s.levelB);
+      const par = route === 'a+b' ? Math.SQRT1_2 : 1;
+      smooth(nodes.namIn.gain, Math.pow(10, s.input / 20));
+      smooth(nodes.namFeedA.gain, route === 'b' ? 0 : 1, 0.005);
+      smooth(nodes.namFeedB.gain, route === 'b' || route === 'a+b' ? 1 : 0, 0.005);
+      smooth(nodes.namAtoB.gain, route === 'a>b' ? gainA : 0, 0.005);
+      smooth(nodes.namOutA.gain, route === 'a' || route === 'a+b' ? gainA * par : 0, 0.005);
+      smooth(nodes.namOutB.gain, route === 'a' ? 0 : gainB * par, 0.005);
+      setNamActive(a, s.on && route !== 'b');
+      setNamActive(b, s.on && route !== 'a');
       break;
+    }
+    case 'amp': {
+      const classic = s.model === 'classic';
+      smooth(nodes.ampClassicGain.gain, classic ? 1 : 0, 0.005);
+      smooth(nodes.ampModelGain.gain, classic ? 0 : 1, 0.005);
+      if (!classic && nodes.ampModelKey !== s.model) {
+        nodes.ampModelKey = s.model;
+        nodes.ampModel.port.postMessage(s.model);
+      }
+      ['gain', 'power', 'bass', 'mid', 'treble', 'presence'].forEach(k => smooth(nodes.ampModel.parameters.get(k), s[k]));
+      smooth(nodes.bass.gain, s.bass);
+      smooth(nodes.mid.gain, s.mid);
+      smooth(nodes.treble.gain, s.treble);
+      smooth(nodes.presence.gain, s.presence);
+      break;
+    }
     case 'cab':
-      nodes.cab.frequency.value = s.cutoff;
+      smooth(nodes.cab.frequency, s.cutoff);
       break;
     case 'delay':
-      nodes.delay.delayTime.value = s.time;
-      nodes.delayFb.gain.value = s.fb / 100;
-      nodes.delayWet.gain.value = s.mix / 100;
-      nodes.delayDry.gain.value = 1;
+      smooth(nodes.delay.delayTime, s.time, 0.03);
+      smooth(nodes.delayFb.gain, s.fb / 100);
+      smooth(nodes.delayWet.gain, s.mix / 100);
       break;
-    case 'chorus':
-      nodes.chorusLfo1.frequency.value = s.rate;
-      nodes.chorusLfo2.frequency.value = s.rate * 1.15;
+    case 'chorus': {
+      const mix = s.on ? s.mix / 100 : 0;
+      smooth(nodes.chorusLfo1.frequency, s.rate);
+      smooth(nodes.chorusLfo2.frequency, s.rate * 1.15);
       // depth: 0〜100% を 0〜5ms の揺れ幅にマップ
-      nodes.chorusDepth1.gain.value = s.depth / 100 * 0.004;
-      nodes.chorusDepth2.gain.value = s.depth / 100 * 0.0045;
-      nodes.chorusWet.gain.value = s.mix / 100;
-      nodes.chorusDry.gain.value = 1 - (s.mix / 100) * 0.3;
+      smooth(nodes.chorusDepth1.gain, s.depth / 100 * 0.004);
+      smooth(nodes.chorusDepth2.gain, s.depth / 100 * 0.0045);
+      smooth(nodes.chorusWet.gain, mix);
+      smooth(nodes.chorusDry.gain, 1 - mix * 0.3);
       break;
+    }
     case 'reverb':
-      nodes.reverbWet.gain.value = s.mix / 100;
-      nodes.reverbDry.gain.value = 1;
+      updateReverbIR(s.size);
+      if (!reverbIRTimer) smooth(nodes.reverbWet.gain, s.mix / 100);
       break;
     case 'master':
-      nodes.master.gain.value = s.vol / 100 * 1.5;
+      smooth(nodes.master.gain, s.vol / 100 * 1.5);
       break;
   }
 }
 
-// ---- メーター & 簡易ノイズゲート ----
+// モデルの音量差はメタデータのラウドネスで揃える（±12dBまで）
+const NAM_TARGET_LOUDNESS = -13;
+function namSlotGain(slot, levelDb) {
+  const norm = slot.loudness === null ? 0 : Math.max(-12, Math.min(12, NAM_TARGET_LOUDNESS - slot.loudness));
+  return Math.pow(10, (levelDb + norm) / 20) * (slot.invert ? -1 : 1);
+}
+
+// 使わない系統は処理を止める。止めるのはクロスフェードが終わってから
+function setNamActive(slot, want) {
+  if (slot.want === want) return;
+  slot.want = want;
+  const node = slot.node;
+  if (want) node.port.postMessage({ active: true });
+  else setTimeout(() => { if (!slot.want) node.port.postMessage({ active: false }); }, 60);
+}
+
+function sendNamModel(slot) {
+  const token = ++slot.token;
+  slot.node.port.onmessage = e => {
+    if (e.data.slotToken !== slot.token) return;
+    if (!e.data.ok) {
+      slot.json = slot.name = slot.rate = slot.loudness = null;
+      updateNamSlotUI(slot, 'unsupported model');
+    } else {
+      slot.loudness = e.data.loudness;
+      slot.slimmable = e.data.slimmable;
+      updateNamSlotUI(slot);
+    }
+    applyParam('nam', 'route');
+  };
+  slot.node.port.postMessage({ json: slot.json, token });
+}
+
+// ---- メーター ----
 let clipHold = 0;
 
 // 各ユニットの粗いバーグラフ（右→左に流れる。5バー・粗いタイムスケール）
@@ -1304,7 +1879,7 @@ document.querySelectorAll('canvas.vu').forEach(cv => {
 // 段ごとの表示ゲイン（ディストーション前は音が小さいので持ち上げる）
 const VU_GAIN = {
   gate: 8, comp: 8, autowah: 8,
-  drive: 3.2, amp: 3.2, cab: 3.2,
+  drive: 3.2, nam: 3.2, amp: 3.2, cab: 3.2,
   chorus: 3.2, delay: 3.2, reverb: 3.2, master: 3.2,
 };
 
@@ -1436,6 +2011,7 @@ function meterLoop() {
   vuTick++;
   if (vuTick >= VU_DECIMATE) {
     vuTick = 0;
+    updateLatencyStatus();
     Object.keys(vuCanvases).forEach(id => {
       const on = state[id] && state[id].on;
       pushVU(id, on ? tapLevel(id) : 0);
@@ -1463,47 +2039,70 @@ function meterLoop() {
   if (clipHold > 0) clipHold--;
   document.getElementById('clipDot').classList.toggle('clip-on', clipHold > 0);
 
-  // simple noise gate（入力レベルで判定する）
-  if (state.gate.on && nodes.gateGain) {
-    const target = inDb < state.gate.thresh ? 0 : 1;
-    const cur = nodes.gateGain.gain.value;
-    nodes.gateGain.gain.value = cur + (target - cur) * 0.2;
-  }
-
-  // Auto Wah: 入力エンベロープでバンドパスの中心周波数を動かす
-  if (state.autowah.on && nodes.wah) {
-    const s = state.autowah;
-    // inRms(おおよそ0〜0.5)を感度で増幅し 0..1 のエンベロープに
-    const env = Math.min(1, inRms * (1 + s.sens / 10));
-    const base = 250;
-    const target = base + env * s.range;
-    const cur = nodes.wah.frequency.value;
-    // アタックは速く、リリースはゆっくり追従させてワウらしい動き
-    const coef = target > cur ? 0.5 : 0.08;
-    nodes.wah.frequency.value = cur + (target - cur) * coef;
-  }
-
   // チューナー（ONのときだけピッチ検出）
   if (state.tuner.on && nodes.tunerAnalyser) updateTuner();
 
   rafId = requestAnimationFrame(meterLoop);
 }
 
+// ブラウザ報告値の入力+処理+出力レイテンシを表示（実測の往復遅延とは異なる）
+function updateLatencyStatus() {
+  const input = stream.getAudioTracks()[0].getSettings().latency || 0;
+  const total = input + (ctx.baseLatency || 0) + (ctx.outputLatency || 0);
+  document.getElementById('status').textContent = `${ctx.sampleRate / 1000}kHz ${(total * 1000).toFixed(1)}ms`;
+}
+
+// NAMはサーバー経由のときだけ読み込む。失敗しても他の機能はそのまま動かす
+// 更新時にブラウザのキャッシュで古いエンジンを読まないよう、URLにバージョンを付ける
+const NAM_VERSION = 2;
+let namReady = false, namWasm = null;
+async function loadNamEngine() {
+  if (location.protocol === 'file:') return false;
+  try {
+    await ctx.audioWorklet.addModule(`vendor/nam/nam-processor.js?v=${NAM_VERSION}`);
+    if (!namWasm) {
+      const get = async url => (await fetch(url)).arrayBuffer();
+      namWasm = { od: await get(`vendor/nam/nam.wasm?v=${NAM_VERSION}`), t3k: await get(`vendor/nam/t3k-engine.wasm?v=${NAM_VERSION}`) };
+    }
+    return true;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
 // ---- 起動/停止 ----
+// 単一HTMLのまま読み込めるよう、ワークレットはBlob URLにする
+const workletUrl = URL.createObjectURL(new Blob([document.getElementById('dspWorklet').textContent], { type: 'text/javascript' }));
+
 async function start() {
   try {
-    ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+    ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 0 });
     stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      audio: {
+        echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+        channelCount: { ideal: 1 }, latency: { ideal: 0 }
+      }
     });
     source = ctx.createMediaStreamSource(stream);
+    await ctx.audioWorklet.addModule(workletUrl);
+    namReady = await loadNamEngine();
+    reverbIRSize = 0;
     buildNodes();
-    rebuildChain();
+    connectGraph();
+    if (namReady) namSlots.forEach(slot => {
+      slot.want = undefined;
+      slot.node.port.postMessage({ wasm: namWasm });
+      slot.node.port.postMessage({ slim: slot.lite ? 0 : 1 });
+      if (slot.json) sendNamModel(slot);
+      updateNamSlotUI(slot);
+    });
+    syncChain();
     running = true;
     const btn = document.getElementById('powerBtn');
     btn.innerHTML = '<span class="power-dot"></span>ON';
     btn.classList.add('live');
-    document.getElementById('status').textContent = `${ctx.sampleRate / 1000}kHz`;
+    updateLatencyStatus();
     meterLoop();
   } catch (e) {
     document.getElementById('status').textContent = 'ERROR';
@@ -1530,8 +2129,8 @@ function stop() {
   });
   // ルーパーは電源に依存するので停止（メトロノームは独立して継続）
   stopPlayback();
-  looper.state = 'empty'; looper.recActive = false;
-  looper.buffer = null; looper.recData = [];
+  looper.state = 'empty'; looper.recId++;
+  looper.buffer = null;
   resetLooperUI();
   updateClock(); // メトロノームが動作中ならクロックは維持される
 }
@@ -1542,7 +2141,7 @@ const looper = {
   countBeats: 4, bars: 4, recMetro: true, recScene: 0, playScene: 1,
   state: 'empty',              // empty | countin | recording | playing | stopped
   buffer: null, source: null, gain: null,
-  recActive: false, recData: [], recNeeded: 0, recCount: 0,
+  recId: 0,
   phaseBeat: 0, targetBeats: 0,
 };
 const clock = { running: false, timer: null, nextTime: 0, barBeat: 0 };
@@ -1772,7 +2371,7 @@ function handleBeat(time) {
       looper.state = 'recording';
       looper.phaseBeat = 0;
       looper.targetBeats = looper.bars * metro.beats;
-      scheduleAt(time + 60 / metro.bpm, startCapture);
+      startCapture(time + 60 / metro.bpm);
     }
   } else if (looper.state === 'recording') {
     looper.phaseBeat++;
@@ -1796,17 +2395,13 @@ function scheduleClick(time, accent) {
 function scheduleDot(time, idx) {
   setTimeout(() => renderDots(idx), Math.max(0, (time - metroCtx.currentTime) * 1000));
 }
-function scheduleAt(time, fn) {
-  setTimeout(fn, Math.max(0, (time - metroCtx.currentTime) * 1000));
-}
-
 // ---- ルーパー本体（録音はギターの ctx を使うので電源ONが必要）----
 function armRecord() {
   if (!running) { setStatus('POWER OFF'); return; }
   switchScene(looper.recScene);
   looper.state = 'countin';
   looper.phaseBeat = 0;
-  looper.recData = []; looper.recCount = 0; looper.recActive = false;
+  cancelCapture();
   clock.barBeat = 0; // カウントインを小節頭から
   utilDom.lRec.classList.add('armed');
   updatePlayStopBtn();
@@ -1814,25 +2409,27 @@ function armRecord() {
   updateClock();
 }
 
-function startCapture() {
-  const spb = 60 / metro.bpm;
-  looper.recNeeded = Math.round(looper.bars * metro.beats * spb * ctx.sampleRate);
-  looper.recCount = 0;
-  looper.recData = [];
-  looper.recActive = true;
+// metroCtx 上の拍の時刻を ctx のフレームに換算し、その位置から録音する
+function startCapture(time) {
+  const startFrame = Math.round((ctx.currentTime + time - metroCtx.currentTime) * ctx.sampleRate);
+  const len = Math.round(looper.bars * metro.beats * 60 / metro.bpm * ctx.sampleRate);
+  const data = new Float32Array(len);
+  nodes.looperRec.port.postMessage({ id: ++looper.recId, startFrame, data }, [data.buffer]);
+}
+function cancelCapture() {
+  looper.recId++;
+  if (nodes.looperRec) nodes.looperRec.port.postMessage({ cancel: true });
 }
 
-function finalizeLoop() {
-  const len = looper.recNeeded;
-  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  let off = 0;
-  for (const chunk of looper.recData) { d.set(chunk, off); off += chunk.length; }
+function finalizeLoop({ id, data: d }) {
+  if (id !== looper.recId) return; // 取り消し済みの録音
+  const len = d.length;
   // ループ境界のプチノイズ対策に短いフェード
   const f = Math.min(256, len >> 1);
   for (let i = 0; i < f; i++) { const g = i / f; d[i] *= g; d[len - 1 - i] *= g; }
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  buf.copyToChannel(d, 0);
   looper.buffer = buf;
-  looper.recData = [];
   looper.state = 'playing';
   switchScene(looper.playScene);   // 再生シーンへ切替
   startPlayback();
@@ -1868,7 +2465,7 @@ function playLoop() {
 }
 function stopLooper() {
   const had = looper.buffer;
-  looper.recActive = false;
+  cancelCapture();
   stopPlayback();
   looper.state = had ? 'stopped' : 'empty';
   looper.phaseBeat = 0;
@@ -1878,9 +2475,9 @@ function stopLooper() {
   updateClock();
 }
 function clearLoop() {
-  looper.recActive = false;
+  cancelCapture();
   stopPlayback();
-  looper.buffer = null; looper.recData = [];
+  looper.buffer = null;
   looper.state = 'empty'; looper.phaseBeat = 0;
   utilDom.lRec.classList.remove('armed');
   updatePlayStopBtn();
