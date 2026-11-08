@@ -25,8 +25,13 @@
 <style>
   html, body { margin: 0; height: 100%; background: #04080b; overflow: hidden; font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif; }
   canvas { display: block; }
-  #loading { position: fixed; inset: 0; display: grid; place-items: center; color: #9cc7d4; background: #04080b; letter-spacing: .2em; font-size: 14px; transition: opacity 1.2s; z-index: 5; }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; color: #9cc7d4; background: #04080b; transition: opacity 1.2s; z-index: 5; }
   #loading.done { opacity: 0; pointer-events: none; }
+  #loading .box { width: min(260px, calc(100vw - 32px)); text-align: center; }
+  #loading .title { font-size: 14px; letter-spacing: .3em; margin-bottom: 14px; }
+  #loading .bar { height: 2px; background: rgba(127, 208, 230, .15); overflow: hidden; }
+  #loading .fill { height: 100%; width: 0%; background: #7fd0e6; }
+  #loading .step { display: flex; justify-content: space-between; margin-top: 10px; font-size: 11px; letter-spacing: .08em; color: #6f97a3; font-variant-numeric: tabular-nums; }
   #label { position: fixed; pointer-events: none; color: #e6f4f8; font-size: 13px; padding: 6px 10px; border-left: 2px solid #7fd0e6;
            background: rgba(4, 14, 20, .55); backdrop-filter: blur(4px); transform: translate(14px, -50%); opacity: 0; transition: opacity .25s; white-space: nowrap; }
   #label small { display: block; color: #8fb4c0; font-size: 11px; margin-top: 2px; }
@@ -43,7 +48,11 @@
 </script>
 </head>
 <body>
-<div id="loading">読み込み中…</div>
+<div id="loading"><div class="box">
+  <div class="title">読み込み中</div>
+  <div class="bar"><div class="fill" id="loadFill"></div></div>
+  <div class="step"><span id="loadStep">準備しています</span><span id="loadPct">0%</span></div>
+</div></div>
 <div id="label"></div>
 <div id="plate"><b>黒潮の海</b>ドラッグで見回す ・ ホイールで近づく ・ 魚にカーソルで名前</div>
 <div id="credit">魚のモデルと動き：<a href="https://cda-social.github.io/fish/gallery.html" target="_blank" rel="noopener">Fish Kit</a>（CC0）</div>
@@ -414,24 +423,43 @@ makeWall(SIDE_LEN, 7, 8.2, (m) => { m.rotation.y = -Math.PI / 2; m.position.set(
   scene.add(im);
 }
 
-// 地面の高さ（岩の上を含む）を、真上から測って表にしておく
-const groundRay = new THREE.Raycaster();
+// 地面の高さ（岩・沈めたものの上を含む）を表にしておく。真上から 1 回描いて、いちばん上の面の高さを読む
+// （1 点ずつ光線を当てると 1 万本以上で 20 秒以上かかった）
 const groundGrid = { nx: 132, nz: 90, h: null };
 function buildGroundGrid() {
   const { nx, nz } = groundGrid;
+  const dx = (TANK.x1 - TANK.x0) / (nx - 1), dz = (TANK.z1 - TANK.z0) / (nz - 1);
+  const W = dx * nx, H = dz * nz, cx = (TANK.x0 + TANK.x1) / 2, cz = (TANK.z0 + TANK.z1) / 2;
+  // 画面の右が +x、上が −z になるよう真下を向け、画素の中心が表の点に重なるようにする
+  const cam = new THREE.OrthographicCamera(-W / 2, W / 2, H / 2, -H / 2, 0.1, 40);
+  cam.up.set(0, 0, -1); cam.position.set(cx, 20, cz); cam.lookAt(cx, 0, cz);
+  cam.layers.set(1);
+  for (const m of rocks) m.layers.enable(1);
+  const rt = new THREE.WebGLRenderTarget(nx, nz, { type: THREE.FloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+  const heightMat = new THREE.ShaderMaterial({
+    side: THREE.DoubleSide,
+    vertexShader: `varying float vY; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vY = w.y; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `varying float vY; void main(){ gl_FragColor = vec4(vY, 0.0, 0.0, 1.0); }`,
+  });
+  const bg = scene.background, prevColor = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+  const shadowAuto = renderer.shadowMap.autoUpdate;
+  scene.background = null; scene.overrideMaterial = heightMat; renderer.shadowMap.autoUpdate = false;
+  renderer.setClearColor(new THREE.Color(-10, 0, 0), 1);
+  renderer.setRenderTarget(rt); renderer.render(scene, cam); renderer.setRenderTarget(null);
+  scene.background = bg; scene.overrideMaterial = null; renderer.shadowMap.autoUpdate = shadowAuto;
+  renderer.setClearColor(prevColor, prevAlpha);
+  const px = new Float32Array(nx * nz * 4);
+  renderer.readRenderTargetPixels(rt, 0, 0, nx, nz, px);
+  rt.dispose(); heightMat.dispose();
+  for (const m of rocks) m.layers.disable(1);
+  // 読み出しの行 0 は画面の下（+z、ガラス側）
   const h = new Float32Array(nx * nz);
-  const down = new THREE.Vector3(0, -1, 0), o = new THREE.Vector3();
-  scene.updateMatrixWorld(true);
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
-    const x = TANK.x0 + (TANK.x1 - TANK.x0) * i / (nx - 1);
-    const z = TANK.z0 + (TANK.z1 - TANK.z0) * j / (nz - 1);
-    o.set(x, 8, z); groundRay.set(o, down);
-    const hit = groundRay.intersectObjects(rocks, false)[0];
-    h[j * nx + i] = Math.max(floorHeight(x, z), hit ? hit.point.y : -1);
+    const x = TANK.x0 + dx * i, z = TANK.z0 + dz * j;
+    h[j * nx + i] = Math.max(floorHeight(x, z), px[((nz - 1 - j) * nx + i) * 4]);
   }
   groundGrid.h = h;
-}
-function groundAt(x, z) {
+}function groundAt(x, z) {
   const { nx, nz, h } = groundGrid;
   if (!h) return floorHeight(x, z);
   const fx = clamp((x - TANK.x0) / (TANK.x1 - TANK.x0) * (nx - 1), 0, nx - 1.001);
@@ -744,11 +772,12 @@ const PROPS = [
   { file: 'props/amphora.glb', x: -0.9, z: -3.0, size: 0.6, rotY: 2.6 + Math.PI / 4, tilt: 1.45, sink: 0.18 },
   { file: 'props/amphora.glb', x: -4.5, z: -3.0, size: 0.55, rotY: 0.3, tilt: 0.12, sink: 0.12 },
 ];
-async function loadProps() {
+async function loadProps(step = async () => {}) {
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
   const cache = new Map();
-  for (const p of PROPS) {
+  for (const [pi, p] of PROPS.entries()) {
+    await step(pi / PROPS.length);
     try {
       if (!cache.has(p.file)) cache.set(p.file, loader.loadAsync(p.file));
       const gltf = await cache.get(p.file);
@@ -1040,34 +1069,56 @@ function cruisers(id, n, cmRange, opt = {}) {
   }
 }
 
-function populate() {
+async function populate(step = async () => {}) {
   // 群れ
   const sk = new School('katakuchi', 110, [9, 13], { x0: -4, x1: 4, y0: 2.4, y1: 4.0, z0: -6.5, z1: -2.2 }, { detail: 'low', pull: 0.25, speedK: 0.9 });
   sk.burstK = 0.03;
+  await step(1/22);
   new School('aji', 34, [20, 27], { x0: -4.5, x1: 4.5, y0: 1.2, y1: 3.4, z0: -6.8, z1: -2.0 }, { pull: 0.3 }).burstK = 0.015;
+  await step(2/22);
   new School('saba', 16, [28, 34], { x0: -4, x1: 4, y0: 2.2, y1: 3.8, z0: -7, z1: -2.5 }, { pull: 0.35, speedK: 0.8 });
+  await step(3/22);
   new School('kamasu', 9, [30, 38], { x0: -4, x1: 4, y0: 1.5, y1: 3.0, z0: -7, z1: -3 }, { pull: 0.3, speedK: 0.7 });
+  await step(4/22);
   new School('isaki_young', 14, [15, 20], { x0: -3.5, x1: 3.5, y0: 0.7, y1: 2.0, z0: -6.5, z1: -2.5 }, { pull: 0.3, speedK: 0.8 });
+  await step(5/22);
   new School('isaki', 10, [28, 35], { x0: -4, x1: 4, y0: 1.0, y1: 2.6, z0: -7, z1: -3 }, { pull: 0.25, speedK: 0.75 });
+  await step(6/22);
   // 回遊する大きな魚
   cruisers('buri', 4, [70, 88], { speed: 0.75 });
+  await step(7/22);
   cruisers('hiramasa', 2, [85, 100], { speed: 0.8 });
+  await step(8/22);
   cruisers('kihada', 1, [128, 135], { speed: 0.95 });
+  await step(9/22);
   cruisers('sawara', 2, [65, 75], { speed: 0.7 });
+  await step(10/22);
   cruisers('seabass', 3, [60, 75], { speed: 0.45 });
+  await step(11/22);
   // 根につく魚
   reef('madai', 6, [40, 55], [0, 1.4, -5.2], [4.5, 0.7, 2.4], { restChance: 0.25 });
+  await step(12/22);
   reef('kurodai', 5, [35, 45], [-3.5, 1.0, -5.5], [2.5, 0.5, 2.0], { restChance: 0.35 });
+  await step(13/22);
   reef('onagagure', 4, [38, 45], [4.0, 1.4, -6.0], [2.0, 0.6, 1.6], { restChance: 0.4 });
+  await step(14/22);
   reef('kuchibuto', 4, [32, 40], [-4.5, 1.5, -6.2], [1.8, 0.6, 1.5], { restChance: 0.4 });
+  await step(15/22);
   reef('shibudai', 3, [42, 50], [2.0, 0.9, -6.5], [3.0, 0.4, 1.5], { restChance: 0.35 });
+  await step(16/22);
   reef('mebaru', 9, [18, 25], [-4.6, 2.0, -6.6], [1.4, 0.8, 1.2], { restChance: 0.85, restTime: [5, 14], speed: 0.15 });
+  await step(17/22);
   reef('mebaru', 6, [18, 24], [4.6, 2.4, -6.8], [1.2, 0.8, 1.0], { restChance: 0.85, restTime: [5, 14], speed: 0.15 });
+  await step(18/22);
   reef('tachiuo', 2, [95, 110], [0.5, 3.0, -7.2], [2.5, 0.5, 0.6], { kind: 'reef', restChance: 0.8, restTime: [8, 20], speed: 0.2 });
+  await step(19/22);
   // 底の魚
   reef('kasago', 4, [22, 28], [-4.4, 0, -5.8], [1.4, 0, 1.3], { bottom: true, restChance: 0.95, restTime: [12, 40], speed: 0.25, startRest: true });
+  await step(20/22);
   reef('kasago', 3, [22, 28], [4.2, 0, -6.0], [1.4, 0, 1.3], { bottom: true, restChance: 0.95, restTime: [12, 40], speed: 0.25, startRest: true });
+  await step(21/22);
   reef('magochi', 3, [45, 55], [0.5, 0, -3.6], [3.5, 0, 1.2], { bottom: true, restChance: 0.95, restTime: [20, 60], speed: 0.3, startRest: true });
+  await step(22/22);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1278,13 +1329,69 @@ function vrMove(dt) {
 // 起動
 // ---------------------------------------------------------------------------------------------
 const loading = document.getElementById('loading');
-await loadProps();
+// 進み具合：段階ごとに全体の何 % を受け持つかを決め、段階の中の進みで埋める
+const loadUI = { fill: document.getElementById('loadFill'), step: document.getElementById('loadStep'), pct: document.getElementById('loadPct'), shown: 0 };
+const STAGES = [
+  ['props', '沈めたものを読み込んでいます', 6],
+  ['ground', '海底を作っています', 4],
+  ['fish', '魚を読み込んでいます', 55],
+  ['spawn', '魚を放しています', 20],
+  ['swim', '群れを泳がせています', 7],
+  ['compile', '描く準備をしています', 8],
+];
+const stageStart = {}; { let acc = 0; for (const [k, , w] of STAGES) { stageStart[k] = acc; acc += w; } }
+let lastPaint = 0;
+// 画面を書き換える機会を作る（重い処理の合間に呼ぶ。描き直しは 1 フレームに 1 回まで）
+const yieldFrame = () => new Promise((r) => { const t = setTimeout(r, 50); requestAnimationFrame(() => { clearTimeout(t); r(); }); });
+async function progress(stage, f = 0) {
+  const st = STAGES.find((s) => s[0] === stage);
+  const v = Math.max(loadUI.shown, Math.min(100, stageStart[stage] + st[2] * clamp(f, 0, 1)));
+  loadUI.shown = v;
+  loadUI.fill.style.width = v.toFixed(1) + '%';
+  loadUI.pct.textContent = Math.floor(v) + '%';
+  loadUI.step.textContent = st[1];
+  const now = performance.now();
+  if (now - lastPaint > 30) { lastPaint = now; await yieldFrame(); }
+}
+await progress('props', 0);
+await loadProps((f) => progress('props', f));
+await progress('ground', 0);
 buildGroundGrid();
+await progress('ground', 0.6);
 buildKelp();
-await loadFish('./fish/');
-populate();
+// 魚のファイル（glb と頭の写真）は three.js の読み込み管理を通るので、読み終えた数で進める
+await progress('fish', 0);
+{
+  const mgr = THREE.DefaultLoadingManager;
+  let base = null;
+  // 魚 1 種で 8 件（glb 2 つ・その中の画像 4 枚・頭の写真 2 枚。写真のない種類もある）。
+  // 種類ごとに順に読むので途中の総数は増えていく。最初から全体の見込みで割り、進みが戻らないようにする
+  const expected = FISH.length * 8 - 2;
+  mgr.onProgress = (url, loaded, total) => {
+    if (base === null) base = loaded - 1;
+    progress('fish', (loaded - base) / Math.max(expected, total - base));
+  };
+  // 読み込んだあとの形の組み立てが重く、その間は画面が止まる。4 種ずつ読み、合間に表示を書き換える
+  const ids = FISH.map((f) => f.id);
+  for (let i = 0; i < ids.length; i += 4) {
+    await loadFish('./fish/', ids.slice(i, i + 4));
+    await yieldFrame();
+  }
+  mgr.onProgress = undefined;
+}
+await progress('spawn', 0);
+await populate((f) => progress('spawn', f));
 // 群れを少し泳がせてから見せる
-for (let i = 0; i < 90; i++) { for (const s of schools) s.update(1 / 30); for (const a of agents) a.update(1 / 30); }
+for (let i = 0; i < 90; i++) {
+  for (const s of schools) s.update(1 / 30);
+  for (const a of agents) a.update(1 / 30);
+  if (i % 10 === 9) await progress('swim', (i + 1) / 90);
+}
+// 最初の 1 枚で材質をまとめて組み立てると止まるので、先に済ませておく
+await progress('compile', 0);
+updateCamera(0, 1);
+try { await renderer.compileAsync(scene, camera); } catch (e) { /* 古いブラウザでは最初の描画で組み立てる */ }
+await progress('compile', 1);
 loading.classList.add('done');
 
 const clock = new THREE.Timer();
