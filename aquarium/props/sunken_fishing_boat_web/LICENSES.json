@@ -1,0 +1,36 @@
+{
+  "restricted": false,
+  "components": [
+    {
+      "name": "Tongyi-MAI/Z-Image-Turbo",
+      "kind": "weights",
+      "license": "Apache-2.0",
+      "commercial": true
+    },
+    {
+      "name": "ZhengPeng7/BiRefNet",
+      "kind": "weights",
+      "license": "MIT",
+      "commercial": true
+    },
+    {
+      "name": "facebook/dinov3-vitl16-pretrain-lvd1689m",
+      "kind": "weights",
+      "license": "DINOv3 License",
+      "commercial": true,
+      "attribution": "Built with DINOv3"
+    },
+    {
+      "name": "microsoft/TRELLIS-image-large",
+      "kind": "weights",
+      "license": "MIT",
+      "commercial": true
+    },
+    {
+      "name": "microsoft/TRELLIS.2-4B",
+      "kind": "weights",
+      "license": "MIT",
+      "commercial": true
+    }
+  ]
+}
