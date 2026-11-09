@@ -863,10 +863,10 @@ const bubbles = makePoints(420, `
 const PROPS = [
   // file, x, z, 長辺 m, 回転 y, 傾き z, 沈める割合
   { file: 'props/sunken_boat.glb', x: -1.6, z: -4.9, size: 3.6, rotY: 0.22, tilt: -0.1, roll: 0.42, sink: 0.3, avoid: true },
-  { file: 'props/anchor.glb', x: 3.3, z: -4.55, size: 1.3, rotY: -0.1, tilt: 0.08 - Math.PI / 6, roll: -0.55, sink: 0.1 },
-  { file: 'props/barrel.glb', x: 0.15, z: -3.7, size: 0.55, rotY: 0.9, tilt: 1.45, sink: 0.15 },
-  { file: 'props/barrel.glb', x: -3.6, z: -4.1, size: 0.5, rotY: 2.2, tilt: 0.1, sink: 0.08 },
-  { file: 'props/amphora.glb', x: -0.9, z: -3.0, size: 0.6, rotY: 2.6 + Math.PI / 4, tilt: 1.45, sink: 0.18 },
+  { file: 'props/anchor.glb', x: 3.3, z: -4.55, size: 1.3, rotY: -0.1, tilt: 0.08 - Math.PI / 6, roll: -0.55, sink: 0.1, tint: [3.6, 2.8, 2.1] },
+  { file: 'props/barrel.glb', x: -0.15, z: -3.7, size: 0.83, rotY: 0.9, tilt: 1.45, sink: 0.15, tint: [3.2, 2.6, 2.0] },
+  { file: 'props/barrel.glb', x: -3.6, z: -4.1, size: 0.75, rotY: 2.2, tilt: 0.1, sink: 0.08, tint: [3.2, 2.6, 2.0] },
+  { file: 'props/amphora.glb', x: -1.8, z: -3.0, size: 0.6, rotY: 2.6 + Math.PI / 4, tilt: 1.45, sink: 0.18 },
   { file: 'props/amphora.glb', x: -4.5, z: -3.0, size: 0.55, rotY: 0.3, tilt: 0.12, sink: 0.12 },
 ];
 async function loadProps(step = async () => {}) {
@@ -906,8 +906,14 @@ async function loadProps(step = async () => {}) {
       obj.traverse((o) => {
         if (!o.isMesh) return;
         o.castShadow = o.receiveShadow = true;
+        if (p.tint) o.material = Array.isArray(o.material) ? o.material.map((m) => m.clone()) : o.material.clone();
         const mats = Array.isArray(o.material) ? o.material : [o.material];
         for (const m of mats) {
+          // 目立たせたいものは色を持ち上げ、暗がりでも少し浮くように自分の色でうっすら光らせる
+          if (p.tint && m.color) {
+            m.color.multiply(new THREE.Color(...p.tint));
+            if (m.emissive) { m.emissive.setRGB(p.tint[0] * 0.12, p.tint[1] * 0.12, p.tint[2] * 0.12); m.emissiveMap = m.map ?? null; }
+          }
           // 水の中で長く経った色：少し暗く、緑がかる
           if (m.color) m.color.multiply(new THREE.Color(1.1, 1.18, 1.12));
           m.roughness = Math.max(m.roughness ?? 1, 0.75);
