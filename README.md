@@ -15,6 +15,13 @@ https://kishida.github.io/webdemos/
 
 2026/10/08
 
+## 水槽
+
+[水槽](aquarium/index.html)  
+![水槽](aquarium/ogp.png)
+
+2026/11/8
+
 ## フライトシミュレーター
 
 [フライトシミュレーター](flightsim/index.html)  
