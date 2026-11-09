@@ -1309,6 +1309,9 @@ rig.add(camera);
 scene.add(rig);
 renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local-floor');
+// PC につなぐヘッドセット（SteamVR など）は既定の描画解像度がとても大きい（Rift S で両目 4032×2172）。
+// 水の霧や影を全画素で計算すると間に合わないので、PC では少し下げる
+if (!/Android|Quest|OculusBrowser|Mobile/i.test(navigator.userAgent)) renderer.xr.setFramebufferScaleFactor(0.7);
 // ?xremu を付けると、ヘッドセットなしで VR を試せる（Meta の WebXR エミュレーター IWER を読み込む）
 if (new URLSearchParams(location.search).has('xremu')) {
   const { XRDevice, metaQuest3 } = await import('https://cdn.jsdelivr.net/npm/iwer@2.1.1/+esm');
@@ -1318,6 +1321,22 @@ if (new URLSearchParams(location.search).has('xremu')) {
   if (typeof window.XRWebGLBinding !== 'function') window.XRWebGLBinding = class {};
   dev.position.set(0, 1.6, 0);
   window.__xrDevice = dev;
+}
+// PC の Chrome / Edge は XRWebGLBinding.createProjectionLayer を持つが、セッションで 'layers' が有効にならない。
+// three.js はそれでも投影レイヤーで描こうとし、フレームが来ないまま止まる（SteamVR に「応答なし」と出る）。
+// 'layers' が有効でないセッションでは、XRWebGLLayer で描かせる
+{
+  const xrProto = navigator.xr && Object.getPrototypeOf(navigator.xr);
+  if (xrProto) {
+    const request = xrProto.requestSession;
+    xrProto.requestSession = async function (...args) {
+      const session = await request.apply(this, args);
+      const layersOn = session.enabledFeatures?.includes('layers');
+      if (!layersOn && typeof window.XRWebGLBinding === 'function' && 'createProjectionLayer' in window.XRWebGLBinding.prototype)
+        window.XRWebGLBinding = class {};
+      return session;
+    };
+  }
 }
 // VR に入れるブラウザ（ヘッドセットのブラウザや、つないだ PC）のときだけボタンを出す
 navigator.xr?.isSessionSupported('immersive-vr')

@@ -328,6 +328,8 @@ function updateCamera(dt) {
     const vr = st.vel.dot(toCam);
     view.doppler = clamp(340 / (340 - vr), 0.6, 1.6);
   }
+  // VR は奥行きの精度が落ちやすい（滑走路と路肩など数 cm 差の面がちらつく）ので、手前の限界を遠めにする
+  if (xr) camera.near = 0.5;
   camera.updateProjectionMatrix();
   if (xr) {
     // 視点の位置と向きをリグに移す。コックピットは機体の姿勢ごと、それ以外は水平の向きだけ（酔い防止）

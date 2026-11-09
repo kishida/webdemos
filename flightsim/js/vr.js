@@ -29,7 +29,10 @@ export class VR {
     this.panel = new THREE.Mesh(new THREE.PlaneGeometry(PANEL_W, PANEL_W * HUD_H / HUD_W), mat);
     this.panel.position.set(0, PANEL_Y, -PANEL_DIST);
     this.panel.renderOrder = 999; this.panel.frustumCulled = false; this.panel.visible = false;
-    this.rig.add(this.panel);
+    // HUD はリグとは別の入れ物に置き、常に水平にする（機内視点で機体と一緒に傾かないように）
+    this.hudAnchor = new THREE.Group(); this.hudAnchor.add(this.panel); scene.add(this.hudAnchor);
+    // 視点リセットの補正（origin に入れるのは描画の直前だけ）
+    this.offPos = new THREE.Vector3(); this.offQuat = new THREE.Quaternion();
     // 入力
     this.prev = {};           // ボタンの前回状態（エッジ検出）
     this.recenterReq = false;
@@ -49,7 +52,7 @@ export class VR {
     const session = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] });
     session.addEventListener('end', () => {
       this.session = null; this.panel.visible = false;
-      this.reset(); this.origin.position.set(0, 0, 0); this.origin.quaternion.identity(); this.origin.updateMatrixWorld(true);
+      this.offPos.set(0, 0, 0); this.offQuat.identity(); this.reset();
       if (this.onEnd) this.onEnd();
     });
     await this.renderer.xr.setSession(session);
@@ -60,12 +63,16 @@ export class VR {
 
   exit() { if (this.session) this.session.end(); }
 
-  // updateCamera() の前に呼ぶ: リグを原点に戻して、通常のカメラ計算をワールド座標で行えるようにする
+  // updateCamera() の前に呼ぶ: リグと補正を原点に戻して、通常のカメラ計算（lookAt など）をワールド座標で行えるようにする
   beginFrame() {
     if (this.recenterReq) this.doRecenter();
     this.reset();
   }
-  reset() { this.rig.position.set(0, 0, 0); this.rig.quaternion.identity(); this.rig.updateMatrixWorld(true); }
+  reset() {
+    this.rig.position.set(0, 0, 0); this.rig.quaternion.identity();
+    this.origin.position.set(0, 0, 0); this.origin.quaternion.identity();
+    this.rig.updateMatrixWorld(true);
+  }
 
   // 通常のカメラ計算の結果（camera の位置・向き）をリグに移す
   // full: 機体の姿勢ごと（コックピット）/ それ以外は水平の向きだけ（酔い防止）。yaw を渡すとその向きに固定
@@ -77,7 +84,13 @@ export class VR {
       const y = yaw ?? new THREE.Euler().setFromQuaternion(cam.quaternion, 'YXZ').y;
       this.rig.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), y);
     }
+    this.origin.position.copy(this.offPos); this.origin.quaternion.copy(this.offQuat);
     this.rig.updateMatrixWorld(true);
+    // HUD: 目の位置から機首の前方に置く。ピッチは機体に合わせ、ロール（左右の傾き）だけ外して常に水平にする
+    const e = new THREE.Euler().setFromQuaternion(this.rig.quaternion, 'YXZ');
+    this.hudAnchor.position.copy(this.rig.position);
+    this.hudAnchor.quaternion.setFromEuler(new THREE.Euler(e.x, e.y, 0, 'YXZ'));
+    this.hudAnchor.updateMatrixWorld(true);
   }
 
   // 今の頭の位置・水平の向きを、リグの原点（目の位置）に合わせる
@@ -90,7 +103,7 @@ export class VR {
     const p = pose.transform.position, o = pose.transform.orientation;
     const yaw = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(o.x, o.y, o.z, o.w), 'YXZ').y;
     const m = new THREE.Matrix4().makeRotationY(yaw).setPosition(p.x, p.y, p.z).invert();
-    m.decompose(this.origin.position, this.origin.quaternion, new THREE.Vector3());
+    m.decompose(this.offPos, this.offQuat, new THREE.Vector3());
   }
 
   // コントローラー入力。presses: 押された瞬間のボタン名（'R.a' など）
