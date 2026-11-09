@@ -22,6 +22,7 @@
 <meta name="twitter:site" content="@kis"/>
 
 <title>森を歩くだけのゲーム — 植生探検</title>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Old+Mincho:wght@600;900&display=swap" rel="stylesheet">
@@ -104,7 +105,13 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
 .row label{font-size:13.5px;display:flex;gap:8px;align-items:center}
 select{font:500 14px var(--jp);color:var(--paper-ink);background:transparent;border:1px solid var(--paper-line);border-radius:6px;padding:5px 8px}
 #start{font:700 16px var(--jp);background:var(--paper-ink);color:var(--paper);border:0;border-radius:6px;padding:12px 22px;cursor:pointer}
-#start:disabled{opacity:.4;cursor:progress}
+#start:disabled,#vr-btn:disabled{opacity:.4;cursor:progress}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+#vr-btn{font:700 16px var(--jp);background:transparent;color:var(--paper-ink);border:1.5px solid var(--paper-ink);border-radius:6px;padding:11px 18px;cursor:pointer}
+.seat{display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:13.5px;cursor:pointer}
+.seat input{accent-color:var(--moss);margin-top:4px}
+.seat small{display:block;color:var(--paper-muted);font-size:12px}
+#vr-msg{font-size:13px;line-height:1.7;color:var(--paper-ink);background:color-mix(in srgb,var(--moss) 14%,transparent);border-radius:6px;padding:10px 12px;margin:14px 0 0}
 #stats-trees{font-size:12.5px;color:var(--paper-muted)}
 .guide{width:min(860px,100%);max-height:calc(100% - 20px);display:flex;flex-direction:column;padding:26px 28px 22px}
 .guide header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-bottom:1px solid var(--paper-line);padding-bottom:12px}
@@ -122,7 +129,7 @@ select{font:500 14px var(--jp);color:var(--paper-ink);background:transparent;bor
 </style>
 </head>
 <body>
-<canvas id="gl" aria-label="3Dの谷の風景。ドラッグで見回し、WASDキーで移動"></canvas>
+<canvas id="gl" aria-label="3Dの森の風景。ドラッグで見回し、WASDキーで移動"></canvas>
 <div id="joy" hidden><i></i></div>
 
 <div class="hud" hidden>
@@ -145,11 +152,12 @@ select{font:500 14px var(--jp);color:var(--paper-ink);background:transparent;bor
 <div class="overlay" id="menu">
   <div class="card">
     <h1>森をあるく</h1>
-    <p class="lead">湖から山頂まで続く谷を歩き、木や動物、地形を図鑑に記録する探検ゲームです。木は標高や水辺からの距離、日当たり、ほかの木との競争で生える場所が決まり、動物はそれぞれ好みの植生に住んでいます。</p>
+    <p class="lead">湖から山頂まで続く森を歩き、木や動物、地形を図鑑に記録する探検ゲームです。木は標高や水辺からの距離、日当たり、ほかの木との競争で生える場所が決まり、動物はそれぞれ好みの植生に住んでいます。</p>
     <dl>
       <dt>移動</dt><dd>WASD または矢印キー、Shift で走る。スマホは画面左をなぞる</dd>
       <dt>見回す</dt><dd>ドラッグ(スマホは画面右をなぞる)</dd>
       <dt>観察</dt><dd>木や地形は近づくと、動物は画面の中央にとらえてしばらく見つめると図鑑に載ります。全17件</dd>
+      <dt>VR</dt><dd>VRヘッドセットのブラウザで開くと「VRで歩く」が使えます。左スティックで歩き、右スティックで向きを変えます。トリガーを引いている間しゃがみます。立って遊ぶときは実際にしゃがんでも忍び足になります</dd>
       <dt>忍び足</dt><dd>走ると動物は逃げます。C キー(スマホは「しゃがむ」)で姿勢を低くするか、立ち止まって待つと近づけます</dd>
     </dl>
     <div class="load" aria-hidden="true"><div id="load-bar"></div></div>
@@ -157,8 +165,10 @@ select{font:500 14px var(--jp);color:var(--paper-ink);background:transparent;bor
     <p id="stats-trees"></p>
     <div class="row">
       <label>画質<select id="quality"><option value="std">標準</option><option value="low">軽量</option></select></label>
-      <button type="button" id="start" disabled>探検を始める</button>
+      <div class="btns"><button type="button" id="vr-btn" hidden disabled>VRで歩く</button><button type="button" id="start" disabled>探検を始める</button></div>
     </div>
+    <label class="seat" id="seat-row" hidden><input type="checkbox" id="seated"><span>すわってプレイする(VR)<small>目線を立った高さまで上げ、頭の高さでしゃがみを判定しません</small></span></label>
+    <p id="vr-msg" role="status" hidden></p>
   </div>
 </div>
 
@@ -658,7 +668,7 @@ function okAt(a, x, z) {
 }
 function noiseLevel() {
   if (player.speed < 0.3 && player.still > 1) return 0.4;
-  if (player.crouch) return 0.55;
+  if (crouching()) return 0.55;
   return player.speed > 6 ? 2 : 1;
 }
 const camDir = new V3(), toA = new V3();
@@ -746,7 +756,7 @@ function updateAnimals(dt) {
     m.position.set(a.x, y, a.z); m.rotation.set(pitch, a.heading, roll);
     // observation: a calm animal near the centre of view
     if (!found.has(D.id) && a.state !== 'flee' && a.state !== 'toTree') {
-      toA.set(a.x - camera.position.x, y + 0.2 - camera.position.y, a.z - camera.position.z);
+      camera.getWorldPosition(camWorld); toA.set(a.x - camWorld.x, y + 0.2 - camWorld.y, a.z - camWorld.z);
       const dist = toA.length();
       if (dist < D.obs) { const dot = toA.multiplyScalar(1 / dist).dot(camDir); if (dot > 0.965 && dot > bestDot) { best = a; bestDot = dot; } }
     }
@@ -756,9 +766,9 @@ function updateAnimals(dt) {
   if (best && best === obsTarget) best.obs += dt; else { if (obsTarget) obsTarget.obs = 0; obsTarget = best; }
   if (obsTarget) {
     const p = Math.min(1, obsTarget.obs / 1.3);
-    ring.hidden = false; ring.querySelector('circle.p').style.strokeDashoffset = 138 * (1 - p);
+    ring.hidden = false; ring.querySelector('circle.p').style.strokeDashoffset = 138 * (1 - p); vrHud.obs = p;
     if (p >= 1) { discover(obsTarget.D.id); obsTarget.obs = 0; obsTarget = null; ring.hidden = true; }
-  } else ring.hidden = true;
+  } else { ring.hidden = true; vrHud.obs = -1; }
 }
 
 // ===================== World generation =====================
@@ -943,6 +953,11 @@ const canvas = $('#gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 1200); camera.rotation.order = 'YXZ';
+// the player's body: in VR the headset pose is applied to the camera inside this rig
+const rig = new THREE.Group(); rig.add(camera); scene.add(rig);
+renderer.xr.enabled = true;
+const camWorld = new V3(), camFwd = new V3();
+function viewYaw() { camera.getWorldDirection(camFwd); return Math.atan2(-camFwd.x, -camFwd.z); }
 const SUN = new V3(0.5, 0.55, 0.36).normalize();
 const FOGC = new THREE.Color(0.74, 0.80, 0.84);
 const SH = { uTime: { value: 0 }, uWind: { value: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 0.35 }, uSun: { value: SUN }, uFog: { value: FOGC }, uFogN: { value: 50 }, uFogF: { value: 230 } };
@@ -1056,7 +1071,7 @@ void main(){
       vec3 c = mix(uFog, vec3(0.36,0.55,0.80), pow(y, 0.6)); float s = max(dot(d, normalize(uSun)), 0.0);
       c += vec3(1.0,0.9,0.7) * (pow(s, 600.0) * 3.0 + pow(s, 12.0) * 0.18); gl_FragColor = vec4(c, 1.0); }`
   });
-  const sky = new THREE.Mesh(g, m); sky.frustumCulled = false; sky.renderOrder = -1; sky.onBeforeRender = () => sky.position.copy(camera.position); scene.add(sky);
+  const sky = new THREE.Mesh(g, m); sky.frustumCulled = false; sky.renderOrder = -1; sky.onBeforeRender = (r, s, cam) => sky.position.setFromMatrixPosition(cam.matrixWorld); scene.add(sky);
 }
 
 // ===================== Textures =====================
@@ -1238,7 +1253,7 @@ function toGeo(B) {
 // ===================== Per-frame instance updates =====================
 let tris = 0;
 function updateInstances() {
-  const cx = camera.position.x, cz = camera.position.z, fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw);
+  const vy = viewYaw(), cx = player.x, cz = player.z, fx = -Math.sin(vy), fz = -Math.cos(vy);
   const L0 = Q.l0 * Q.l0, L1 = Q.l1 * Q.l1, F = Q.far * Q.far; tris = 0;
   for (const grp of TREE_GROUPS) {
     const c = [0, 0, 0], arrs = grp.lods.map((l) => l.attr.array);
@@ -1270,7 +1285,10 @@ function updateInstances() {
 }
 
 // ===================== Player & input =====================
-const player = { x: 0, z: 0, y: 10, yaw: 0, pitch: -0.05, bob: 0, crouch: false, speed: 0, still: 0 };
+const player = { x: 0, z: 0, y: 10, eye: 1.65, drop: 0, yaw: 0, pitch: -0.05, bob: 0, crouch: false, speed: 0, still: 0 };
+// in VR, physically crouching (head below 1.15 m) counts as sneaking
+// in VR: holding a trigger crouches; standing players can also physically crouch (head below 1.15 m)
+const crouching = () => player.crouch || (renderer.xr.isPresenting && (xrIn.trig || (!vrSeated && camera.position.y < 1.15)));
 function setCrouch(v) { player.crouch = v; $('#stance').hidden = !v; $('#crouch-btn').setAttribute('aria-pressed', v); }
 $('#crouch-btn').addEventListener('click', () => setCrouch(!player.crouch));
 const keys = new Set(); let joy = null, look = null, started = false, paused = true;
@@ -1309,12 +1327,14 @@ function movePlayer(dt) {
   if (keys.has('KeyD')) ix += 1; if (keys.has('KeyA')) ix -= 1;
   if (keys.has('ArrowLeft')) player.yaw += dt * 1.8; if (keys.has('ArrowRight')) player.yaw -= dt * 1.8;
   if (joy) { ix += joy.x; iy -= joy.y; }
+  if (xrIn.active) { ix += xrIn.x; iy += xrIn.y; }
   const l = Math.hypot(ix, iy); if (l > 1) { ix /= l; iy /= l; }
   const h0 = hAt(player.x, player.z), px0 = player.x, pz0 = player.z;
   if (l > 0.05) {
-    const run = keys.has('ShiftLeft') || keys.has('ShiftRight') || (joy && Math.hypot(joy.x, joy.y) > 0.95);
-    let sp = player.crouch ? 1.8 : run ? 9 : 4.5;
-    const fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw), rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
+    const run = keys.has('ShiftLeft') || keys.has('ShiftRight') || (joy && Math.hypot(joy.x, joy.y) > 0.95) || xrIn.run;
+    let sp = crouching() ? 1.8 : run ? (xrIn.active ? 6 : 9) : (xrIn.active ? 3 : 4.5);
+    const my = xrIn.active ? viewYaw() : player.yaw; // in VR you walk where you look
+    const fx = -Math.sin(my), fz = -Math.cos(my), rx = Math.cos(my), rz = -Math.sin(my);
     let dx = (fx * iy + rx * ix) * sp * dt, dz = (fz * iy + rz * ix) * sp * dt;
     const d = Math.hypot(dx, dz), nx = player.x + dx, nz = player.z + dz, h1 = hAt(nx, nz), grade = (h1 - h0) / Math.max(d, 1e-4);
     if (grade > 1.2) { dx = dz = 0; }
@@ -1337,9 +1357,13 @@ function movePlayer(dt) {
   const h = hAt(player.x, player.z), wd = Math.max(0, waterDepth(player.x, player.z, h));
   const moved = dt > 0 ? Math.hypot(player.x - px0, player.z - pz0) / dt : 0;
   player.speed += (moved - player.speed) * Math.min(1, dt * 6); player.still = player.speed < 0.3 ? player.still + dt : 0;
-  const target = h + (player.crouch ? 0.95 : 1.65) - Math.min(wd, 0.9) * 0.5 + Math.sin(player.bob) * 0.04;
+  // player.y is the ground under the body; the eye height comes from the headset in VR
+  const target = h - Math.min(wd, 0.9) * 0.5 + (xrIn.active ? 0 : Math.sin(player.bob) * 0.04);
   player.y += (target - player.y) * Math.min(1, dt * 12);
-  camera.position.set(player.x, player.y, player.z); camera.rotation.set(player.pitch, player.yaw, 0);
+  // in VR a trigger/button crouch lowers the view by 0.6 m; seated play lifts the view to standing height
+  player.drop += (((xrIn.trig || player.crouch) && renderer.xr.isPresenting ? 0.6 : 0) - player.drop) * Math.min(1, dt * 10);
+  rig.position.set(player.x, player.y + (renderer.xr.isPresenting ? xrOffset + seatOffset - player.drop : 0), player.z); rig.rotation.y = player.yaw;
+  if (!renderer.xr.isPresenting) { player.eye += ((player.crouch ? 0.95 : 1.65) - player.eye) * Math.min(1, dt * 12); camera.position.set(0, player.eye, 0); camera.rotation.set(player.pitch, 0, 0); }
 }
 
 // ===================== Discovery, HUD, map =====================
@@ -1350,7 +1374,7 @@ function discover(id) {
   toast(`発見: ${it.name}`, it.note);
   if (id === 'giant' || id === 'summit' || id === 'lake') markers.push({ id, x: player.x, z: player.z });
   updateCount(); renderGuide();
-  if (found.size === ALL.length) setTimeout(() => toast('すべて見つけました', '谷の植生をひととおり記録しました。気になった場所をもう一度歩いてみてください。'), 4500);
+  if (found.size === ALL.length) setTimeout(() => toast('すべて見つけました', '森の植生をひととおり記録しました。気になった場所をもう一度歩いてみてください。'), 4500);
 }
 function checkDiscoveries() {
   const x = player.x, z = player.z, e = env(x, z);
@@ -1376,10 +1400,11 @@ function biomeName(e) {
 const markers = [];
 let toastTimer = 0, flashTimer = 0;
 function toast(title, body) {
+  vrHud.toast = { title, body, until: performance.now() + 6000 }; vrHud.dirty = true;
   const t = $('#toast'); t.querySelector('strong').textContent = title; t.querySelector('p').textContent = body;
   t.classList.remove('show'); void t.offsetWidth; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 5200);
 }
-function flash(msg) { if (flashTimer > 0) return; flashTimer = 2.5; const f = $('#flash'); f.textContent = msg; f.classList.add('show'); setTimeout(() => f.classList.remove('show'), 1800); }
+function flash(msg) { if (flashTimer > 0) return; flashTimer = 2.5; vrHud.flash = { msg, until: performance.now() + 1800 }; vrHud.dirty = true; const f = $('#flash'); f.textContent = msg; f.classList.add('show'); setTimeout(() => f.classList.remove('show'), 1800); }
 function updateCount() { $('#count').textContent = `${found.size} / ${ALL.length}`; }
 
 // minimap
@@ -1418,7 +1443,7 @@ function drawMap() {
   mctx.drawImage(mapBase, 0, 0); mctx.drawImage(fogCv, 0, 0);
   for (const m of markers) { mctx.fillStyle = '#F4E9B8'; mctx.strokeStyle = '#1d2520'; mctx.lineWidth = 1.5; mctx.beginPath(); mctx.arc((m.x + HALF) / G, (m.z + HALF) / G, 4, 0, 6.29); mctx.fill(); mctx.stroke(); }
   const px = (player.x + HALF) / G, pz = (player.z + HALF) / G;
-  mctx.save(); mctx.translate(px, pz); mctx.rotate(-player.yaw);
+  mctx.save(); mctx.translate(px, pz); mctx.rotate(-viewYaw());
   mctx.fillStyle = '#fff'; mctx.strokeStyle = '#1d2520'; mctx.lineWidth = 2;
   mctx.beginPath(); mctx.moveTo(0, -9); mctx.lineTo(6, 6); mctx.lineTo(0, 3); mctx.lineTo(-6, 6); mctx.closePath(); mctx.stroke(); mctx.fill(); mctx.restore();
 }
@@ -1431,7 +1456,7 @@ const DIRS = [['北', 0], ['北東', 45], ['東', 90], ['南東', 135], ['南', 
 compass.innerHTML = [...DIRS, ...DIRS.map(([n, a]) => [n, a + 360]), ...DIRS.map(([n, a]) => [n, a - 360])].map(([n, a]) => `<span data-a="${a}" class="${n.length === 1 ? 'main' : ''}">${n}</span>`).join('');
 const compSpans = [...compass.children];
 function updateCompass() {
-  const head = ((-player.yaw * 180 / Math.PI) % 360 + 360) % 360, w = compass.clientWidth;
+  const head = ((-viewYaw() * 180 / Math.PI) % 360 + 360) % 360, w = compass.clientWidth;
   for (const s of compSpans) { const d = +s.dataset.a - head, x = w / 2 + d * 2.2; s.style.transform = `translateX(${x}px) translateX(-50%)`; s.style.opacity = Math.abs(d) > 80 ? 0 : 1 - Math.abs(d) / 90; }
 }
 
@@ -1458,16 +1483,16 @@ function setPaused(p) {
 }
 $('#start').addEventListener('click', () => {
   started = true; setPaused(false); $('.hud').hidden = false;
-  if (!found.size) toast('谷に着きました', '木や動物、地形を記録しよう。動物は走ると逃げるので、見つけたらしゃがんでそっと近づいて。');
+  if (!found.size) toast('森に着きました', '木や動物、地形を記録しよう。動物は走ると逃げるので、見つけたらしゃがんでそっと近づいて。');
 });
 $('#pause-btn').addEventListener('click', () => setPaused(true));
 $('#quality').addEventListener('change', (e) => { Q = QUALITY[e.target.value]; applyQuality(); try { localStorage.setItem('forest-q', e.target.value); } catch (_) {} });
 function applyQuality() {
   SH.uFogF.value = Q.far; SH.uFogN.value = Q.far * 0.22; scene.background = FOGC;
   if (grassMesh) grassMesh.material.uniforms.uGR.value = Q.grass;
-  renderer.setPixelRatio(Math.min(devicePixelRatio, Q.dpr)); resize();
+  if (!renderer.xr.isPresenting) { renderer.setPixelRatio(Math.min(devicePixelRatio, Q.dpr)); resize(); }
 }
-function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+function resize() { if (renderer.xr.isPresenting) return; const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize);
 
 // ===================== Boot =====================
@@ -1498,17 +1523,17 @@ async function boot() {
   await step('草を植えています', 0.84); buildGrass(grassT);
   await step('地図を描いています', 0.94); buildTreeMeshes(); buildMap();
   await step('動物を放しています', 0.98); buildAnimals();
-  player.x = SPAWN.x; player.z = SPAWN.z; player.y = hAt(SPAWN.x, SPAWN.z) + 1.65; player.yaw = 0;
+  player.x = SPAWN.x; player.z = SPAWN.z; player.y = hAt(SPAWN.x, SPAWN.z); player.yaw = 0;
   $('#stats-trees').textContent = `${trees.length.toLocaleString('ja-JP')}本の木`;
   $('.load').hidden = true; $('#load-msg').textContent = '準備ができました'; $('#start').disabled = false; $('#start').focus();
-  updateCount(); renderGuide(); movePlayer(0); updateInstances(); requestAnimationFrame(loop);
+  updateCount(); renderGuide(); movePlayer(0); updateInstances(); renderer.setAnimationLoop(loop); initVR();
 }
 
 let last = performance.now(), frame = 0, tick = 0, fpsAcc = 0, fpsN = 0;
 function loop(now) {
-  requestAnimationFrame(loop);
   const dt = Math.min(0.05, (now - last) / 1000); last = now; frame++;
   SH.uTime.value = now / 1000; flashTimer -= dt;
+  if (renderer.xr.isPresenting) readXR(dt);
   if (!paused) { movePlayer(dt); updateAnimals(dt); }
   if (frame % 3 === 0) updateInstances();
   tick += dt; fpsAcc += dt; fpsN++;
@@ -1517,11 +1542,145 @@ function loop(now) {
     const e = env(player.x, player.z);
     $('#biome').textContent = biomeName(e); $('#elev').textContent = `標高 ${Math.round(Math.max(0, e.h) * 10 + 120)} m`;
     let ex = 0; for (const v of explored) ex += v; $('#explored').textContent = `探索 ${Math.round(ex / explored.length * 100)}%`;
+    vrHud.biome = biomeName(e); vrHud.dirty = true;
     if (fpsAcc > 1) { $('#perf').textContent = `${Math.round(fpsN / fpsAcc)} fps　${Math.round(tris / 1000)}k 三角形`; fpsAcc = 0; fpsN = 0; }
   }
   updateCompass();
+  if (renderer.xr.isPresenting) drawVRHud();
   renderer.render(scene, camera);
 }
+
+// ===================== VR (WebXR) =====================
+const xrIn = { active: false, x: 0, y: 0, run: false, trig: false, turnLatch: false, btn: {} };
+let xrOffset = 0, prevQ = null, seatOffset = 0, seatCalPending = false;
+let vrSeated = false; try { vrSeated = localStorage.getItem('forest-seated') === '1'; } catch (_) {}
+// seated: lift the eyes to about 1.6 m above the ground, measured from where the head is now
+function calibrateSeat() { const y = camera.position.y; if (y < 0.2) return false; seatOffset = clamp(1.6 - y, 0, 1.2); return true; }
+const dz = (v) => Math.abs(v) < 0.15 ? 0 : (v - Math.sign(v) * 0.15) / 0.85;
+const headA = new V3(), headB = new V3();
+function snapTurn(a) {
+  camera.getWorldPosition(headA);
+  player.yaw += a; rig.rotation.y = player.yaw; rig.updateMatrixWorld(true);
+  camera.getWorldPosition(headB);
+  player.x += headA.x - headB.x; player.z += headA.z - headB.z; // turn around the head, not the feet
+}
+function pressedOnce(key, on) { const was = xrIn.btn[key]; xrIn.btn[key] = on; return on && !was; }
+function readXR() {
+  const session = renderer.xr.getSession(); if (!session) return;
+  xrIn.x = 0; xrIn.y = 0; xrIn.run = false; xrIn.trig = false;
+  if (seatCalPending && vrSeated && calibrateSeat()) seatCalPending = false;
+  for (const src of session.inputSources) {
+    const gp = src.gamepad; if (!gp) continue;
+    const ax = gp.axes.length >= 4 ? [gp.axes[2], gp.axes[3]] : [gp.axes[0] || 0, gp.axes[1] || 0];
+    const b = (i) => !!(gp.buttons[i] && gp.buttons[i].pressed);
+    if (b(0)) xrIn.trig = true;                                  // either trigger: crouch while held
+    if (src.handedness === 'left') {
+      xrIn.x = dz(ax[0]); xrIn.y = -dz(ax[1]);
+      xrIn.run = b(1) || b(3);                                   // grip or stick click = run
+      if (pressedOnce('L4', b(4) || b(5))) setCrouch(!player.crouch); // X / Y = toggle crouch
+    } else {
+      if (vrSeated && pressedOnce('R3', b(3))) { calibrateSeat(); flash('目線の高さを合わせました'); } // right stick click
+      if (!xrIn.turnLatch && Math.abs(ax[0]) > 0.7) { snapTurn(-Math.sign(ax[0]) * Math.PI / 6); xrIn.turnLatch = true; }
+      if (Math.abs(ax[0]) < 0.3) xrIn.turnLatch = false;
+      if (pressedOnce('R4', b(4) || b(5))) {                      // A / B = progress and next hint
+        const next = ALL.find((a) => !found.has(a.id));
+        toast(`図鑑 ${found.size} / ${ALL.length}`, next ? `つぎのヒント: ${next.hint}` : 'すべて記録しました。');
+      }
+    }
+  }
+}
+
+// a small panel that follows the head (DOM overlays are invisible inside the headset)
+const vrHud = { dirty: true, biome: '', toast: null, flash: null, obs: -1, lastObs: -2 };
+const hudCv = document.createElement('canvas'); hudCv.width = 1024; hudCv.height = 400;
+const hudCtx = hudCv.getContext('2d'), hudTex = new THREE.CanvasTexture(hudCv);
+hudTex.encoding = THREE.sRGBEncoding;
+const hudMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.28), new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+hudMesh.position.set(0, -0.3, -1); hudMesh.rotation.x = -0.22; hudMesh.renderOrder = 999; hudMesh.visible = false; camera.add(hudMesh);
+function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+function wrapText(c, text, x, y, maxW, lh, maxLines) {
+  let line = '', n = 0;
+  for (const ch of text) { if (c.measureText(line + ch).width > maxW) { c.fillText(line, x, y + n * lh); line = ch; if (++n >= maxLines) return; } else line += ch; }
+  if (line) c.fillText(line, x, y + n * lh);
+}
+function drawVRHud() {
+  const now = performance.now();
+  if (vrHud.toast && now > vrHud.toast.until) { vrHud.toast = null; vrHud.dirty = true; }
+  if (vrHud.flash && now > vrHud.flash.until) { vrHud.flash = null; vrHud.dirty = true; }
+  if (Math.abs(vrHud.obs - vrHud.lastObs) > 0.02) { vrHud.lastObs = vrHud.obs; vrHud.dirty = true; }
+  const cr = crouching(); if (cr !== vrHud.lastCr) { vrHud.lastCr = cr; vrHud.dirty = true; }
+  if (!vrHud.dirty) return; vrHud.dirty = false;
+  const c = hudCtx, W = hudCv.width; c.clearRect(0, 0, W, hudCv.height);
+  const jp = '"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",sans-serif', min = '"Zen Old Mincho","Hiragino Mincho ProN",serif';
+  // status pill
+  c.fillStyle = 'rgba(20,27,23,0.62)'; rrect(c, 0, 0, W, 64, 32); c.fill();
+  c.fillStyle = '#F4F1E6'; c.font = `900 34px ${min}`; c.textBaseline = 'middle'; c.fillText(vrHud.biome || '', 30, 33);
+  c.fillStyle = '#E6D88A'; c.font = `600 30px ${min}`; c.textAlign = 'right'; c.fillText(`図鑑 ${found.size} / ${ALL.length}`, W - 30, 33); c.textAlign = 'left';
+  if (crouching()) { c.fillStyle = 'rgba(244,241,230,0.8)'; c.font = `500 24px ${jp}`; c.textAlign = 'center'; c.fillText('しゃがみ中', W / 2, 33); c.textAlign = 'left'; }
+  let y = 84;
+  if (vrHud.obs >= 0) {
+    c.fillStyle = 'rgba(20,27,23,0.62)'; rrect(c, W / 2 - 200, y, 400, 46, 23); c.fill();
+    c.fillStyle = '#E6D88A'; rrect(c, W / 2 - 190, y + 30, 380 * vrHud.obs, 8, 4); c.fill();
+    c.fillStyle = '#F4F1E6'; c.font = `500 22px ${jp}`; c.textAlign = 'center'; c.fillText('観察中', W / 2, y + 16); c.textAlign = 'left';
+    y += 58;
+  }
+  if (vrHud.toast) {
+    c.fillStyle = 'rgba(20,27,23,0.72)'; rrect(c, 0, y, W, 190, 24); c.fill();
+    c.fillStyle = '#E6D88A'; c.font = `900 40px ${min}`; c.textBaseline = 'top'; c.fillText(vrHud.toast.title, 30, y + 18);
+    c.fillStyle = '#F4F1E6'; c.font = `500 28px ${jp}`; wrapText(c, vrHud.toast.body, 30, y + 74, W - 60, 38, 3);
+    c.textBaseline = 'middle';
+  } else if (vrHud.flash) {
+    c.fillStyle = 'rgba(20,27,23,0.72)'; rrect(c, W / 2 - 260, y, 520, 56, 28); c.fill();
+    c.fillStyle = '#F4F1E6'; c.font = `500 28px ${jp}`; c.textAlign = 'center'; c.fillText(vrHud.flash.msg, W / 2, y + 29); c.textAlign = 'left';
+  }
+  hudTex.needsUpdate = true;
+}
+
+// simple controller models so the hands are visible
+for (let i = 0; i < 2; i++) {
+  const grip = renderer.xr.getControllerGrip(i);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.022, 0.13, 10), new THREE.MeshBasicMaterial({ color: 0x2b2a27 }));
+  m.rotation.x = -Math.PI / 2.6; grip.add(m); rig.add(grip);
+}
+
+const VR_BLOCKED = 'この画面(claude.ai の中)では、ブラウザの制限で VR を始められません。HTMLファイルを HTTPS のサーバー(GitHub Pages など)に置き、VRヘッドセットのブラウザで開くと VR で歩けます。';
+function vrMsg(t) { const m = $('#vr-msg'); m.textContent = t; m.hidden = !t; }
+function initVR() {
+  const btn = $('#vr-btn');
+  if (!('xr' in navigator)) return;
+  navigator.xr.isSessionSupported('immersive-vr').then((ok) => { if (ok) { btn.hidden = false; btn.disabled = false; $('#seat-row').hidden = false; } }).catch(() => {});
+  const seat = $('#seated'); seat.checked = vrSeated;
+  seat.addEventListener('change', () => { vrSeated = seat.checked; try { localStorage.setItem('forest-seated', vrSeated ? '1' : '0'); } catch (_) {} });
+  btn.addEventListener('click', enterVR);
+}
+async function startSession(session, space) {
+  renderer.xr.setReferenceSpaceType(space);
+  await renderer.xr.setSession(session);
+}
+async function enterVR() {
+  const btn = $('#vr-btn'); btn.disabled = true; vrMsg('');
+  let session;
+  try { session = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor'] }); }
+  catch (e) { btn.disabled = false; vrMsg(e && e.name === 'SecurityError' ? VR_BLOCKED : `VR を始められませんでした(${e && e.name || 'error'})。` + (window.top !== window ? VR_BLOCKED : '')); return; }
+  renderer.xr.setFramebufferScaleFactor(0.9);
+  try { await startSession(session, 'local-floor'); xrOffset = 0; }
+  catch (e) { try { await startSession(session, 'local'); xrOffset = 1.6; } catch (e2) { session.end(); btn.disabled = false; vrMsg('VR の空間を準備できませんでした。'); return; } }
+  if (typeof renderer.xr.setFoveation === 'function') renderer.xr.setFoveation(1);
+  prevQ = Q; Q = QUALITY.low; applyQuality();          // keep the frame rate up inside the headset
+  camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0);
+  xrIn.active = true; hudMesh.visible = true; vrHud.dirty = true;
+  seatOffset = 0; seatCalPending = vrSeated;                 // measured on the first frames with a head pose
+  started = true; setPaused(false); $('.hud').hidden = false; btn.disabled = false;
+  session.addEventListener('end', () => {
+    xrIn.active = false; xrIn.trig = false; hudMesh.visible = false; xrOffset = 0; seatOffset = 0; player.drop = 0;
+    if (prevQ) { Q = prevQ; applyQuality(); }
+    resize(); setPaused(true);
+  });
+  toast('VRで森に入りました', vrSeated
+    ? '左スティックで歩き、右スティックで向きを変えます。トリガーを引いている間しゃがみます。目線がずれたら右スティックを押し込んでください。'
+    : '左スティックで歩き、右スティックで向きを変えます。トリガーを引くか実際にしゃがむと忍び足、A ボタンで図鑑のヒントが出ます。');
+}
+
 boot().catch((e) => { $('#load-msg').textContent = '読み込みに失敗しました: ' + e.message; console.error(e); });
 </script>
 </body></html>
