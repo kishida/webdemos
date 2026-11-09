@@ -473,6 +473,67 @@ function buildGroundGrid() {
 // 海藻（カジメのような長い葉）：葉を 1 つの形にまとめ、頂点シェーダーで波に揺らす
 // ---------------------------------------------------------------------------------------------
 const kelpU = { uTime: { value: 0 } };
+// 葉の模様（横が葉の幅、縦が根元→先）。中央の濃い筋、筋から斜めに伸びるひだの濃淡と葉脈、薄いまだら、
+// 薄くて明るい縁、ぎざぎざに欠けた輪郭（透明にして alphaTest で切る）。
+// 全部の葉が同じ模様だと規則的に見えるので、乱数を変えた KELP_VARIANTS 枚を横に並べ、葉ごとに選ぶ
+const KELP_VARIANTS = 4;
+function kelpTexture() {
+  const CW = 128, W = CW * KELP_VARIANTS, Hh = 512;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = Hh;
+  const g = cv.getContext('2d'); const img = g.createImageData(W, Hh); const d = img.data;
+  const ss = THREE.MathUtils.smoothstep;
+  for (let v = 0; v < KELP_VARIANTS; v++) {
+    const sd = 17 + v * 31;
+    // 葉ごとの性格：色み、筋の太さ、ひだの濃淡の強さと細かさ、縁の欠け方
+    const tint = [0.70 + 0.06 * (hash3(v, 1, 3) - 0.5), 0.48 + 0.06 * (hash3(v, 2, 3) - 0.5), 0.15 + 0.05 * (hash3(v, 3, 3) - 0.5)];
+    const ribW = 0.05 + 0.03 * hash3(v, 4, 3);
+    const bandAmp = 0.015 + 0.025 * hash3(v, 5, 3), bandFreq = 90 + 70 * hash3(v, 6, 3);
+    const raggedK = 0.04 + 0.06 * hash3(v, 7, 3);
+    for (let y = 0; y < Hh; y++) {
+      const t = 1 - y / (Hh - 1);
+      for (let cx = 0; cx < CW; cx++) {
+        const u = cx / (CW - 1) * 2 - 1, au = Math.abs(u), side = u > 0 ? 1 : 2;
+        // 輪郭：縁は細かく欠け、先端は虫食いのように崩れる（左右で違う欠け方）
+        const ragged = 0.95 - raggedK * (vnoise(t * 45, side * 7, sd) * 0.5 + 0.5) - 0.04 * Math.max(0, vnoise(t * 160, side * 5, sd + 1));
+        const tipWear = t > 0.88 ? (t - 0.88) * 5 * (0.5 + 0.5 * vnoise(u * 7, t * 25, sd + 2)) : 0;
+        // 虫食いの穴は少なく、半分の模様だけ
+        const hole = v % 2 === 1 && t > 0.55 && vnoise(u * 6, t * 40, sd + 3) > 0.9;
+        const alpha = au < ragged - tipWear && !hole ? 255 : 0;
+        // 色：金色がかった茶色。まだらは弱く、大きくゆるやかに
+        let r = tint[0], gg = tint[1], b = tint[2];
+        const mott = fbm(u * 1.5 + v, t * 8, sd + 4, 3) * 0.5 + 0.5;
+        const k = 0.95 + 0.08 * mott;
+        r *= k; gg *= k; b *= k;
+        // ひだ：筋から先へ斜めに走る濃淡。間隔と濃さを長さ方向に不規則にする
+        const warp = vnoise(t * 4, side, sd + 5) * 3 + vnoise(t * 14, u * 2, sd + 6) * 1.2;
+        const bandAmpHere = bandAmp * (0.4 + 0.6 * (vnoise(t * 5, 0.5, sd + 7) * 0.5 + 0.5));
+        const band = Math.sin(t * bandFreq - au * 7 + warp);
+        const bandK = 1 + bandAmpHere * band * Math.min(1, au * 3);
+        r *= bandK; gg *= bandK; b *= bandK;
+        // 細い葉脈：とぎれとぎれに薄く
+        const vein = Math.pow(Math.abs(Math.sin(t * 380 - au * 26 + warp * 2)), 30) * 0.05 * Math.min(1, au * 4) * (vnoise(t * 30, u * 6, sd + 8) > -0.2 ? 1 : 0) * 0.5;
+        r -= vein; gg -= vein * 0.8; b -= vein * 0.4;
+        // 中央の筋（中肋）：濃く、両脇に細い明るい線。太さが少しゆらぐ
+        const ribD = au / (ribW * (0.85 + 0.3 * (vnoise(t * 10, 1.5, sd + 9) * 0.5 + 0.5)));
+        if (ribD < 1) { const kk = 0.62 + 0.25 * ribD; r *= kk; gg *= kk; b *= kk * 0.9; }
+        else if (ribD < 1.3) { r *= 1.08; gg *= 1.07; b *= 1.03; }
+        // 縁の薄い部分は明るく黄色っぽい
+        const edge = ss(au, 0.72, 0.94);
+        r += edge * 0.09; gg += edge * 0.07; b += edge * 0.015;
+        // 根元（柄）は暗い
+        const base = 1 - ss(t, 0.02, 0.14);
+        r *= 1 - 0.45 * base; gg *= 1 - 0.5 * base; b *= 1 - 0.4 * base;
+        const i = (y * W + v * CW + cx) * 4;
+        d[i] = clamp(r * 255, 0, 255); d[i + 1] = clamp(gg * 255, 0, 255); d[i + 2] = clamp(b * 255, 0, 255); d[i + 3] = alpha;
+      }
+    }
+  }
+  g.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
 function buildKelp() {
   const positions = [], uvs = [], phases = [], indices = [], colors = [];
   let vi = 0;
@@ -490,29 +551,60 @@ function buildKelp() {
     if (clusters.length >= 26) break;
     clusters.push([x, z]);
   }
+  // 葉 1 枚：幅方向に 9 列。中央に盛り上がった筋（中肋）、縁ほど大きく波打つひだ、全体のゆるい反りとねじれ
+  const NU = 9;
+  const white = new THREE.Color(1, 1, 1);
   for (const [cx, cz] of clusters) {
     const blades = 4 + Math.floor(Math.random() * 6);
-    const hue = rand(0.1, 0.17);
+    const hue = rand(0.085, 0.125);
     for (let b = 0; b < blades; b++) {
       const x = cx + rand(-0.25, 0.25), z = cz + rand(-0.25, 0.25);
       const y0 = groundAt(x, z) - 0.03;
-      const H = rand(0.7, 2.1), W = rand(0.06, 0.13), seg = 18;
-      const ang = rand(0, Math.PI * 2), lean = rand(-0.2, 0.2), ph = rand(0, 10);
-      const c = new THREE.Color().setHSL(hue, rand(0.35, 0.55), rand(0.16, 0.26));
+      const H = rand(0.7, 2.1), W = rand(0.07, 0.14);
+      // ひだ 1 波に 8 点以上（少ないと縁がのこぎりの歯に見える）
+      const seg = Math.ceil(H * 60);
+      const ang0 = rand(0, Math.PI * 2), twist = rand(-0.7, 0.7), lean = rand(-0.2, 0.2), ph = rand(0, 10);
+      // 葉ごとの性格：ひだの間隔と大きさ、左右の縁のずれ、いちばん広い所の位置、横への反り、模様の種類
+      const ruffleK = rand(22, 40), ruffleA = rand(0.1, 0.24), sideShift = rand(0.6, 2.6);
+      const widthPow = rand(0.4, 0.9), bow = rand(-0.12, 0.12), seed = rand(0, 100);
+      const blisterK = rand(60, 110), blisterA = rand(0.01, 0.035);
+      const variant = Math.floor(Math.random() * KELP_VARIANTS);
+      const c = white.clone().lerp(new THREE.Color().setHSL(hue + rand(-0.01, 0.01), rand(0.45, 0.75), rand(0.42, 0.62)), rand(0.3, 0.55));
+      const bright = rand(0.85, 1.1);
       for (let s = 0; s <= seg; s++) {
-        const t = s / seg;
-        const w = W * Math.sin(Math.min(1, t * 1.2 + 0.08) * Math.PI) * (t < 0.08 ? 0.35 : 1);
-        const curl = Math.sin(t * 9 + ph) * 0.02;
-        for (const side of [-1, 1]) {
-          const lx = Math.cos(ang) * w * side + curl, lz = Math.sin(ang) * w * side;
-          positions.push(x + lx + lean * t * t * H, y0 + t * H, z + lz);
-          uvs.push(side * 0.5 + 0.5, t);
+        const t = s / seg, len = t * H;
+        // 細い柄から広がって、先へゆるく細る。幅もところどころ少し変わる
+        const w = W * (t < 0.07 ? 0.18 + t * 3 : Math.pow(Math.sin(Math.min(1, (t - 0.07) / 0.93 * 0.92 + 0.08) * Math.PI), widthPow))
+          * (1 + 0.1 * vnoise(len * 3, seed, 1));
+        const ang = ang0 + twist * t + 0.15 * vnoise(len * 1.5, seed, 2);
+        const sx = Math.cos(ang), sz = Math.sin(ang), nx = -sz, nz = sx;
+        const curl = Math.sin(t * 7 + ph) * 0.03 * t;
+        const bx = x + lean * t * t * H + curl + nx * bow * Math.sin(t * Math.PI), by = y0 + len, bz = z + nz * bow * Math.sin(t * Math.PI);
+        const shade = (0.6 + 0.45 * Math.min(1, t * 1.6)) * bright;
+        // ひだの位相：一定の間隔ではなく、長さ方向にずれていく。強さも場所でまちまち（根元はほとんど波打たない）
+        const phase = len * ruffleK + ph * 3 + 2.4 * vnoise(len * 1.6, seed, 3);
+        const amp = ruffleA * (0.45 + 0.55 * (vnoise(len * 2.2, seed, 4) * 0.5 + 0.5)) * THREE.MathUtils.smoothstep(t, 0.04, 0.3);
+        for (let k = 0; k < NU; k++) {
+          const u = k / (NU - 1) * 2 - 1, au = Math.abs(u);
+          const p = phase + (u > 0 ? sideShift * au : 0) + u * 1.1;
+          const rib = 0.007 * (1 - THREE.MathUtils.smoothstep(au, 0, 0.22)) * Math.min(1, t * 6);
+          const ruffle = Math.pow(au, 1.6) * w * amp * Math.sin(p);
+          const blister = blisterA * w * Math.sin(len * blisterK + ph + 1.5 * vnoise(len * 4, u * 2, seed)) * Math.sin(au * Math.PI) * (1 - au);
+          const cup = -0.18 * w * u * u;
+          const off = rib + ruffle + blister + cup;
+          // 縁は波打つぶん、少し内側へ寄る（ひだで幅が詰まる）
+          const across = w * u * (1 - 0.12 * Math.abs(Math.sin(p)) * au * amp / 0.35);
+          positions.push(bx + sx * across + nx * off, by, bz + sz * across + nz * off);
+          uvs.push((variant + 0.01 + (u * 0.5 + 0.5) * 0.98) / KELP_VARIANTS, t);
           phases.push(ph, H);
-          colors.push(c.r * (0.7 + 0.5 * t), c.g * (0.7 + 0.5 * t), c.b * (0.7 + 0.4 * t));
+          colors.push(c.r * shade, c.g * shade, c.b * shade * 0.95);
         }
-        if (s < seg) { const a = vi + s * 2; indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+        if (s < seg) for (let k = 0; k < NU - 1; k++) {
+          const a = vi + s * NU + k, d = a + NU;
+          indices.push(a, a + 1, d, a + 1, d + 1, d);
+        }
       }
-      vi += (seg + 1) * 2;
+      vi += (seg + 1) * NU;
     }
   }
   const g = new THREE.BufferGeometry();
@@ -522,7 +614,12 @@ function buildKelp() {
   g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   g.setIndex(indices);
   g.computeVertexNormals();
-  const m = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.55, emissive: 0x0a1205 });
+  // 模様の画像を、光が透けたような明るさ（emissive）にも使う。逆光で葉が金色に光る感じを少し出す
+  const tex = kelpTexture();
+  const m = new THREE.MeshStandardMaterial({
+    vertexColors: true, side: THREE.DoubleSide, map: tex, alphaTest: 0.5, roughness: 0.45,
+    emissive: new THREE.Color(0.32, 0.22, 0.07), emissiveMap: tex,
+  });
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, kelpU);
     sh.vertexShader = sh.vertexShader
