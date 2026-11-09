@@ -6,12 +6,14 @@ const D = 180 / Math.PI;
 const GREEN = '#8dffa0', AMBER = '#ffbf3c', RED = '#ff4a3c', WHITE = '#f2f5f8', CYAN = '#6fe3ff', MAG = '#ff6cf0';
 
 export class HUD {
-  constructor(canvas) {
+  // fixed: [幅, 高さ] を渡すと画面サイズに追従しない固定解像度のキャンバスとして使う（VR の HUD パネル）
+  constructor(canvas, fixed = null) {
     this.c = canvas; this.g = canvas.getContext('2d');
-    this.msgs = []; this.map = null;
+    this.msgs = []; this.map = null; this.fixed = fixed;
     this.resize();
   }
   resize() {
+    if (this.fixed) { this.dpr = 1; [this.w, this.h] = this.fixed; return; }
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.dpr = dpr; this.w = window.innerWidth; this.h = window.innerHeight;
     this.c.width = this.w * dpr; this.c.height = this.h * dpr;
@@ -106,6 +108,26 @@ export class HUD {
       g.font = C ? '700 17px "Segoe UI", sans-serif' : '700 22px "Segoe UI", sans-serif'; g.textAlign = 'center'; g.fillStyle = st.agl < 60 ? AMBER : GREEN;
       g.fillText(`RA ${Math.max(0, Math.round(st.agl * 3.281))}`, cx, cy + tapeH / 2 + 24);
     }
+    g.textAlign = 'left';
+  }
+
+  // VR 用: 画面中央のパネル（一時停止・着陸結果・墜落）
+  drawPanel(title, rows, hint, color = WHITE) {
+    const g = this.g, w = this.w, h = this.h;
+    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const pw = 760, ph = 130 + rows.length * 46 + 70, x = (w - pw) / 2, y = (h - ph) / 2;
+    g.fillStyle = 'rgba(10,16,26,0.88)'; g.fillRect(x, y, pw, ph);
+    g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 2; g.strokeRect(x, y, pw, ph);
+    g.textBaseline = 'middle'; g.textAlign = 'center'; g.fillStyle = color; g.font = '700 52px "Segoe UI", "Yu Gothic UI", sans-serif';
+    g.fillText(title, w / 2, y + 62);
+    rows.forEach(([a, b], i) => {
+      const yy = y + 140 + i * 46; g.font = '600 28px "Segoe UI", "Yu Gothic UI", sans-serif';
+      if (b == null) { g.textAlign = 'center'; g.fillStyle = WHITE; g.fillText(a, w / 2, yy); return; }
+      g.textAlign = 'left'; g.fillStyle = '#9fb0c2'; g.fillText(a, x + 40, yy);
+      g.textAlign = 'right'; g.fillStyle = WHITE; g.fillText(b, x + pw - 40, yy);
+    });
+    g.textAlign = 'center'; g.fillStyle = CYAN; g.font = '600 26px "Segoe UI", "Yu Gothic UI", sans-serif';
+    g.fillText(hint, w / 2, y + ph - 40);
     g.textAlign = 'left';
   }
 
@@ -204,6 +226,7 @@ export class HUD {
     if (st.brake || st.parkBrake) parts.push([st.parkBrake ? 'PARK' : 'BRAKE', AMBER]);
     parts.push([`AoA ${(st.alpha * D).toFixed(0)}°`, st.stallWarn ? RED : WHITE]);
     parts.push([`G ${st.gLoad.toFixed(1)}`, WHITE]);
+    if (st.surface && st.agl < 300) parts.push([st.surface.name, st.surface.rough ? RED : st.surface.paved ? GREEN : st.surface.water ? CYAN : AMBER]);
     g.font = '600 12px "Segoe UI", sans-serif'; g.textAlign = 'left';
     const widths = parts.map(([t]) => g.measureText(t).width + 12);
     const total = widths.reduce((a, b) => a + b, 0);
@@ -229,6 +252,7 @@ export class HUD {
     rows.push(['GS', `${Math.round(Math.hypot(st.vel.x, st.vel.z) * 1.944)} kt`, WHITE]);
     if (!spec.fbw) rows.push(['TRIM', `${(st.trimAlpha * D).toFixed(1)}°${st.autoTrim ? ' A' : ''}`, CYAN]);
     if (info.wind) rows.push(['WIND', info.wind, WHITE]);
+    if (st.surface && st.agl < 300) rows.push(['地表', st.surface.name, st.surface.rough ? RED : st.surface.paved ? GREEN : st.surface.water ? CYAN : AMBER]);
     const H = rows.length * 20 + 16;
     y = this.h - H - 16;
     g.fillStyle = 'rgba(10,16,24,0.55)'; g.fillRect(x, y, 214, H);

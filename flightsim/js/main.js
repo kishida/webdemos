@@ -10,6 +10,7 @@ import { Audio } from './audio.js';
 import { Particles } from './effects.js';
 import { setAnisotropy } from './textures.js';
 import { TouchControls, isTouchDevice, isPortrait } from './touch.js';
+import { VR } from './vr.js';
 import { RWY, terrainHeight, DOWNTOWN } from './layout.js';
 import { clamp, lerp } from './geo.js';
 
@@ -29,6 +30,10 @@ setAnisotropy(Math.min(8, renderer.capabilities.getMaxAnisotropy()));
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.25, 95000);
 const hud = new HUD($('hud'));
+// VR: カメラはリグの子になる（VR 中以外はリグが原点なので従来どおり）
+const vr = new VR(renderer, scene, camera);
+const vrHud = new HUD(vr.hudCanvas, vr.hudSize);
+let vrFrame = 0, vrResult = null;
 
 const sky = new Sky(); sky.scale.setScalar(80000); scene.add(sky);
 const sun = new THREE.DirectionalLight(0xffffff, 3); sun.castShadow = true;
@@ -156,7 +161,7 @@ function applyTouchSetting() { touchOn = $('optTouch').checked; document.body.cl
 // 縦向きになったら一時停止して横向きを促す
 function checkOrientation() {
   // 横向き要求はスマホ/タブレットのみ（PCで縦長ウィンドウにしても止めない）
-  const need = isTouchDevice && touchOn && isPortrait() && (mode === 'flight' || mode === 'paused');
+  const need = !vr.presenting && isTouchDevice && touchOn && isPortrait() && (mode === 'flight' || mode === 'paused');
   $('rotate').classList.toggle('show', need);
   if (need && mode === 'flight') { rotatePaused = true; setMode('paused'); }
   else if (!need && rotatePaused && mode === 'paused') { rotatePaused = false; setMode('flight'); }
@@ -167,7 +172,7 @@ async function goFullscreenLandscape() {
   try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch {}
 }
 
-function readInput(dt) {
+function readInput(dt, vin) {
   const k = keys;
   const pitchT = ((k.KeyS || k.ArrowDown) ? 1 : 0) - ((k.KeyW || k.ArrowUp) ? 1 : 0);
   const rollT = ((k.KeyD || k.ArrowRight) ? 1 : 0) - ((k.KeyA || k.ArrowLeft) ? 1 : 0);
@@ -179,7 +184,12 @@ function readInput(dt) {
   const app = (cur, tgt, r) => cur + clamp(tgt - cur, -r * dt, r * dt);
   const dz = (v) => (Math.abs(v) < 0.12 ? 0 : (v - Math.sign(v) * 0.12) / 0.88);
   const ta = touchOn ? touch.axes() : { active: false };
-  if (ta.active && !pitchT && !rollT) {
+  if (vin && vin.stick && !pitchT && !rollT) {
+    // VR コントローラー: 右スティックで操縦（中心付近を細かく）
+    const curve = (v) => Math.sign(v) * (0.35 * Math.abs(v) + 0.65 * v * v);
+    c.elev = app(c.elev, curve(vin.pitch), 6); c.ail = app(c.ail, curve(vin.roll), 8);
+    c.rudder = app(c.rudder, vin.rudder || yawT, 2.5);
+  } else if (ta.active && !pitchT && !rollT) {
     // タッチ/傾き: 中心付近を細かく（2乗カーブ）
     const curve = (v) => Math.sign(v) * (0.35 * Math.abs(v) + 0.65 * v * v);
     c.elev = app(c.elev, curve(ta.pitch), 6); c.ail = app(c.ail, curve(ta.roll), 8);
@@ -189,7 +199,7 @@ function readInput(dt) {
   } else {
     c.elev = app(c.elev, pitchT, pitchT ? spec.pitchKeyRate : spec.pitchKeyRate * 2);
     c.ail = app(c.ail, rollT, rollT ? rate * 1.4 : rate * 2);
-    c.rudder = app(c.rudder, yawT || (touchOn ? touch.rudder : 0), 2.5);
+    c.rudder = app(c.rudder, yawT || (touchOn ? touch.rudder : 0) || (vin ? vin.rudder : 0), 2.5);
   }
   if (touchOn && touch.throttleDrag != null) {
     const canRev = spec.id === 'airliner' && st.onGround;
@@ -202,6 +212,12 @@ function readInput(dt) {
     const canRev = spec.engine !== 'prop' && st.onGround && spec.id === 'airliner';
     st.throttle = Math.max(canRev && st.throttle <= 0 ? -1 : 0, st.throttle - dt * 0.5);
   }
+  if (vin && vin.thr) {
+    // 左スティック前後でスロットル（旅客機は地上で 0 からさらに引くと逆噴射）
+    const canRev = spec.id === 'airliner' && st.onGround;
+    if (vin.thr > 0) st.throttle = Math.min(1, st.throttle + dt * 0.6 * vin.thr);
+    else st.throttle = Math.max(canRev && st.throttle <= 0 ? -1 : 0, st.throttle + dt * 0.6 * vin.thr);
+  }
   if (pad) {
     const rt = pad.buttons[7]?.value || 0, lt = pad.buttons[6]?.value || 0;
     if (rt > 0.05) st.throttle = Math.min(1, st.throttle + dt * 0.6 * rt);
@@ -209,7 +225,7 @@ function readInput(dt) {
     padButtons(pad);
   }
   if (st.reverse && !st.onGround) st.throttle = 0;
-  st.brake = k.Space || (pad && pad.buttons[0]?.pressed) || (touchOn && touch.brake) ? 1 : 0;
+  st.brake = k.Space || (pad && pad.buttons[0]?.pressed) || (touchOn && touch.brake) || (vin && vin.brake) ? 1 : 0;
   if (st.brake && st.parkBrake) st.parkBrake = false;
   // トリム
   const tr = (k.BracketLeft || k.Home ? 1 : 0) - (k.BracketRight || k.End ? 1 : 0);
@@ -229,6 +245,31 @@ function padButtons(pad) {
   }
 }
 
+// VR コントローラーのボタン
+function vrButtons(vin) {
+  const acts = {
+    flight: { 'R.a': 'KeyG', 'R.b': 'KeyC', 'L.x': 'KeyV', 'L.y': 'KeyB', 'R.squeeze': 'KeyK', 'L.squeeze': 'KeyX', 'L.stick': 'Escape' },
+    paused: { 'R.a': 'resume', 'L.stick': 'resume', 'R.b': 'restart', 'L.y': 'menu' },
+    result: { 'R.a': 'restart', 'R.b': 'continue', 'L.y': 'menu' },
+    crash: { 'R.a': 'restart', 'L.y': 'menu' },
+  }[mode] || {};
+  for (const k of vin.presses) {
+    if (k === 'R.stick') { vr.recenter(); hud.message('視点をリセットしました', CYAN, 1.5); continue; }
+    const a = acts[k]; if (!a) continue;
+    if (mode === 'flight') { onKey({ code: a }); continue; }
+    Audio.sfx('select');
+    if (a === 'resume') setMode('flight');
+    if (a === 'restart') restart();
+    if (a === 'continue') { resultShown = true; setMode('flight'); }
+    if (a === 'menu') { vr.exit(); setMode('menu'); }
+  }
+}
+const VR_HELP = [
+  'VR: 右スティック=操縦（手前で機首上げ） / 左スティック=前後スロットル・左右ラダー',
+  'トリガー=ブレーキ / A=脚 / B=視点 / X・Y=フラップ / 右グリップ=スポイラー / 左グリップ=駐機ブレーキ',
+  '右スティック押し込み=視点リセット / 左スティック押し込み=一時停止',
+];
+
 // ---------- カメラ ----------
 function setCam(m) {
   camMode = m; cam.flyby = null;
@@ -240,6 +281,7 @@ function updateCamera(dt) {
   const p = st.pos; const fwd = _t.set(0, 0, -1).applyQuaternion(st.q);
   const hdgYaw = Math.atan2(-fwd.x, -fwd.z);
   let view = { cockpit: false, distGain: 1, doppler: 1 };
+  const xr = vr.presenting; if (xr) vr.beginFrame(); else if (vr.rig.position.lengthSq() > 0) vr.reset();
   camera.fov = 60; camera.near = 0.3;
   if (camMode === 0) {
     // ヘディングに追従（なめらかに）
@@ -256,11 +298,12 @@ function updateCamera(dt) {
     const cp = new THREE.Vector3(...spec.cockpit).applyQuaternion(st.q).add(p);
     camera.position.copy(cp);
     _q.setFromEuler(new THREE.Euler(cam.lookPitch, cam.lookYaw, 0, 'YXZ'));
-    camera.quaternion.copy(st.q).multiply(_q);
+    camera.quaternion.copy(st.q); if (!xr) camera.quaternion.multiply(_q);
     camera.near = 0.1; camera.fov = 65;
     view.cockpit = true;
   } else if (camMode === 2) {
     camera.position.copy(world.towerCamPos);
+    if (cam.towerYaw == null) { const d = world.towerCamPos.clone().negate(); cam.towerYaw = Math.atan2(-d.x, -d.z); }
     camera.up.set(0, 1, 0); camera.lookAt(p);
     const dist = camera.position.distanceTo(p);
     camera.fov = clamp(2 * Math.atan((spec.id === 'airliner' ? 60 : 25) / dist) / D2R, 2, 60);
@@ -271,6 +314,9 @@ function updateCamera(dt) {
       const right = new THREE.Vector3().crossVectors(v, new THREE.Vector3(0, 1, 0)).normalize();
       cam.flyby = p.clone().addScaledVector(v, Math.max(200, st.vel.length() * 7)).addScaledVector(right, 25 + spec.camDist).add(new THREE.Vector3(0, 6, 0));
       cam.flyby.y = Math.max(cam.flyby.y, groundAt(cam.flyby.x, cam.flyby.z).y + 2);
+      // VR では向きを固定する（機体を目で追う）: 近づいてくる機体と、最接近点の中間を向く
+      const a = p.clone().sub(cam.flyby).setY(0).normalize(), b = right.clone().negate();
+      const d = a.add(b); cam.flybyYaw = Math.atan2(-d.x, -d.z);
     }
     camera.position.copy(cam.flyby); camera.up.set(0, 1, 0); camera.lookAt(p);
     const dist = camera.position.distanceTo(p);
@@ -283,6 +329,14 @@ function updateCamera(dt) {
     view.doppler = clamp(340 / (340 - vr), 0.6, 1.6);
   }
   camera.updateProjectionMatrix();
+  if (xr) {
+    // 視点の位置と向きをリグに移す。コックピットは機体の姿勢ごと、それ以外は水平の向きだけ（酔い防止）
+    if (camMode === 1) vr.place(true);
+    else if (camMode === 2) vr.place(false, cam.towerYaw);
+    else if (camMode === 3) vr.place(false, cam.flybyYaw);
+    else vr.place(false);
+    view.cockpit = false;  // 実景に重ねる HUD は VR では使わない
+  }
   return view;
 }
 
@@ -325,6 +379,7 @@ function startFlight() {
     air: `上空からスタート。自由に飛び回り、空港（ミニマップの白い線）に戻って着陸してみましょう`,
   };
   hud.message(tips[cfg.start], WHITE, 7);
+  if (vr.presenting) for (const l of VR_HELP) hud.message(l, CYAN, 9);
   if (cfg.start !== 'runway') hud.message(`推奨進入速度 ${Math.round(spec.vApp * 1.944)} kt / 脚とフラップは着陸形態です`, CYAN, 7);
 }
 function restart() { startFlight(); }
@@ -336,7 +391,7 @@ function setMode(m) {
   $('result').classList.toggle('show', m === 'result');
   $('crash').classList.toggle('show', m === 'crash');
   $('camlabel').style.display = m === 'flight' ? '' : 'none';
-  touch.show(touchOn && m === 'flight');
+  touch.show(touchOn && m === 'flight' && !vr.presenting);
   if (m !== 'paused') rotatePaused = false;
   setTimeout(checkOrientation, 0);
   if (m === 'menu') { Audio.silence(); if (Audio.ready) Audio.playTitle(); if (model) scene.remove(model.group); st = null; menuDemo(); }
@@ -377,6 +432,15 @@ function buildMenu() {
     if (isTouchDevice && touchOn) goFullscreenLandscape();
     await ensureAudio(); Audio.sfx('select'); startFlight();
   });
+  // VR で飛ぶ（WebXR 対応のブラウザとヘッドセットがあるときだけ表示）
+  vr.check().then((ok) => { $('goVR').hidden = !ok; });
+  $('goVR').addEventListener('click', async () => {
+    try { await vr.enter(); } catch (err) { console.warn(err); hud.message('VR を開始できませんでした', RED); return; }
+    await ensureAudio(); Audio.sfx('select');
+    camMode = 1;  // VR はコックピット視点から
+    startFlight();
+  });
+  vr.onEnd = () => { if (mode === 'flight') setMode('paused'); hud.resize(); };
   syncMenu();
 }
 function syncMenu() {
@@ -437,8 +501,11 @@ function warnings(ils) {
   const tti = st.vel.y < -3 ? st.agl / -st.vel.y : 99;
   const ahead = st.pos.clone().addScaledVector(st.vel, 7);
   const terrAhead = terrainHeight(ahead.x, ahead.z) > ahead.y - 20 && st.vel.length() > 20;
-  info.pullUp = !st.onGround && st.agl > 3 && ((tti < 7 && st.agl < 450 && !(landingCfg && nearRunway)) || (terrAhead && !(landingCfg && nearRunway)));
-  info.gearWarn = spec.retractGear && st.gearPos < 1 && !st.onGround && st.agl < 230 && st.throttle < 0.35;
+  // 着陸形態で緩やかに降下中なら、滑走路以外への着陸でも警報を出さない
+  const gentle = (landingCfg || (spec.id === 'cessna' && st.flapIdx >= 1) || st.gearPos < 1) && st.vel.y > -6 && st.agl < 250;
+  const ok = (landingCfg && nearRunway) || gentle;
+  info.pullUp = !st.onGround && st.agl > 3 && ((tti < 7 && st.agl < 450 && !ok) || (terrAhead && !ok));
+  info.gearWarn = spec.retractGear && st.gearPos < 1 && !st.onGround && st.agl < 230 && st.throttle < 0.35 && !(st.surface && st.surface.water);
   return info;
 }
 
@@ -473,12 +540,19 @@ function handleEvents() {
     if (ev.type === 'liftoff') { Audio.sfx('liftoff'); hud.message(spec.retractGear ? '離陸！ 上昇を確認したら脚を上げましょう（G）' : '離陸！', GREEN, 4); }
     if (ev.type === 'touchdown') {
       const fpm = Math.round(ev.vs * 196.85);
-      Audio.sfx(ev.hard ? 'hardlanding' : 'touchdown', clamp(-ev.vs / 3, 0.4, 1));
-      hud.message(`接地 ${fpm} fpm${ev.runway ? '' : '（滑走路外）'}`, fpm > -240 ? GREEN : fpm > -500 ? AMBER : RED, 4);
+      if (ev.water) Audio.sfx('splash'); else if (ev.belly) Audio.sfx('scrape');
+      else Audio.sfx(ev.hard ? 'hardlanding' : ev.surface === 'grass' || ev.surface === 'farm' || ev.surface === 'sand' ? 'thudsoft' : 'touchdown', clamp(-ev.vs / 3, 0.4, 1));
+      const where = ev.water ? '着水' : ev.belly ? `胴体着陸（${ev.surfaceName}）` : ev.surfaceName;
+      hud.message(`接地 ${fpm} fpm — ${where}`, fpm > -240 ? GREEN : fpm > -500 ? AMBER : RED, 4);
       const back = new THREE.Vector3(0, 0, 1).applyQuaternion(st.q);
-      for (let i = 0; i < 10; i++) for (const s of [-1, 1]) {
-        const p = st.pos.clone().addScaledVector(back, spec.id === 'airliner' ? 1.6 : 0.5).add(new THREE.Vector3(s * (spec.id === 'airliner' ? 3.8 : 1.2), -spec.gearH + 0.3, 0));
-        particles.spawn({ pos: p, vel: st.vel.clone().multiplyScalar(0.25).add(new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3)), size: 1.5, grow: 4, life: 2.5, opacity: 0.6, color: 0xe8e8e8, drag: 1.5 });
+      // 路面に応じた煙: 舗装=タイヤの白煙 / 未舗装=土ぼこり / 水面=しぶき
+      const dust = { grass: 0xa8a080, farm: 0x8a7458, sand: 0xd8c8a0 }[ev.surface];
+      const col = ev.water ? 0xf4f8ff : dust ?? 0xe8e8e8;
+      const n = ev.water ? 30 : 10;
+      for (let i = 0; i < n; i++) for (const s of [-1, 1]) {
+        const p = st.pos.clone().addScaledVector(back, spec.id === 'airliner' ? 1.6 : 0.5).add(new THREE.Vector3(s * (spec.id === 'airliner' ? 3.8 : 1.2), -spec.gearH * (ev.water ? 0.3 : 1) + 0.3, 0));
+        const up = ev.water ? 6 + Math.random() * 6 : 2;
+        particles.spawn({ pos: p, vel: st.vel.clone().multiplyScalar(0.25).add(new THREE.Vector3((Math.random() - 0.5) * 4, Math.random() * up, (Math.random() - 0.5) * 4)), size: ev.water ? 2.5 : 1.5, grow: ev.water ? 6 : dust ? 6 : 4, life: ev.water ? 2 : dust ? 4 : 2.5, opacity: 0.6, color: col, drag: 1.5, rise: ev.water ? -8 : 0 });
       }
       st.landing = { ...ev, start: st.time };
     }
@@ -505,17 +579,22 @@ function checkLandingResult() {
   const cl = Math.abs(L.x).toFixed(1);
   let score = 100;
   score -= clamp((-fpm - 100) / 6, 0, 45);
-  score -= L.runway ? 0 : 40;
-  score -= clamp((Math.abs(L.x) - 2) * 2.5, 0, 20);
-  score -= tdDist < 150 || tdDist > 900 ? 15 : tdDist < 250 || tdDist > 650 ? 6 : 0;
+  if (L.runway) {
+    score -= clamp((Math.abs(L.x) - 2) * 2.5, 0, 20);
+    score -= tdDist < 150 || tdDist > 900 ? 15 : tdDist < 250 || tdDist > 650 ? 6 : 0;
+  }
   score -= clamp((Math.abs(L.roll) / D2R - 2) * 2, 0, 10);
+  const stopDist = Math.round(Math.hypot(st.pos.x - L.x, st.pos.z - L.z));
   score = Math.round(clamp(score, 0, 100));
   const grade = score >= 92 ? 'S' : score >= 80 ? 'A' : score >= 65 ? 'B' : score >= 45 ? 'C' : 'D';
   const comment = fpm > -120 ? 'バターのようなソフトランディング！' : fpm > -240 ? 'きれいな接地です' : fpm > -400 ? 'やや硬めの接地' : fpm > -600 ? 'ハードランディング' : '非常に激しい接地 — 機体点検が必要';
-  $('resTitle').textContent = L.runway ? '着陸成功' : '着陸（滑走路外）';
+  $('resTitle').textContent = L.water ? '着水成功' : L.belly ? `胴体着陸 成功（${L.surfaceName}）` : L.runway ? '着陸成功' : `${L.surfaceName}に着陸`;
   $('resGrade').textContent = grade;
-  const rows = [['スコア', `${score} / 100`], ['接地率', `${fpm} fpm（${comment}）`], ['接地位置', `滑走路端から ${tdDist} m（目標 300〜600 m）`], ['センターライン偏差', `${cl} m`],
-    ['接地速度', `${Math.round(L.ias * 1.944)} kt`], ['接地時バンク角', `${(Math.abs(L.roll) / D2R).toFixed(1)}°`]];
+  const rows = [['スコア', `${score} / 100`], ['接地率', `${fpm} fpm（${comment}）`]];
+  if (L.runway) rows.push(['接地位置', `滑走路端から ${tdDist} m（目標 300〜600 m）`], ['センターライン偏差', `${cl} m`]);
+  else rows.push(['着陸場所', L.water ? '水面' : L.surfaceName], ['停止までの距離', `${stopDist} m`]);
+  rows.push(['接地速度', `${Math.round(L.ias * 1.944)} kt`], ['接地時バンク角', `${(Math.abs(L.roll) / D2R).toFixed(1)}°`]);
+  vrResult = { title: $('resTitle').textContent, rows: [['評価', grade], ...rows] };
   $('resRows').innerHTML = rows.map(([a, b]) => `<div class="row"><span>${a}</span><span>${b}</span></div>`).join('');
   if (score >= 65) Audio.sfx('success');
   if (spec.id === 'airliner') setTimeout(() => Audio.sfx('cabin'), 900);
@@ -549,22 +628,23 @@ function updateModel(t, dt) {
 // ---------- メインループ ----------
 const SUB = 1 / 240;
 let acc = 0;
-function frame() {
-  requestAnimationFrame(frame);
-  tick(Math.min(0.05, clock.getDelta()));
-}
+// VR 中はヘッドセットのフレームで回すため setAnimationLoop を使う
+function frame() { tick(Math.min(0.05, clock.getDelta())); }
+const viewH = () => (vr.presenting ? 900 : renderer.domElement.height);  // 灯火の点の大きさの基準
 function tick(dt) {
   const t = clock.elapsedTime;
   if (mode === 'loading') return;
   if (window.__camOverride) { // デバッグ用の固定カメラ
     const o = window.__camOverride; camera.fov = o.fov || 60; camera.near = 0.5; camera.position.set(...o.p); camera.up.set(0, 1, 0); camera.lookAt(...o.t); camera.updateProjectionMatrix();
-    world.update(dt, t, camera, renderer.domElement.height, env.wind); hud.draw(null); renderer.render(scene, camera); return;
+    world.update(dt, t, camera, viewH(), env.wind); hud.draw(null); renderer.render(scene, camera); return;
   }
-  if (mode === 'menu') { updateMenu(t); world.update(dt, t, camera, renderer.domElement.height, env.wind); hud.draw(null); renderer.render(scene, camera); return; }
+  if (mode === 'menu') { updateMenu(t); world.update(dt, t, camera, viewH(), env.wind); hud.draw(null); renderer.render(scene, camera); return; }
   if (!st) return;
+  const vin = vr.presenting ? vr.poll() : null;
+  if (vin) vrButtons(vin);
   if (mode === 'flight') {
     if (!st.crashed) {
-      readInput(dt);
+      readInput(dt, vin);
       // 突風
       if (env.gustAmp > 0) { const gtime = st.time; st.gust.set(Math.sin(gtime * 0.7) * Math.sin(gtime * 0.23), Math.sin(gtime * 1.3) * 0.3, Math.cos(gtime * 0.53) * Math.sin(gtime * 0.31)).multiplyScalar(env.gustAmp); }
       acc += dt;
@@ -576,18 +656,31 @@ function tick(dt) {
   if (!st.crashed) updateModel(t, dt);
   particles.update(dt);
   const view = updateCamera(dt);
-  world.update(dt, t, camera, renderer.domElement.height, env.wind);
+  world.update(dt, t, camera, viewH(), env.wind);
   const ils = ilsInfo();
   const info = mode === 'flight' && !st.crashed ? warnings(ils) : {};
   if (mode === 'flight') touch.update(st, spec);
   if (mode === 'flight' && !st.crashed) { soundWarnings(info, dt); callout(ils); checkLandingResult(); Audio.update(st, spec, view); }
   info.ils = ils && ils.along > -200 ? ils : null; info.cockpit = view.cockpit; info.camera = camera; info.dt = dt; info.showMap = $('optMap').checked; info.wind = env.windTxt;
   if (window.__noRender) return;
-  hud.draw(st.crashed ? null : st, spec, info);
+  if (vr.presenting) {
+    // HUD はヘッドセット前方のパネルに描く（転送量を抑えるため 2 フレームに 1 回）
+    hud.draw(null);
+    vrHud.map = hud.map; vrHud.msgs = hud.msgs;
+    if ((vrFrame++ & 1) === 0) vr.updateHud(() => { vrHud.draw(st.crashed ? null : st, spec, info); drawVrPanel(); });
+    else vrHud.msgs = vrHud.msgs.filter((m) => (m.t -= dt) > 0);
+    hud.msgs = vrHud.msgs;
+  } else hud.draw(st.crashed ? null : st, spec, info);
   renderer.render(scene, camera);
+}
+function drawVrPanel() {
+  if (mode === 'paused') vrHud.drawPanel('一時停止', [], 'A: 再開　B: やり直し　Y: メニューへ（VR 終了）');
+  else if (mode === 'result' && vrResult) vrHud.drawPanel(vrResult.title, vrResult.rows, 'A: もう一度　B: このまま続ける　Y: メニューへ（VR 終了）');
+  else if (mode === 'crash') vrHud.drawPanel('墜落', [[$('crashReason').textContent, null]], 'A: やり直し　Y: メニューへ（VR 終了）', RED);
 }
 
 window.addEventListener('resize', () => {
+  if (renderer.xr.isPresenting) return;
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); hud.resize();
   hud.compact = touchOn || window.innerHeight < 500;
@@ -628,9 +721,9 @@ async function boot() {
   renderer.compile(scene, camera);
   $('loadbar').style.width = '100%';
   $('loading').classList.remove('show');
-  $('go').disabled = false; $('go').textContent = 'フライト開始';
+  $('go').disabled = false; $('go').textContent = 'フライト開始'; $('goVR').disabled = false;
   setMode('menu');
 }
-window.__sim = { touch, particles, get st() { return st; }, get spec() { return spec; }, world, tick, startFlight, cfg, setMode, keys, get mode() { return mode; }, camera, renderer, scene, setCam, applyTime, FM: window.FM };
-boot().then(() => frame());
+window.__sim = { vr, touch, particles, get st() { return st; }, get spec() { return spec; }, world, tick, startFlight, cfg, setMode, keys, get mode() { return mode; }, camera, renderer, scene, setCam, applyTime, FM: window.FM };
+boot().then(() => renderer.setAnimationLoop(frame));
 void lerp; void onRunway; void DOWNTOWN; void RED;
