@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="なみのかたち — 物理モデルの歌声とピアノ">
+<meta property="og:description" content="Fable 5.2での物理モデリングと作曲">
+<meta property="og:image" content="https://kishida.github.io/webdemos/instruments/voice-fable/ogp.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/instruments/voice-fable/index.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<title>なみのかたち — 物理モデルの歌声とピアノ</title>
+<style>
+  :root {
+    --bg: #080b14; --panel: #0e1322; --line: #1e2740; --ink: #e8ecf6; --dim: #7f8aa8;
+    --voice: #ff8463; --air: #62d6ff; --piano: #f3cd7a; --ok: #8ef0b4;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif; }
+  body { min-height: 100vh; background: radial-gradient(1200px 700px at 30% 0%, #141c36 0%, var(--bg) 60%); }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 18px 20px 28px; }
+  header { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; margin-bottom: 14px; }
+  h1 { font-family: "Yu Mincho", "Hiragino Mincho ProN", serif; font-weight: 600; font-size: 34px; letter-spacing: .12em; margin: 0; }
+  h1 small { display: block; font-family: inherit; font-size: 12.5px; letter-spacing: .08em; color: var(--dim); font-weight: 400; margin-top: 4px; }
+  .transport { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+  button.play { appearance: none; border: 0; cursor: pointer; width: 58px; height: 58px; border-radius: 50%; background: linear-gradient(145deg, #ffa07f, #ff6a4a); color: #1b0d08; font-size: 22px; box-shadow: 0 6px 24px #ff6a4a55, inset 0 1px 0 #fff6; transition: transform .12s; }
+  button.play:hover { transform: scale(1.06); }
+  .time { font-variant-numeric: tabular-nums; color: var(--dim); font-size: 13px; min-width: 86px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); gap: 14px; }
+  .panel { background: linear-gradient(180deg, #111830cc, #0b101dcc); border: 1px solid var(--line); border-radius: 14px; position: relative; overflow: hidden; }
+  .panel h2 { position: absolute; left: 14px; top: 10px; margin: 0; font-size: 11.5px; letter-spacing: .14em; color: var(--dim); font-weight: 500; z-index: 2; pointer-events: none; }
+  .panel h2 b { color: var(--ink); font-weight: 600; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #singer { height: 520px; }
+  .right { display: grid; grid-template-rows: 1fr 1fr 1.15fr; gap: 14px; min-height: 0; }
+  .right .panel { min-height: 0; }
+  .right { height: 520px; }
+  .lyrics { margin: 10px 0; text-align: center; min-height: 56px; display: flex; align-items: center; justify-content: center; font-family: "Yu Mincho", "Hiragino Mincho ProN", serif; font-size: 34px; letter-spacing: .22em; }
+  .lyrics span { color: #3c4767; transition: color .12s, text-shadow .12s; }
+  .lyrics span.on { color: var(--ink); }
+  .lyrics span.now { color: var(--voice); text-shadow: 0 0 18px #ff846388; }
+  .lyrics .idle { font-size: 15px; letter-spacing: .1em; color: var(--dim); font-family: "Yu Gothic UI", sans-serif; }
+  #roll { height: 190px; cursor: grab; touch-action: pan-y; }
+  #roll.drag { cursor: grabbing; }
+  #rollBack { position: absolute; right: 12px; top: 8px; z-index: 3; display: none; appearance: none; cursor: pointer; border: 1px solid var(--line); background: #131a2ee6; color: var(--air); border-radius: 999px; font-size: 11.5px; padding: 4px 12px; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+  .seg button { appearance: none; border: 0; cursor: pointer; background: #131a2e; color: var(--dim); font-size: 13px; padding: 8px 16px; font-family: inherit; }
+  .seg button.on { background: var(--voice); color: #1b0d08; font-weight: 600; }
+  #keys { height: 64px; }
+  #keysP { margin-top: 12px; }
+  .seek { height: 6px; background: #1a2238; border-radius: 3px; margin-top: 12px; cursor: pointer; position: relative; }
+  .seek i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 3px; background: linear-gradient(90deg, var(--air), var(--voice)); }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 26px; margin-top: 16px; align-items: center; font-size: 12.5px; color: var(--dim); }
+  .controls label { display: flex; align-items: center; gap: 8px; }
+  input[type=range] { accent-color: var(--voice); width: 120px; }
+  .vowels { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+  .vowels button { appearance: none; cursor: pointer; width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: #131a2e; color: var(--ink); font-size: 17px; font-family: "Yu Mincho", serif; touch-action: none; }
+  .vowels button:active, .vowels button.on { background: var(--voice); color: #1b0d08; border-color: transparent; }
+  .note { margin-top: 18px; font-size: 12.5px; line-height: 1.9; color: var(--dim); display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 6px 28px; }
+  .note b { color: var(--ink); font-weight: 600; }
+  .note i { font-style: normal; color: var(--air); }
+  .controls a { color: var(--air); text-decoration: none; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .right { height: auto; } .right .panel { height: 170px; } h1 { font-size: 26px; } .lyrics { font-size: 24px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>なみのかたち<small>肺の圧力・声帯の振動・声道の空気の波を計算して歌う声と、弦とハンマーを計算するピアノ</small></h1>
+    <div class="transport">
+      <div class="seg" id="voiceSeg" title="歌い手の体の寸法を切り替える"><button data-t="male" class="on">男声</button><button data-t="female">女声</button></div>
+      <span class="time" id="time">0:00 / 0:00</span>
+      <button class="play" id="play" title="再生 / 停止">▶</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="panel" id="singerP"><h2><b>声道</b>　正中断面</h2><canvas id="singer"></canvas></div>
+    <div class="right">
+      <div class="panel"><h2><b>声門を通る空気の流れ</b>　と　口から出る音圧</h2><canvas id="wave"></canvas></div>
+      <div class="panel"><h2><b>スペクトル</b>　倍音（声帯）× 共鳴（声道の形）</h2><canvas id="spec"></canvas></div>
+      <div class="panel"><h2><b>声道の断面積</b>　声門 → 唇</h2><canvas id="area"></canvas></div>
+    </div>
+  </div>
+
+  <div class="lyrics" id="lyrics"><span class="idle">▶ を押すと、計算された声が歌い出します</span></div>
+  <div class="panel"><h2><b>音高</b>　帯＝楽譜　線＝声帯が実際に出した高さ　｜　ドラッグ・ホイールでスクロール　Ctrl+ホイールで拡大　クリックで再生位置を移動</h2><button id="rollBack">再生位置へ戻る</button><canvas id="roll"></canvas></div>
+  <div class="panel" id="keysP"><canvas id="keys"></canvas></div>
+  <div class="seek" id="seek"><i id="seekbar"></i></div>
+
+  <div class="controls">
+    <label>歌 <input type="range" id="vVol" min="0" max="1.6" step="0.01" value="1"></label>
+    <label>ピアノ <input type="range" id="pVol" min="0" max="3" step="0.01" value="1.5"></label>
+    <label>ビブラート <input type="range" id="vib" min="0" max="2.5" step="0.01" value="1"></label>
+    <label>息まじり <input type="range" id="breath" min="0" max="6" step="0.01" value="1"></label>
+    <a id="wav" href="out/song.wav" download="naminokatachi.wav">WAV（書き出し済み）</a>
+    <div class="vowels">自分で鳴らす
+      <input type="range" id="freeP" min="50" max="67" step="1" value="60" title="音の高さ">
+      <button data-v="a">あ</button><button data-v="i">い</button><button data-v="u">う</button><button data-v="e">え</button><button data-v="o">お</button>
+    </div>
+  </div>
+
+  <div class="note">
+    <div><b>録音もサンプルも使っていません。</b>声帯は 2 つの質量とばねでできていて、肺からの空気に押されて自分で震えはじめます（二質量モデル）。波形はどこにも書かれていません。</div>
+    <div><b>音程は耳で合わせています。</b>声帯の張りを決めても、出る高さは息の強さや口の形で変わります。1 周期ごとに高さを測って張りを直す——人と同じやり方です。</div>
+    <div><b>母音は管の形です。</b>声道を約 40 個の短い管に分け、空気の圧力波の反射を計算します。<i>あ・い・う・え・お</i> の違いは舌と唇が作る断面積だけ。</div>
+    <div><b>女声は体の寸法が違うだけです。</b>声帯を相似形のまま 0.72 倍に、声道を 15 cm から 13 cm に縮めています。式は男声と同じで、曲は 7 半音上げて歌います。</div>
+    <div><b>子音は「どこを狭めるか」です。</b>狭い所を空気が速く抜けると乱流になり、s や sh の音になります。閉じて開けば破裂音、鼻へ抜けば m・n。</div>
+  </div>
+</div>
+
+<script src="piano-engine.js"></script>
+<script src="voice-engine.js"></script>
+<script src="host.js"></script>
+<script src="song.js"></script>
+<script>
+'use strict';
+let voiceType = 'male', song = FableSong.buildSong({ voice: voiceType });
+const $ = id => document.getElementById(id);
+const C_SOUND = 350, RHO = 1.14;
+const COL = { voice: '#ff8463', air: '#62d6ff', piano: '#f3cd7a', dim: '#7f8aa8', ink: '#e8ecf6', line: '#1e2740' };
+
+// ============================== 音 ==============================
+let ctx = null, node = null, anaV = null, anaM = null, playing = false, started = false;
+let snap = null, songT = 0, snapAt = 0;
+const f0Hist = [];       // {t, f}
+async function initAudio() {
+  if (ctx) return;
+  ctx = new AudioContext({ sampleRate: 48000, latencyHint: 'playback' });
+  const src = `
+    ${pianoEngineFactory.toString()}
+    ${voiceEngineFactory.toString()}
+    ${hostFactory.toString()}
+    const Host = hostFactory(), Piano = pianoEngineFactory(), Voice = voiceEngineFactory().Voice;
+    class P extends AudioWorkletProcessor {
+      constructor() { super(); this.h = new Host(Piano, Voice, sampleRate, m => this.port.postMessage(m)); this.port.onmessage = e => this.h.msg(e.data); }
+      process(inp, out) { const o = out[0]; this.h.process(o[0], o[1] || o[0], o[0].length, out[1] && out[1][0]); return true; }
+    }
+    registerProcessor('fable-voice', P);`;
+  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([src], { type: 'application/javascript' })));
+  node = new AudioWorkletNode(ctx, 'fable-voice', { numberOfInputs: 0, numberOfOutputs: 2, outputChannelCount: [2, 1] });
+  anaV = ctx.createAnalyser(); anaV.fftSize = 4096; anaV.smoothingTimeConstant = 0.6;
+  anaM = ctx.createAnalyser(); anaM.fftSize = 2048;
+  node.connect(ctx.destination, 0); node.connect(anaM, 0); node.connect(anaV, 1);
+  node.port.onmessage = e => {
+    const d = e.data;
+    if (d.type === 'snap') {
+      snap = d; snapAt = performance.now(); songT = d.t; if (d.playing) { f0Hist.push({ t: d.t, f: d.f0 }); if (f0Hist.length > 4000) f0Hist.splice(0, 1000); }
+    } else if (d.type === 'end') { playing = false; $('play').textContent = '▶'; }
+  };
+  node.port.postMessage({ type: 'voice', kind: voiceType });
+  node.port.postMessage({ type: 'load', events: song.events, dur: song.dur });
+  sendParams();
+}
+function sendParams() {
+  if (!node) return;
+  node.port.postMessage({ type: 'param', name: 'voiceVol', value: +$('vVol').value });
+  node.port.postMessage({ type: 'param', name: 'pianoVol', value: +$('pVol').value });
+  node.port.postMessage({ type: 'param', name: 'vibScale', value: +$('vib').value });
+  node.port.postMessage({ type: 'param', name: 'breathScale', value: +$('breath').value });
+}
+for (const id of ['vVol', 'pVol', 'vib', 'breath']) $(id).addEventListener('input', () => {
+  sendParams();
+  if (id === 'breath' && node) node.port.postMessage({ type: 'breath', value: +$('breath').value });
+});
+async function play(from) {
+  await initAudio(); await ctx.resume();
+  f0Hist.length = 0; songT = from || 0; rollFollow = true;
+  node.port.postMessage({ type: 'play', t: from || 0 }); playing = true; started = true; $('play').textContent = '■';
+}
+function stop() { if (node) node.port.postMessage({ type: 'stop' }); playing = false; $('play').textContent = '▶'; }
+$('play').onclick = () => playing ? stop() : play(songT > song.dur - 1 ? 0 : (started ? songT : 0));
+$('seek').onclick = e => { const r = $('seek').getBoundingClientRect(); play(Math.max(0, (e.clientX - r.left) / r.width * song.dur - 0.01)); };
+document.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); $('play').click(); } });
+for (const b of document.querySelectorAll('.vowels button')) {
+  const on = async e => { e.preventDefault(); await initAudio(); await ctx.resume(); if (playing) stop(); b.classList.add('on'); node.port.postMessage({ type: 'sing', vowel: b.dataset.v, midi: +$('freeP').value }); };
+  const off = () => { if (!b.classList.contains('on')) return; b.classList.remove('on'); node.port.postMessage({ type: 'hush' }); };
+  b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointerleave', off); b.addEventListener('pointercancel', off);
+}
+$('freeP').addEventListener('input', () => { const b = document.querySelector('.vowels button.on'); if (b && node) node.port.postMessage({ type: 'sing', vowel: b.dataset.v, midi: +$('freeP').value }); });
+
+// ============================== 歌詞 ==============================
+let rollFollow = true, rollT = 0, rollSpan = 9, rollLo = 52.5, rollHi = 69.5;
+const lineInfo = [];
+function setSong() { // 曲（声種で調が変わる）から歌詞と表示範囲を作り直す
+  const kanaNotes = song.voice.filter(n => n.kana); lineInfo.length = 0; shownLine = -2;
+  let mn = 127, mx = 0; for (const n of song.voice) { mn = Math.min(mn, n.m); mx = Math.max(mx, n.m); } rollLo = mn - 2.5; rollHi = mx + 2.5;
+  { let k = 0; for (const ln of song.lines) { const chars = []; for (const ch of ln) { if (ch === ' ') chars.push({ ch: '　' }); else chars.push({ ch, n: kanaNotes[k++] }); } const ns = chars.filter(c => c.n).map(c => c.n); lineInfo.push({ chars, t0: ns[0].t, t1: 0 }); } }
+lineInfo.forEach((l, i) => { const lastN = l.chars.filter(c => c.n).pop().n; let end = lastN.t + lastN.d; for (const n of song.voice) if (!n.kana && n.t >= lastN.t && (i === lineInfo.length - 1 || n.t < lineInfo[i + 1].t0)) end = Math.max(end, n.t + n.d); l.t1 = end; });
+}
+var shownLine = -2; setSong();
+function setVoice(type) {
+  if (type === voiceType) return;
+  if (playing) stop();
+  voiceType = type; song = FableSong.buildSong({ voice: type }); setSong();
+  for (const b of $('voiceSeg').children) b.classList.toggle('on', b.dataset.t === type);
+  playing = false; started = false; songT = 0; rollT = 0; rollFollow = true; f0Hist.length = 0; $('play').textContent = '▶';
+  const fp = $('freeP'), d = song.transpose; fp.min = 50 + d; fp.max = 67 + d; fp.value = 60 + d;
+  $('wav').href = type === 'female' ? 'out/song-female.wav' : 'out/song.wav'; $('wav').download = type === 'female' ? 'naminokatachi-female.wav' : 'naminokatachi.wav';
+  if (node) { node.port.postMessage({ type: 'voice', kind: type }); node.port.postMessage({ type: 'load', events: song.events, dur: song.dur }); sendParams(); node.port.postMessage({ type: 'breath', value: +$('breath').value }); }
+}
+for (const b of $('voiceSeg').children) b.onclick = () => setVoice(b.dataset.t);
+function drawLyrics(t) {
+  let li = -1; for (let i = 0; i < lineInfo.length; i++) if (t > lineInfo[i].t0 - 1.2 && t < lineInfo[i].t1 + 0.6) li = i;
+  const el = $('lyrics');
+  if (li !== shownLine) {
+    shownLine = li; el.innerHTML = '';
+    if (li < 0) { const s = document.createElement('span'); s.className = 'idle'; s.textContent = started ? (t > song.voice[song.voice.length - 1].t ? '— おわり —' : '♪') : '▶ を押すと、計算された声が歌い出します'; el.appendChild(s); }
+    else for (const c of lineInfo[li].chars) { const s = document.createElement('span'); s.textContent = c.ch; c.el = s; el.appendChild(s); }
+  }
+  if (li >= 0) for (const c of lineInfo[li].chars) if (c.n) { const now = t >= c.n.t - 0.05 && t < c.n.t + c.n.d; c.el.className = now ? 'now' : t >= c.n.t ? 'on' : ''; }
+}
+
+// ============================== 描画の下ごしらえ ==============================
+function fit(cv) { const r = cv.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1); const w = Math.round(r.width * d), h = Math.round(r.height * d); if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; } const g = cv.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); return { g, w: r.width, h: r.height }; }
+const NOTE_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+const midiOf = f => 69 + 12 * Math.log2(f / 440);
+
+// 静止時の見た目用（あいまい母音の形）
+const idleArea = (() => { const V = voiceEngineFactory().VOWELS.x[0].pts, N = 41, a = new Float32Array(N); for (let i = 0; i < N; i++) { const x = (i + 0.5) / N * (V.length - 1), j = Math.min(V.length - 2, Math.floor(x)), t = x - j; a[i] = Math.exp(Math.log(V[j]) * (1 - t) + Math.log(V[j + 1]) * t); } return a; })();
+let dispArea = Float32Array.from(idleArea), dispVelum = 0, dispPs = 0, dispFlow = 0, strobe = 0, glotOpen = 0.15, glotOpen2 = 0.15;
+
+// ---- 声道の外壁（咽頭の後ろ壁 → 口蓋）: 弧長でたどる ----
+const WALL = { x0: 240, yG: 560, yA: 335, r: 95, xL: 478 };
+WALL.l1 = WALL.yG - WALL.yA; WALL.l2 = Math.PI / 2 * WALL.r; WALL.l3 = WALL.xL - (WALL.x0 + WALL.r); WALL.len = WALL.l1 + WALL.l2 + WALL.l3;
+function wall(s) { // s: 0..1 → {x, y, nx, ny}（n は内向き = 舌の側）
+  let d = s * WALL.len;
+  if (d <= WALL.l1) return { x: WALL.x0, y: WALL.yG - d, nx: 1, ny: 0 };
+  d -= WALL.l1;
+  if (d <= WALL.l2) { const th = Math.PI + d / WALL.r, c = Math.cos(th), sn = Math.sin(th); return { x: WALL.x0 + WALL.r + WALL.r * c, y: WALL.yA + WALL.r * sn, nx: -c, ny: -sn }; }
+  d -= WALL.l2; return { x: WALL.x0 + WALL.r + d, y: WALL.yA - WALL.r, nx: 0, ny: 1 };
+}
+const dpx = a => Math.min(90, 27 * Math.sqrt(Math.max(0, a)));
+const parts = Array.from({ length: 150 }, () => ({ s: Math.random(), u: 0.12 + Math.random() * 0.76, v: 0.6 + Math.random() * 0.8 }));
+
+function drawSinger(dt) {
+  const { g, w, h } = fit($('singer'));
+  g.clearRect(0, 0, w, h);
+  const sc = Math.min(w / 620, h / 672); g.save(); g.translate((w - 620 * sc) / 2 + 10 * sc, (h - 672 * sc) / 2 + 14 * sc); g.scale(sc, sc);
+  const A = dispArea, N = A.length;
+  const P = [], W = [];
+  for (let i = 0; i < N; i++) { const q = wall((i + 0.5) / N), d = dpx(A[i]); W.push(q); P.push({ x: q.x + q.nx * d, y: q.y + q.ny * d }); }
+  const wEnd = wall(1), dl = dpx(A[N - 1]), jaw = Math.min(26, dl * 0.45 + dpx(A[N - 6]) * 0.12);
+  const lipTop = { x: wEnd.x, y: wEnd.y }, lipBot = { x: wEnd.x, y: wEnd.y + dl };
+
+  // ---- 頭部のシルエット ----
+  const head = new Path2D();
+  head.moveTo(452, 10); head.bezierCurveTo(472, 70, 464, 112, 458, 126);
+  head.lineTo(517, 196); head.quadraticCurveTo(524, 209, 508, 213); head.lineTo(491, 215);
+  head.quadraticCurveTo(507, 223, 499, 238); head.lineTo(lipTop.x, lipTop.y);
+  head.lineTo(lipBot.x, lipBot.y); head.quadraticCurveTo(505, 246 + dl, 496, 262 + dl);
+  head.quadraticCurveTo(487, 272 + dl, 491, 292 + jaw); head.quadraticCurveTo(488, 320 + jaw, 452, 328 + jaw);
+  head.quadraticCurveTo(384, 342 + jaw * 0.5, 346, 402); head.lineTo(338, 640); head.lineTo(150, 640); head.lineTo(150, 432);
+  head.quadraticCurveTo(108, 330, 112, 200); head.lineTo(122, 10); head.closePath();
+  const sk = g.createLinearGradient(0, 0, 0, 640); sk.addColorStop(0, '#1b274400'); sk.addColorStop(0.2, '#1b2744'); sk.addColorStop(1, '#141d36');
+  g.fillStyle = sk; g.fill(head);
+  const rim = g.createLinearGradient(0, 20, 0, 200); rim.addColorStop(0, '#5b6b9a00'); rim.addColorStop(1, '#5b6b9a');
+  g.strokeStyle = rim; g.lineWidth = 1.6; g.stroke(head);
+
+  g.save(); g.clip(head);
+  // ---- 鼻腔 ----
+  const vOpen = Math.min(1, dispVelum / 0.6);
+  const nasal = new Path2D();
+  nasal.moveTo(252, 300); nasal.quadraticCurveTo(250, 205, 330, 196); nasal.lineTo(470, 190); nasal.quadraticCurveTo(505, 196, 508, 214); nasal.lineTo(488, 214);
+  nasal.quadraticCurveTo(470, 226, 345, 228); nasal.quadraticCurveTo(292, 232, 278, 300); nasal.closePath();
+  g.fillStyle = '#070a13'; g.fill(nasal);
+  if (vOpen > 0.02) { g.save(); g.globalAlpha = 0.55 * vOpen * Math.min(1, dispFlow * 4 + 0.3); g.shadowColor = COL.air; g.shadowBlur = 22; g.fillStyle = '#2b7fa8'; g.fill(nasal); g.restore(); }
+  // ---- 気管と肺の圧力 ----
+  const pn = Math.max(-0.4, Math.min(1.3, dispPs / 1200));
+  g.fillStyle = '#070a13'; g.fillRect(WALL.x0, WALL.yG, 46, 90);
+  if (Math.abs(pn) > 0.01) { const tg = g.createLinearGradient(0, 650, 0, WALL.yG); const c = pn > 0 ? '255,132,99' : '98,214,255'; tg.addColorStop(0, `rgba(${c},${0.75 * Math.abs(pn)})`); tg.addColorStop(1, `rgba(${c},${0.3 * Math.abs(pn)})`); g.fillStyle = tg; g.fillRect(WALL.x0, WALL.yG, 46, 90); }
+  // ---- 舌 ----
+  const i0 = Math.round(N * 0.2), i1 = N - 3;
+  const tongue = new Path2D(); tongue.moveTo(P[i0].x, P[i0].y);
+  for (let i = i0 + 1; i <= i1; i++) tongue.lineTo(P[i].x, P[i].y);
+  tongue.quadraticCurveTo(P[i1].x + 8, P[i1].y + 16, P[i1].x - 14, P[i1].y + 34 + jaw * 0.4);
+  tongue.quadraticCurveTo(400, 372 + jaw * 0.4, 318, 430); tongue.quadraticCurveTo(292, 470, P[i0].x + 6, P[i0].y + 4); tongue.closePath();
+  const tg2 = g.createLinearGradient(260, 250, 420, 420); tg2.addColorStop(0, '#c2566a'); tg2.addColorStop(1, '#5a2238');
+  g.fillStyle = tg2; g.fill(tongue);
+  // ---- 気道（空気の通り道） ----
+  const lumen = new Path2D(); const g0 = wall(0);
+  lumen.moveTo(g0.x, g0.y); for (let i = 0; i < N; i++) lumen.lineTo(W[i].x, W[i].y); lumen.lineTo(wEnd.x + 26, wEnd.y - 2); lumen.lineTo(wEnd.x + 26, wEnd.y + dl + 2); lumen.lineTo(lipBot.x, lipBot.y);
+  for (let i = N - 1; i >= 0; i--) lumen.lineTo(P[i].x, P[i].y); lumen.lineTo(g0.x + dpx(A[0]), g0.y); lumen.closePath();
+  g.fillStyle = '#060912'; g.fill(lumen);
+  const glow = Math.min(1, dispFlow * 3.2);
+  if (glow > 0.01) { g.save(); g.clip(lumen); const lg = g.createLinearGradient(240, 560, 480, 240); lg.addColorStop(0, `rgba(255,150,110,${0.5 * glow})`); lg.addColorStop(0.35, `rgba(98,214,255,${0.3 * glow})`); lg.addColorStop(1, `rgba(98,214,255,${0.42 * glow})`); g.fillStyle = lg; g.fillRect(200, 180, 340, 420); g.restore(); }
+  g.restore();
+
+  // ---- 空気の粒 ----
+  const flow = dispFlow;
+  g.save(); g.globalCompositeOperation = 'lighter';
+  for (const p of parts) {
+    const i = Math.min(N - 1, Math.floor(p.s * N)), a = Math.max(0.05, A[i]);
+    p.s += dt * p.v * (0.25 + 2.2 * flow) * Math.min(4.5, 1.6 / a) * 0.22;
+    if (p.s >= 1.06) { p.s = 0; p.u = 0.12 + Math.random() * 0.76; }
+    if (p.s < 0) p.s = 0;
+    const q = wall(Math.min(1, p.s)), d = dpx(A[Math.min(N - 1, Math.floor(Math.min(0.999, p.s) * N))]);
+    let x = q.x + q.nx * d * p.u, y = q.y + q.ny * d * p.u; if (p.s > 1) { x += (p.s - 1) * WALL.len; y += (p.u - 0.5) * (p.s - 1) * 300; }
+    const al = Math.min(1, 0.12 + flow * 3) * (p.s > 1 ? 1 - (p.s - 1) / 0.06 : 1), fast = Math.min(1, 0.5 / a);
+    g.fillStyle = `rgba(${Math.round(98 + 157 * fast)},${Math.round(214 - 20 * fast)},255,${al * 0.8})`;
+    g.beginPath(); g.arc(x, y, 1.3 + fast * 1.1, 0, 6.3); g.fill();
+  }
+  // 乱流のきらめき
+  if (snap && snap.fric > 2) {
+    const q = wall(Math.min(1, snap.fricPos)), k = Math.min(1, snap.fric / 30), d = dpx(A[Math.min(N - 1, Math.round(snap.fricPos * N))]);
+    for (let j = 0; j < 26 * k; j++) { const ang = Math.random() * 6.3, rr = Math.random() * 20 + 3; g.fillStyle = `rgba(255,255,255,${0.75 * Math.random()})`; g.fillRect(q.x + q.nx * d * 0.5 + Math.cos(ang) * rr + q.ny * 10, q.y + q.ny * d * 0.5 + Math.sin(ang) * rr * 0.6, 1.6, 1.6); }
+  }
+  g.restore();
+
+  // ---- 輪郭線: 口蓋・咽頭壁・舌 ----
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  g.strokeStyle = '#8fa0cf'; g.lineWidth = 2.2; g.beginPath(); g.moveTo(g0.x, g0.y + 90); g.lineTo(g0.x, g0.y);
+  for (let i = 0; i < N; i++) { const s = (i + 0.5) / N; if (Math.abs(s - 0.53) < 0.075) g.moveTo(W[i].x, W[i].y); else g.lineTo(W[i].x, W[i].y); }
+  g.lineTo(wEnd.x, wEnd.y); g.stroke();
+  // 軟口蓋（鼻への弁）
+  { const a = wall(0.60), b = wall(0.455), ang = vOpen * 0.5; const dx = b.x - a.x, dy = b.y - a.y, c = Math.cos(ang), sn = Math.sin(ang);
+    g.strokeStyle = vOpen > 0.05 ? COL.air : '#c98a9a'; g.lineWidth = 7; g.beginPath(); g.moveTo(a.x, a.y); g.quadraticCurveTo(a.x + (dx * 0.5) * c - (dy * 0.5) * sn - 8, a.y + (dx * 0.5) * sn + (dy * 0.5) * c - 6, a.x + dx * c - dy * sn, a.y + dx * sn + dy * c); g.stroke(); }
+  g.strokeStyle = COL.voice; g.lineWidth = 2.4; g.beginPath(); g.moveTo(g0.x + dpx(A[0]), g0.y + 90); g.lineTo(g0.x + dpx(A[0]), g0.y);
+  for (let i = 0; i < N; i++) g.lineTo(P[i].x, P[i].y); g.stroke();
+  // 歯
+  g.fillStyle = '#e9edf7'; g.beginPath(); g.roundRect(wEnd.x - 16, wEnd.y - 1, 5, 11, 2); g.fill();
+  g.beginPath(); g.roundRect(wEnd.x - 13, wEnd.y + Math.max(13, dl * 0.9 + 6) + jaw * 0.2, 5, -10, 2); g.fill();
+  // 声帯（横から）
+  { const gx = WALL.x0, gy = WALL.yG, wT = 46, gap = Math.max(0, glotOpen) * 20;
+    g.fillStyle = '#ffd9c9'; g.beginPath(); g.moveTo(gx - 3, gy - 7); g.lineTo(gx + wT / 2 - gap / 2, gy); g.lineTo(gx - 3, gy + 9); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(gx + wT + 3, gy - 7); g.lineTo(gx + wT / 2 + gap / 2, gy); g.lineTo(gx + wT + 3, gy + 9); g.closePath(); g.fill(); }
+
+  // ---- ラベル ----
+  g.font = '12px "Yu Gothic UI", sans-serif'; g.textBaseline = 'middle';
+  const label = (txt, x, y, tx, ty, col) => { g.strokeStyle = '#42507a'; g.lineWidth = 1; g.beginPath(); g.moveTo(x, y); g.lineTo(tx, ty); g.stroke(); g.fillStyle = col || COL.dim; g.textAlign = tx < x ? 'right' : 'left'; g.fillText(txt, tx + (tx < x ? -5 : 5), ty); };
+  const mid = P[Math.round(N * 0.66)];
+  label('舌', mid.x - 8, mid.y + 38, 536, 400, '#e08a9a');
+  label('唇', wEnd.x + 14, wEnd.y + dl / 2, 560, 300);
+  label('軟口蓋', wall(0.5).x - 4, wall(0.5).y - 8, 190, 236, vOpen > 0.05 ? COL.air : COL.dim);
+  label('鼻腔', 420, 208, 560, 170, vOpen > 0.05 ? COL.air : COL.dim);
+  label('声帯', WALL.x0 + 50, WALL.yG, 392, 560, '#ffd9c9');
+  label('肺からの圧力', WALL.x0 + 46, 632, 392, 620, COL.voice);
+  g.textAlign = 'left'; g.fillStyle = COL.ink; g.font = '600 15px "Yu Gothic UI", sans-serif';
+  g.fillText(`${Math.round(dispPs)} Pa`, 397, 640); g.font = '11px "Yu Gothic UI", sans-serif'; g.fillStyle = COL.dim; g.fillText(`(${(dispPs / 98.07).toFixed(1)} cmH₂O)`, 462, 640);
+
+  // ---- 声帯を上から（ストロボ） ----
+  const cx = 78, cy = 548, R = 62;
+  g.save(); g.beginPath(); g.arc(cx, cy, R, 0, 6.3); g.fillStyle = '#0a0e1a'; g.fill(); g.strokeStyle = '#34406a'; g.lineWidth = 1.5; g.stroke(); g.clip();
+  const rg = g.createRadialGradient(cx, cy, 6, cx, cy, R); rg.addColorStop(0, '#5a2030'); rg.addColorStop(1, '#2a1220'); g.fillStyle = rg; g.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+  const fold = (open, col, len) => { g.fillStyle = col; for (const sgn of [-1, 1]) { g.beginPath(); g.moveTo(cx + sgn * 60, cy - len - 14); g.lineTo(cx + sgn * 1.2, cy - len); g.quadraticCurveTo(cx + sgn * (1.2 + open * 34), cy, cx + sgn * (1.2 + open * 8), cy + len); g.lineTo(cx + sgn * 60, cy + len + 10); g.closePath(); g.fill(); } };
+  g.fillStyle = '#04060c'; g.beginPath(); g.ellipse(cx, cy, 30, 50, 0, 0, 6.3); g.fill();
+  fold(Math.max(0, glotOpen), '#b96a7c', 46); fold(Math.max(0, glotOpen2), '#f3d6cc', 44);
+  g.restore();
+  g.strokeStyle = '#42507a'; g.lineWidth = 1; g.beginPath(); g.moveTo(cx + R - 4, cy + 12); g.lineTo(WALL.x0 - 4, WALL.yG); g.stroke();
+  g.fillStyle = COL.dim; g.font = '11px "Yu Gothic UI", sans-serif'; g.textAlign = 'center'; g.fillText('声帯を上から（スロー再生）', cx + 10, cy - R - 12);
+
+  // ---- 読み取り値 ----
+  g.textAlign = 'left';
+  const f0 = snap && snap.f0 > 0 ? snap.f0 : 0;
+  g.font = '11px "Yu Gothic UI", sans-serif'; g.fillStyle = COL.dim; g.fillText('声帯の振動数', 22, 74);
+  g.font = '600 30px "Yu Gothic UI", sans-serif'; g.fillStyle = f0 ? COL.ink : '#3c4767';
+  g.fillText(f0 ? `${f0.toFixed(1)} Hz` : '— Hz', 22, 102);
+  if (f0) { const m = Math.round(midiOf(f0)); g.font = '600 15px "Yu Gothic UI", sans-serif'; g.fillStyle = COL.voice; g.fillText(`${NOTE_NAMES[m % 12]}${Math.floor(m / 12) - 1}`, 22, 130); }
+  if (snap && snap.fric > 2) { g.font = '11px "Yu Gothic UI", sans-serif'; g.fillStyle = COL.air; g.fillText(`乱流発生　Re ≈ ${Math.round(snap.re / 100) * 100}`, 22, 158); }
+  g.restore();
+}
+
+// ============================== 波形 ==============================
+const tdBuf = new Float32Array(2048);
+function drawWave() {
+  const { g, w, h } = fit($('wave')); g.clearRect(0, 0, w, h);
+  const x0 = 14, x1 = w - 14, yU = h * 0.42, yP = h * 0.78;
+  g.strokeStyle = '#1b233b'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, yU + h * 0.14); g.lineTo(x1, yU + h * 0.14); g.moveTo(x0, yP); g.lineTo(x1, yP); g.stroke();
+  g.font = '10.5px "Yu Gothic UI", sans-serif'; g.fillStyle = COL.voice; g.textAlign = 'right'; g.fillText('声門流', x1, 44); g.fillStyle = COL.air; g.fillText('音圧', x1, yP - h * 0.14);
+  if (!snap) return;
+  const ug = snap.ug, n = ug.length; let mx = 1e-5; for (let i = 0; i < n; i++) if (ug[i] > mx) mx = ug[i];
+  // 立ち上がりでそろえる
+  let st = 0; const th = mx * 0.35; for (let i = 1; i < n / 2; i++) if (ug[i - 1] < th && ug[i] >= th) { st = i; break; }
+  const span = n / 2;
+  const scale = Math.max(mx, 250e-6);
+  g.strokeStyle = COL.voice; g.lineWidth = 1.8; g.shadowColor = COL.voice; g.shadowBlur = 8; g.beginPath();
+  for (let i = 0; i < span; i++) { const x = x0 + (x1 - x0) * i / (span - 1), y = yU + h * 0.14 - ug[st + i] / scale * h * 0.26; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+  g.stroke(); g.shadowBlur = 0;
+  g.fillStyle = COL.dim; g.textAlign = 'left'; g.fillText(`最大 ${Math.round(mx * 1e6)} cm³/s`, x0, h - 8);
+  g.textAlign = 'right'; g.fillText(`${(span / 48).toFixed(1)} ms`, x1, h - 8);
+  if (anaV) {
+    anaV.getFloatTimeDomainData(tdBuf); let pm = 0.02; for (let i = 0; i < 2048; i++) { const a = Math.abs(tdBuf[i]); if (a > pm) pm = a; }
+    // 同じ周期でそろえる
+    let s2 = 0, best = -1; for (let i = 8; i < 1000; i++) if (tdBuf[i] > best) { best = tdBuf[i]; s2 = i; } s2 = Math.max(0, s2 - 20);
+    g.strokeStyle = COL.air; g.lineWidth = 1.4; g.beginPath();
+    for (let i = 0; i < span; i++) { const x = x0 + (x1 - x0) * i / (span - 1), y = yP - tdBuf[Math.min(2047, s2 + i)] / pm * h * 0.15; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.stroke();
+  }
+}
+
+// ============================== スペクトルと声道の伝達特性 ==============================
+const fdBuf = new Float32Array(2048);
+const TF_N = 220, tfF = Float32Array.from({ length: TF_N }, (_, i) => 80 * Math.pow(8000 / 80, i / (TF_N - 1))), tfDb = new Float32Array(TF_N);
+function transfer(A) { // 断面積 [cm²] から |U唇/U声門| を計算（損失つき連鎖行列）
+  const N = A.length, dl = C_SOUND / 96000, al = 0.0012;
+  for (let q = 0; q < TF_N; q++) {
+    const om = 2 * Math.PI * tfF[q], kr = om * dl / C_SOUND;
+    // cos, sin of (kr - j·al)
+    const ch = Math.cosh(al), sh = Math.sinh(al), cr = Math.cos(kr) * ch, ci = Math.sin(kr) * sh, sr = Math.sin(kr) * ch, si = -Math.cos(kr) * sh;
+    // 唇の放射インピーダンス
+    const aL = A[N - 1] * 1e-4, rad = Math.sqrt(aL / Math.PI), ka = om * rad / C_SOUND, ZN = RHO * C_SOUND / aL;
+    let pr = ZN * 0.25 * ka * ka, pi = ZN * 0.6 * ka, ur = 1, ui = 0; // p = Zr·U, U = 1
+    for (let i = N - 1; i >= 0; i--) {
+      const Z = RHO * C_SOUND / (A[i] * 1e-4);
+      // p' = cos·p + jZ sin·U ; U' = (j sin / Z)·p + cos·U
+      const jsr = -si, jsi = sr; // j·sin
+      const npr = cr * pr - ci * pi + Z * (jsr * ur - jsi * ui), npi = cr * pi + ci * pr + Z * (jsr * ui + jsi * ur);
+      const nur = (jsr * pr - jsi * pi) / Z + cr * ur - ci * ui, nui = (jsr * pi + jsi * pr) / Z + cr * ui + ci * ur;
+      pr = npr; pi = npi; ur = nur; ui = nui;
+    }
+    tfDb[q] = -20 * Math.log10(Math.hypot(ur, ui) + 1e-9);
+  }
+}
+function drawSpec() {
+  const { g, w, h } = fit($('spec')); g.clearRect(0, 0, w, h);
+  const x0 = 14, x1 = w - 14, y0 = 30, y1 = h - 20, fx = f => x0 + (x1 - x0) * Math.log(f / 80) / Math.log(100);
+  g.font = '10px "Yu Gothic UI", sans-serif'; g.textAlign = 'center';
+  for (const f of [100, 200, 500, 1000, 2000, 5000]) { const x = fx(f); g.strokeStyle = '#161d33'; g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); g.stroke(); g.fillStyle = '#56628a'; g.fillText(f >= 1000 ? f / 1000 + 'k' : f, x, h - 7); }
+  if (anaV) {
+    anaV.getFloatFrequencyData(fdBuf);
+    const grd = g.createLinearGradient(0, y0, 0, y1); grd.addColorStop(0, '#ff8463'); grd.addColorStop(1, '#ff846322');
+    g.fillStyle = grd; g.beginPath(); g.moveTo(x0, y1);
+    for (let i = 7; i < 700; i++) { const f = i * 48000 / 4096, x = fx(f), y = y1 - Math.max(0, Math.min(1, (fdBuf[i] + 105) / 80)) * (y1 - y0); g.lineTo(x, y); }
+    g.lineTo(x1, y1); g.closePath(); g.fill();
+  }
+  transfer(dispArea);
+  let mxD = -1e9; for (let q = 0; q < TF_N; q++) if (tfDb[q] > mxD) mxD = tfDb[q];
+  g.strokeStyle = COL.air; g.lineWidth = 2; g.shadowColor = COL.air; g.shadowBlur = 8; g.beginPath();
+  for (let q = 0; q < TF_N; q++) { const x = fx(tfF[q]), y = y0 + 6 + (mxD - tfDb[q]) / 50 * (y1 - y0); q ? g.lineTo(x, Math.min(y1, y)) : g.moveTo(x, Math.min(y1, y)); }
+  g.stroke(); g.shadowBlur = 0;
+  let k = 0; g.fillStyle = COL.air; g.font = '600 11px "Yu Gothic UI", sans-serif';
+  for (let q = 1; q < TF_N - 1 && k < 3; q++) if (tfDb[q] > tfDb[q - 1] && tfDb[q] >= tfDb[q + 1] && tfDb[q] > mxD - 40) { k++; const x = fx(tfF[q]), y = y0 + 6 + (mxD - tfDb[q]) / 50 * (y1 - y0); g.fillText(`F${k} ${Math.round(tfF[q] / 10) * 10}`, Math.max(x0 + 26, Math.min(x1 - 26, x)), Math.max(y0 + 2, y - 9)); }
+}
+
+// ============================== 断面積 ==============================
+function drawArea() {
+  const { g, w, h } = fit($('area')); g.clearRect(0, 0, w, h);
+  const A = dispArea, N = A.length, x0 = 22, x1 = w - 22, cy = h * 0.54, sc = (h * 0.36) / Math.sqrt(7);
+  const grd = g.createLinearGradient(x0, 0, x1, 0); grd.addColorStop(0, '#ff846388'); grd.addColorStop(1, '#62d6ff88');
+  g.fillStyle = grd; g.strokeStyle = '#cfd8f0'; g.lineWidth = 1.4;
+  g.beginPath();
+  for (let i = 0; i < N; i++) { const x = x0 + (x1 - x0) * i / N, r = Math.sqrt(A[i]) * sc; g.lineTo(x, cy - r); g.lineTo(x + (x1 - x0) / N, cy - r); }
+  for (let i = N - 1; i >= 0; i--) { const x = x0 + (x1 - x0) * i / N, r = Math.sqrt(A[i]) * sc; g.lineTo(x + (x1 - x0) / N, cy + r); g.lineTo(x, cy + r); }
+  g.closePath(); g.fill(); g.stroke();
+  if (snap && snap.fric > 2) { const x = x0 + (x1 - x0) * snap.fricPos; g.fillStyle = '#fff'; for (let j = 0; j < 14; j++) g.fillRect(x + Math.random() * 26 - 4, cy + (Math.random() - 0.5) * 22, 1.5, 1.5); }
+  if (dispVelum > 0.03) { const x = x0 + (x1 - x0) * 0.53; g.strokeStyle = COL.air; g.lineWidth = 2; g.beginPath(); g.moveTo(x, cy - Math.sqrt(A[Math.round(N * 0.53)]) * sc); g.lineTo(x + 10, 34); g.stroke(); g.fillStyle = COL.air; g.font = '10.5px "Yu Gothic UI", sans-serif'; g.textAlign = 'left'; g.fillText('鼻へ', x + 14, 36); }
+  g.font = '10.5px "Yu Gothic UI", sans-serif'; g.fillStyle = COL.dim; g.textAlign = 'left'; g.fillText('声門', x0, h - 9); g.textAlign = 'right'; g.fillText('唇', x1, h - 9);
+  g.textAlign = 'center'; g.fillText(`${(N * C_SOUND / 96000 * 100).toFixed(1)} cm を ${N} 区間`, (x0 + x1) / 2, h - 9);
+}
+
+// ============================== 音高ロール ==============================
+function drawRoll(t) {
+  const { g, w, h } = fit($('roll')); g.clearRect(0, 0, w, h);
+  if (rollFollow) rollT = t;
+  $('rollBack').style.display = rollFollow ? 'none' : 'block';
+  const lo = rollLo, hi = rollHi, m0 = Math.ceil(lo), m1 = Math.floor(hi), span = rollSpan, px = w * 0.3, y0 = 30, y1 = h - 10;
+  const tx = tt => px + (tt - rollT) * (w / span), my = m => y1 - (m - lo) / (hi - lo) * (y1 - y0);
+  for (let m = m0; m <= m1; m++) { const bl = [1, 3, 6, 8, 10].includes(m % 12); g.fillStyle = bl ? '#0c1120' : '#10162a'; g.fillRect(0, my(m + 0.5), w, my(m - 0.5) - my(m + 0.5) - 1); }
+  // 曲の外側を暗く
+  g.fillStyle = '#05070dcc'; if (tx(0) > 0) g.fillRect(0, y0 - 8, tx(0), y1 - y0 + 8); if (tx(song.dur) < w) g.fillRect(tx(song.dur), y0 - 8, w - tx(song.dur), y1 - y0 + 8);
+  g.font = '10px "Yu Gothic UI", sans-serif'; g.textAlign = 'left';
+  for (const b of song.bars) { const x = tx(b.t); if (x < -40 || x > w) continue; g.strokeStyle = '#1e2740'; g.beginPath(); g.moveTo(x, y0 - 6); g.lineTo(x, y1); g.stroke(); g.fillStyle = COL.piano; g.globalAlpha = 0.75; g.fillText(b.chord, x + 5, y0 + 2); g.globalAlpha = 1; }
+  // ピアノの音（薄く）
+  for (const n of song.piano) { const x = tx(n.t); if (x > w || x < -200) continue; let m = n.m; while (m < m0) m += 12; while (m > m1) m -= 12; const on = t >= n.t && t < n.t + Math.min(n.d, 0.5); g.fillStyle = on ? '#f3cd7acc' : '#f3cd7a2e'; g.fillRect(x, my(m) - 1.5, Math.max(3, Math.min(n.d, 0.35) * w / span), 3); }
+  // 歌の音符
+  g.textAlign = 'center';
+  for (const n of song.voice) {
+    const x = tx(n.t), ww = n.d * w / span - 2; if (x > w || x + ww < 0) continue;
+    const on = t >= n.t && t < n.t + n.d, past = t >= n.t + n.d, y = my(n.m);
+    g.fillStyle = on ? '#ff8463' : past ? '#ff846355' : '#ff846399'; if (on) { g.shadowColor = COL.voice; g.shadowBlur = 14; }
+    g.beginPath(); g.roundRect(x, y - 6, Math.max(4, ww), 12, 6); g.fill(); g.shadowBlur = 0;
+    if (n.kana) { g.font = '13px "Yu Mincho", serif'; g.fillStyle = on ? '#fff' : past ? '#6b7699' : '#c5cde4'; g.fillText(n.kana, x + 9, y - 14); }
+  }
+  // 実際に出た高さ
+  g.strokeStyle = '#fff'; g.lineWidth = 2; g.shadowColor = '#fff'; g.shadowBlur = 6; g.beginPath(); let pen = false;
+  for (const p of f0Hist) { const x = tx(p.t); if (x < -10 || x > w + 10) { pen = false; continue; } if (p.f <= 0 || p.t > t + 0.02) { pen = false; continue; } const y = my(midiOf(p.f)); pen ? g.lineTo(x, y) : g.moveTo(x, y); pen = true; }
+  g.stroke(); g.shadowBlur = 0;
+  // 音名（主和音の音）
+  g.font = '10px "Yu Gothic UI", sans-serif'; g.textAlign = 'left';
+  const tri = [0, 4, 7].map(i => (i + song.transpose) % 12);
+  for (let m = m0 + 1; m < m1; m++) if (tri.includes(m % 12)) { const s2 = NOTE_NAMES[m % 12] + (Math.floor(m / 12) - 1); g.fillStyle = '#080b14cc'; g.fillRect(2, my(m) - 6, 26, 12); g.fillStyle = '#7f8aa8'; g.fillText(s2, 6, my(m) + 3.5); }
+  // 再生位置
+  const xp = tx(t); if (xp >= 0 && xp <= w) { g.strokeStyle = rollFollow ? '#ffffff55' : '#ffffffaa'; g.lineWidth = 1; g.beginPath(); g.moveTo(xp, y0 - 8); g.lineTo(xp, y1); g.stroke(); }
+}
+{ // スクロール操作: ドラッグ・ホイールで時間方向へ、Ctrl+ホイールで拡大縮小、クリックでその位置から再生
+  const cv = $('roll'), clampT = v => Math.max(0, Math.min(song.dur, v));
+  let dn = null;
+  cv.addEventListener('pointerdown', e => { dn = { x: e.clientX, t: rollT, moved: false }; try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
+  cv.addEventListener('pointermove', e => {
+    if (!dn) return; const dx = e.clientX - dn.x; if (!dn.moved && Math.abs(dx) < 4) return;
+    dn.moved = true; rollFollow = false; cv.classList.add('drag'); rollT = clampT(dn.t - dx / (cv.clientWidth / rollSpan));
+  });
+  const up = e => {
+    if (!dn) return; const d = dn; dn = null; cv.classList.remove('drag');
+    if (!d.moved && e.type === 'pointerup') { const r = cv.getBoundingClientRect(), tt = clampT(rollT + (e.clientX - r.left - r.width * 0.3) / (r.width / rollSpan));
+      if (playing) play(tt); // 再生中はその位置へ飛ぶ
+      else { rollFollow = false; songT = tt; started = true; f0Hist.length = 0; if (node) node.port.postMessage({ type: 'seek', t: tt }); } // 停止中は再生位置の線だけ動かす（音は出さない）
+    }
+  };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => {
+    e.preventDefault(); const px = e.deltaMode === 1 ? 32 : 1, r = cv.getBoundingClientRect();
+    if (e.ctrlKey) { // ポインタの下の時刻を動かさずに拡大縮小
+      const fx = (e.clientX - r.left - r.width * 0.3) / r.width, at = rollT + fx * rollSpan;
+      rollSpan = Math.max(3, Math.min(40, rollSpan * Math.exp(e.deltaY * px * 0.0015))); rollFollow = false; rollT = clampT(at - fx * rollSpan);
+    } else { rollFollow = false; rollT = clampT(rollT + (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * px / (r.width / rollSpan)); }
+  }, { passive: false });
+  $('rollBack').onclick = () => { rollFollow = true; };
+}
+
+// ============================== 鍵盤 ==============================
+function drawKeys(t) {
+  const { g, w, h } = fit($('keys')); g.clearRect(0, 0, w, h);
+  const lo = 33, hi = 96, isB = m => [1, 3, 6, 8, 10].includes(m % 12); let nW = 0; for (let m = lo; m <= hi; m++) if (!isB(m)) nW++;
+  const kw = (w - 16) / nW, act = new Map();
+  for (const n of song.piano) if (t >= n.t && t < n.t + n.d) act.set(n.m, Math.max(act.get(n.m) || 0, 1 - Math.min(1, (t - n.t) / 1.2) * 0.7));
+  const vn = song.voice.find(n => t >= n.t && t < n.t + n.d);
+  let x = 8; const pos = {};
+  for (let m = lo; m <= hi; m++) if (!isB(m)) { pos[m] = x; const a = act.get(m) || 0; g.fillStyle = a ? `rgb(${255 - 12 * (1 - a)},${222 + 20 * (1 - a)},${160 + 80 * (1 - a)})` : '#e9edf6'; if (vn && vn.m === m) g.fillStyle = COL.voice; if (a) { g.shadowColor = COL.piano; g.shadowBlur = 16 * a; } g.beginPath(); g.roundRect(x + 0.6, 8, kw - 1.2, h - 16, [0, 0, 3, 3]); g.fill(); g.shadowBlur = 0; x += kw; }
+  for (let m = lo; m <= hi; m++) if (isB(m)) { const bx = pos[m - 1] + kw * 0.68; const a = act.get(m) || 0; g.fillStyle = a ? COL.piano : (vn && vn.m === m ? COL.voice : '#0c101c'); g.beginPath(); g.roundRect(bx, 8, kw * 0.64, (h - 16) * 0.62, [0, 0, 2, 2]); g.fill(); }
+}
+
+// ============================== ループ ==============================
+let lastNow = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastNow) / 1000); lastNow = now;
+  const t = playing ? songT + (now - snapAt) / 1000 : songT;
+  // 表示用の値をなめらかに
+  const tgt = snap ? snap.area : idleArea;
+  if (dispArea.length !== tgt.length) dispArea = Float32Array.from(tgt);
+  for (let i = 0; i < tgt.length; i++) dispArea[i] += (tgt[i] - dispArea[i]) * 0.55;
+  dispVelum += ((snap ? snap.velum : 0) - dispVelum) * 0.4; dispPs += ((snap ? snap.ps : 0) - dispPs) * 0.35;
+  if (snap) {
+    let m = 0; for (let i = 0; i < snap.ug.length; i++) m += Math.abs(snap.ug[i]); m = m / snap.ug.length / 250e-6; dispFlow += (Math.min(1.2, m) - dispFlow) * 0.25;
+    // 声帯のストロボ: 1 周期ぶんを毎秒 1.3 周でゆっくりなぞる
+    const x1 = snap.x1, x2 = snap.x2, n = x1.length;
+    if (snap.f0 > 0) {
+      const T = 48000 / snap.f0; let z = -1; for (let i = n - Math.ceil(2.2 * T); i < n - T - 1; i++) if (i > 0 && x1[i - 1] <= 0 && x1[i] > 0) { z = i; break; }
+      strobe = (strobe + dt * 1.3) % 1;
+      if (z > 0) { const j = Math.min(n - 1, Math.round(z + strobe * T)), a0 = snap.abd, two_l = 2 * snap.lg * 1e4; glotOpen += ((a0 + two_l * x1[j]) / 0.16 - glotOpen) * 0.6; glotOpen2 += ((a0 + two_l * x2[j]) / 0.16 - glotOpen2) * 0.6; }
+    } else { const rest = Math.min(1.6, snap.abd / 0.16 + 0.12); glotOpen += (rest - glotOpen) * 0.2; glotOpen2 += (rest - glotOpen2) * 0.2; }
+  }
+  drawSinger(dt); drawWave(); drawSpec(); drawArea(); drawRoll(t); drawKeys(t); drawLyrics(t);
+  $('seekbar').style.width = (100 * Math.min(1, t / song.dur)) + '%';
+  const f = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`; $('time').textContent = `${f(Math.min(t, song.dur))} / ${f(song.dur)}`;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
