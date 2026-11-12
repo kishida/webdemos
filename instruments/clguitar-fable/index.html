@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja">
+<html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -43,6 +43,10 @@
   h1 span { color: var(--mel); }
   .sub { color: var(--mute); margin-top: 8px; font-size: 14px; letter-spacing: .08em; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; max-width: 560px; }
+  .langs { flex-basis: 100%; display: flex; justify-content: flex-end; gap: 4px; margin-bottom: 4px; }
+  .langs button { font: inherit; font-size: 12px; color: var(--mute); background: none; border: 1px solid transparent; border-radius: 999px; padding: 4px 11px; cursor: pointer; }
+  .langs button:hover { color: var(--ink); }
+  .langs button.on { color: #1a1109; background: var(--mel); }
   .chip { font-size: 11.5px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); color: #d9cbb4; background: rgba(255, 255, 255, .03); white-space: nowrap; }
   .card { background: linear-gradient(180deg, #1e1711, #130e0b); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; position: relative; box-shadow: 0 30px 60px -30px #000; }
   canvas { display: block; width: 100%; }
@@ -95,7 +99,7 @@
     .params { grid-template-columns: 1fr; gap: 12px; padding: 16px 18px; }
     .scopebox { padding: 16px 18px; }
   }
-  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .chips { justify-content: flex-start; } #vol, .vlab { display: none; } }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .chips, .langs { justify-content: flex-start; } #vol, .vlab { display: none; } }
 </style>
 </head>
 <body>
@@ -103,15 +107,20 @@
   <header>
     <div>
       <h1>Brisa de <span>Novembro</span></h1>
-      <div class="sub">十一月のそよ風 ── 物理モデルのクラシックギターが弾くボサノヴァ・ソロ</div>
+      <div class="sub" data-i18n="sub"></div>
     </div>
     <div class="chips">
-      <span class="chip">ウェーブガイド弦 ×6（2偏波）</span>
-      <span class="chip">三角形の撥弦初期変位</span>
-      <span class="chip">周波数依存の弦損失</span>
-      <span class="chip">ブリッジ結合の共鳴弦</span>
-      <span class="chip" id="chipModes">ボディモード</span>
-      <span class="chip">AudioWorklet でリアルタイム合成</span>
+      <div class="langs" id="langs">
+        <button data-lang="pt" lang="pt-BR">Português</button>
+        <button data-lang="en" lang="en">English</button>
+        <button data-lang="ja" lang="ja">日本語</button>
+      </div>
+      <span class="chip" data-i18n="chip1"></span>
+      <span class="chip" data-i18n="chip2"></span>
+      <span class="chip" data-i18n="chip3"></span>
+      <span class="chip" data-i18n="chip4"></span>
+      <span class="chip" id="chipModes"></span>
+      <span class="chip" data-i18n="chip6"></span>
     </div>
   </header>
 
@@ -120,39 +129,36 @@
   <div class="card" id="stage">
     <canvas id="guitar"></canvas>
     <div class="overlay" id="overlay">
-      <div class="ovtext" id="ovtext">サンプル音源なし ── 弦と胴の振動をその場で計算して鳴らします</div>
-      <button class="bigplay" id="bigplay">▶　演奏を聴く</button>
+      <div class="ovtext" id="ovtext" data-i18n="ov"></div>
+      <button class="bigplay" id="bigplay" data-i18n="bigplay"></button>
     </div>
   </div>
 
   <div class="card" id="tabCard"><canvas id="tab"></canvas></div>
 
   <div class="card bar">
-    <button class="btn play" id="play" title="再生 / 一時停止 (Space)">▶</button>
-    <button class="btn" id="rew" title="最初から">⏮</button>
+    <button class="btn play" id="play" data-i18n-title="playTitle">▶</button>
+    <button class="btn" id="rew" data-i18n-title="rew">⏮</button>
     <span class="time" id="time">0:00 / 0:00</span>
     <input type="range" id="seek" min="0" max="1000" value="0">
-    <span class="lab vlab">音量</span>
+    <span class="lab vlab" data-i18n="vol"></span>
     <input type="range" id="vol" min="0" max="100" value="85">
-    <button class="btn" id="wav">WAV保存</button>
+    <button class="btn" id="wav" data-i18n="wav"></button>
   </div>
   </div>
 
   <div class="grid">
     <div class="card params" id="params">
-      <h3>物理パラメータ（演奏中にそのまま効きます）</h3>
+      <h3 data-i18n="paramsH"></h3>
     </div>
     <div class="card scopebox">
-      <h3>スペクトル ／ 波形</h3>
+      <h3 data-i18n="scopeH"></h3>
       <canvas id="scope"></canvas>
     </div>
   </div>
   </div>
 
-  <footer>
-    弦は「指で三角形に引いて離す」初期変位を載せた進行波モデルで、ブリッジにかかる力がボディの共振モード群を駆動します。
-    ギターの弦をクリック／ドラッグすると自分でも弾けます（指板上＝そのフレット、サウンドホール〜ブリッジ間＝開放弦を撥弦位置を変えて）。
-    画面の弦の揺れは、実際の撥弦波形（キンクが弦を往復する運動）をスローモーションで描いたものです。
+  <footer data-i18n="footer">
   </footer>
 </div>
 
@@ -166,18 +172,105 @@ const song = window.GuitarSong.buildSong();
 const COL = { mel: '#ffd27a', comp: '#6fd6c8', bass: '#ff8f6b', user: '#ffffff' };
 const $ = (id) => document.getElementById(id);
 
+// ---------------- 表示言語（pt-BR / English / 日本語） ----------------
+const I18N = {
+  pt: {
+    title: 'Brisa de Novembro — Simulação física de violão clássico',
+    sub: 'Um solo de bossa nova tocado por um violão clássico de modelagem física',
+    chip1: 'Cordas em guia de onda ×6 (2 polarizações)',
+    chip2: 'Deslocamento inicial triangular do toque',
+    chip3: 'Perdas da corda dependentes da frequência',
+    chip4: 'Cordas simpáticas acopladas pelo cavalete',
+    chipModes: 'Modos de ressonância do corpo ×{n}',
+    chip6: 'Síntese em tempo real com AudioWorklet',
+    ov: 'Sem samples — a vibração das cordas e do corpo é calculada na hora',
+    bigplay: '▶  Ouvir a música',
+    playTitle: 'Tocar / Pausar (Espaço)', rew: 'Voltar ao início', vol: 'Volume',
+    wav: 'Salvar WAV', wavBusy: 'Calculando {p}%',
+    paramsH: 'PARÂMETROS FÍSICOS (VALEM DURANTE A EXECUÇÃO)', scopeH: 'ESPECTRO / FORMA DE ONDA',
+    p_betaScale: 'Ponto de toque', p_betaScale_l: 'Perto do cavalete (duro)', p_betaScale_r: 'Perto do braço (doce)',
+    p_touchScale: 'Toque', p_touchScale_l: 'Unha', p_touchScale_r: 'Polpa do dedo',
+    p_body: 'Ressonância do corpo', p_body_l: 'Só as cordas', p_body_r: 'Rica',
+    p_symp: 'Cordas simpáticas', p_symp_l: 'Nenhuma', p_symp_r: 'Forte',
+    p_reverb: 'Reverberação da sala', p_reverb_l: 'Seca', p_reverb_r: 'Sala de concerto',
+    legMel: 'Melodia (cordas 1 e 2)', legComp: 'Acordes (i·m·a)', legBass: 'Baixo (polegar)',
+    footer: 'Cada corda é um modelo de ondas progressivas que parte do deslocamento inicial de quem “puxa a corda em triângulo e solta”; a força no cavalete excita o conjunto de modos de ressonância do corpo. '
+      + 'Clique ou arraste sobre as cordas para tocar você mesmo (no braço = aquela casa; entre a boca e o cavalete = corda solta, variando o ponto de toque). '
+      + 'O movimento das cordas na tela é a forma de onda real de uma corda pulsada (a quina que vai e volta pela corda), mostrada em câmera lenta.',
+  },
+  en: {
+    title: 'Brisa de Novembro — Classical Guitar Physical Simulation',
+    sub: 'November Breeze — a bossa nova solo played by a physically modelled classical guitar',
+    chip1: 'Waveguide strings ×6 (2 polarizations)',
+    chip2: 'Triangular pluck displacement',
+    chip3: 'Frequency-dependent string loss',
+    chip4: 'Sympathetic strings coupled at the bridge',
+    chipModes: 'Body resonance modes ×{n}',
+    chip6: 'Real-time synthesis in an AudioWorklet',
+    ov: 'No samples — string and body vibrations are computed on the fly',
+    bigplay: '▶  Listen',
+    playTitle: 'Play / Pause (Space)', rew: 'Back to start', vol: 'Volume',
+    wav: 'Save WAV', wavBusy: 'Rendering {p}%',
+    paramsH: 'PHYSICAL PARAMETERS (APPLIED LIVE WHILE PLAYING)', scopeH: 'SPECTRUM / WAVEFORM',
+    p_betaScale: 'Pluck position', p_betaScale_l: 'Near the bridge (hard)', p_betaScale_r: 'Near the neck (sweet)',
+    p_touchScale: 'Touch', p_touchScale_l: 'Nail', p_touchScale_r: 'Fingertip',
+    p_body: 'Body resonance', p_body_l: 'Strings only', p_body_r: 'Rich',
+    p_symp: 'Sympathetic strings', p_symp_l: 'None', p_symp_r: 'Strong',
+    p_reverb: 'Room reverb', p_reverb_l: 'Dead', p_reverb_r: 'Hall',
+    legMel: 'Melody (strings 1–2)', legComp: 'Chords (i·m·a)', legBass: 'Bass (thumb)',
+    footer: 'Each string is a travelling-wave model started from the initial displacement of a finger pulling the string into a triangle and letting go; the force on the bridge drives the body’s resonance modes. '
+      + 'Click or drag across the strings to play it yourself (on the fingerboard = that fret; between the soundhole and the bridge = open string at that pluck position). '
+      + 'The string motion on screen is the real plucked-string waveform (a kink travelling back and forth along the string), shown in slow motion.',
+  },
+  ja: {
+    title: 'Brisa de Novembro — クラシックギター物理シミュレーション',
+    sub: '十一月のそよ風 ── 物理モデルのクラシックギターが弾くボサノヴァ・ソロ',
+    chip1: 'ウェーブガイド弦 ×6（2偏波）',
+    chip2: '三角形の撥弦初期変位',
+    chip3: '周波数依存の弦損失',
+    chip4: 'ブリッジ結合の共鳴弦',
+    chipModes: 'ボディ共振モード ×{n}',
+    chip6: 'AudioWorklet でリアルタイム合成',
+    ov: 'サンプル音源なし ── 弦と胴の振動をその場で計算して鳴らします',
+    bigplay: '▶　演奏を聴く',
+    playTitle: '再生 / 一時停止 (Space)', rew: '最初から', vol: '音量',
+    wav: 'WAV保存', wavBusy: '計算中 {p}%',
+    paramsH: '物理パラメータ（演奏中にそのまま効きます）', scopeH: 'スペクトル ／ 波形',
+    p_betaScale: '撥弦位置', p_betaScale_l: 'ブリッジ寄り（硬い）', p_betaScale_r: '指板寄り（甘い）',
+    p_touchScale: 'タッチ', p_touchScale_l: '爪', p_touchScale_r: '指頭',
+    p_body: 'ボディ共鳴', p_body_l: '弦だけ', p_body_r: '豊か',
+    p_symp: '共鳴弦', p_symp_l: 'なし', p_symp_r: '強い',
+    p_reverb: '部屋の残響', p_reverb_l: 'デッド', p_reverb_r: 'ホール',
+    legMel: '旋律（1・2弦）', legComp: 'コード（i・m・a）', legBass: 'ベース（親指）',
+    footer: '弦は「指で三角形に引いて離す」初期変位を載せた進行波モデルで、ブリッジにかかる力がボディの共振モード群を駆動します。'
+      + 'ギターの弦をクリック／ドラッグすると自分でも弾けます（指板上＝そのフレット、サウンドホール〜ブリッジ間＝開放弦を撥弦位置を変えて）。'
+      + '画面の弦の揺れは、実際の撥弦波形（キンクが弦を往復する運動）をスローモーションで描いたものです。',
+  },
+};
+const LANG_TAG = { pt: 'pt-BR', en: 'en', ja: 'ja' };
+// 優先順：URL の ?lang= → 前回の選択 → ブラウザの言語 → pt-BR（ボサノヴァなので）
+let lang = (() => {
+  const norm = (v) => { v = String(v || '').toLowerCase(); return v.startsWith('pt') ? 'pt' : v.startsWith('ja') ? 'ja' : v.startsWith('en') ? 'en' : null; };
+  let saved = null; try { saved = localStorage.getItem('lang'); } catch (e) {}
+  const cands = [new URLSearchParams(location.search).get('lang'), saved].concat(navigator.languages || [navigator.language]);
+  for (const c of cands) { const l = norm(c); if (l) return l; }
+  return 'pt';
+})();
+const t = (k, v) => (I18N[lang][k] || I18N.pt[k] || k).replace(/\{(\w+)\}/g, (m, n) => v[n]);
+
 // ---------------- パラメータUI ----------------
 const params = Object.assign({}, P.DEFAULTS);
+const pct = (v) => Math.round(v * 100) + '%', mul = (v) => '×' + v.toFixed(2);
 const PDEF = [
-  { k: 'betaScale', name: '撥弦位置', min: 0.4, max: 2.4, step: 0.05, l: 'ブリッジ寄り（硬い）', r: '指板寄り（甘い）', f: (v) => '×' + v.toFixed(2) },
-  { k: 'touchScale', name: 'タッチ', min: 0.3, max: 3, step: 0.05, l: '爪', r: '指頭', f: (v) => '×' + v.toFixed(2) },
-  { k: 'body', name: 'ボディ共鳴', min: 0, max: 2, step: 0.05, l: '弦だけ', r: '豊か', f: (v) => Math.round(v * 100) + '%' },
-  { k: 'symp', name: '共鳴弦', min: 0, max: 3, step: 0.1, l: 'なし', r: '強い', f: (v) => Math.round(v * 100) + '%' },
-  { k: 'reverb', name: '部屋の残響', min: 0, max: 0.5, step: 0.01, l: 'デッド', r: 'ホール', f: (v) => Math.round(v * 100) + '%' },
+  { k: 'betaScale', min: 0.4, max: 2.4, step: 0.05, f: mul },
+  { k: 'touchScale', min: 0.3, max: 3, step: 0.05, f: mul },
+  { k: 'body', min: 0, max: 2, step: 0.05, f: pct },
+  { k: 'symp', min: 0, max: 3, step: 0.1, f: pct },
+  { k: 'reverb', min: 0, max: 0.5, step: 0.01, f: pct },
 ];
 PDEF.forEach((d) => {
   const div = document.createElement('div'); div.className = 'p';
-  div.innerHTML = `<label><b>${d.name}</b><em></em></label><input type="range" min="${d.min}" max="${d.max}" step="${d.step}" value="${params[d.k]}"><div class="ends"><span>${d.l}</span><span>${d.r}</span></div>`;
+  div.innerHTML = `<label><b data-i18n="p_${d.k}"></b><em></em></label><input type="range" min="${d.min}" max="${d.max}" step="${d.step}" value="${params[d.k]}"><div class="ends"><span data-i18n="p_${d.k}_l"></span><span data-i18n="p_${d.k}_r"></span></div>`;
   const inp = div.querySelector('input'), em = div.querySelector('em');
   em.textContent = d.f(params[d.k]);
   inp.addEventListener('input', () => {
@@ -186,7 +279,17 @@ PDEF.forEach((d) => {
   });
   $('params').appendChild(div);
 });
-$('chipModes').textContent = 'ボディ共振モード ×' + new P.GuitarSynth(44100).nModes;
+const N_MODES = new P.GuitarSynth(44100).nModes;
+let wavBusy = false;
+function applyLang() {
+  document.documentElement.lang = LANG_TAG[lang]; document.title = t('title');
+  document.querySelectorAll('[data-i18n]').forEach((e) => { if (!(e.id === 'wav' && wavBusy)) e.textContent = t(e.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-title]').forEach((e) => { e.title = t(e.dataset.i18nTitle); });
+  $('chipModes').textContent = t('chipModes', { n: N_MODES });
+  document.querySelectorAll('#langs button').forEach((b) => b.classList.toggle('on', b.dataset.lang === lang));
+}
+document.querySelectorAll('#langs button').forEach((b) => { b.onclick = () => { lang = b.dataset.lang; try { localStorage.setItem('lang', lang); } catch (e) {} applyLang(); }; });
+applyLang();
 
 // ---------------- オーディオ（AudioWorklet でリアルタイム合成） ----------------
 let ctx = null, master = null, analyser = null, node = null, initP = null;
@@ -266,9 +369,9 @@ $('seek').addEventListener('change', () => { seeking = false; });
 addEventListener('keydown', (e) => { if (e.code === 'Space' && e.target.tagName !== 'BUTTON') { e.preventDefault(); playing ? pause() : play(); } });
 $('wav').onclick = async () => { // 書き出しだけはオフラインで計算
   const btn = $('wav'); if (btn.disabled) return;
-  btn.disabled = true;
+  btn.disabled = true; wavBusy = true;
   const FS = 44100;
-  const pcm = await P.renderAsync(song.notes, song.duration, FS, params, (p) => { btn.textContent = '計算中 ' + Math.round(p * 100) + '%'; });
+  const pcm = await P.renderAsync(song.notes, song.duration, FS, params, (p) => { btn.textContent = t('wavBusy', { p: Math.round(p * 100) }); });
   P.applyGain(pcm, 0.89 / Math.max(1e-6, P.peakOf(pcm)));
   const n = pcm.L.length, dv = new DataView(new ArrayBuffer(44 + n * 4));
   const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
@@ -276,7 +379,7 @@ $('wav').onclick = async () => { // 書き出しだけはオフラインで計�
   dv.setUint32(24, FS, true); dv.setUint32(28, FS * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 4, true);
   for (let i = 0; i < n; i++) { dv.setInt16(44 + i * 4, Math.max(-1, Math.min(1, pcm.L[i])) * 32767, true); dv.setInt16(46 + i * 4, Math.max(-1, Math.min(1, pcm.R[i])) * 32767, true); }
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([dv], { type: 'audio/wav' })); a.download = 'brisa-de-novembro.wav'; a.click();
-  btn.textContent = 'WAV保存'; btn.disabled = false;
+  wavBusy = false; btn.textContent = t('wav'); btn.disabled = false;
 };
 
 // ---------------- ギターの幾何 ----------------
@@ -514,9 +617,10 @@ function drawGuitar(p) {
 
   // 凡例
   g.font = '12px "Yu Gothic UI", system-ui'; let lx = 40;
-  for (const [k, t] of [['mel', '旋律（1弦）'], ['comp', 'コード（i・m・a）'], ['bass', 'ベース（親指）']]) {
+  for (const [k, key] of [['mel', 'legMel'], ['comp', 'legComp'], ['bass', 'legBass']]) {
+    const txt = t(key);
     g.fillStyle = COL[k]; g.beginPath(); g.arc(lx, H - 36, 5, 0, 7); g.fill();
-    g.fillStyle = 'rgba(243,233,216,.75)'; g.fillText(t, lx + 11, H - 32); lx += g.measureText(t).width + 34;
+    g.fillStyle = 'rgba(243,233,216,.75)'; g.fillText(txt, lx + 11, H - 32); lx += g.measureText(txt).width + 34;
   }
   g.fillStyle = 'rgba(168,153,133,.8)'; g.fillText('♩= ' + song.bpm + '　Bossa Nova　Am', 40, 132);
 }
