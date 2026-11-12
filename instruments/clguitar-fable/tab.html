@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brisa de Novembro — TAB</title>
+<style>
+  :root {
+    --bg: #100c09; --paper: #17120e; --ink: #f3e9d8; --mute: #a89985; --line: rgba(255, 236, 205, .28); --bar: rgba(255, 236, 205, .5);
+    --mel: #ffd27a; --comp: #6fd6c8; --bass: #ff8f6b; --sec: #ffd27a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body { font-family: "Yu Gothic UI", "Hiragino Sans", "Segoe UI", system-ui, sans-serif; min-height: 100vh;
+         background: radial-gradient(1200px 700px at 70% -10%, #3a2413 0%, transparent 60%), var(--bg); }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 28px 16px 48px; }
+  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+  h1 { font-family: Georgia, "Yu Mincho", serif; font-style: italic; font-weight: 400; font-size: clamp(28px, 4vw, 44px); margin: 0; line-height: 1.05; }
+  h1 span { color: var(--mel); }
+  .sub { color: var(--mute); margin-top: 6px; font-size: 13.5px; letter-spacing: .06em; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 12px; font-size: 12.5px; color: var(--mute); }
+  .meta b { color: var(--ink); font-weight: 500; }
+  .tools { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+  .langs { display: flex; gap: 4px; }
+  .langs button, .btn { font: inherit; font-size: 12px; color: var(--mute); background: none; border: 1px solid transparent; border-radius: 999px; padding: 4px 11px; cursor: pointer; text-decoration: none; }
+  .langs button:hover, .btn:hover { color: var(--ink); }
+  .langs button.on { color: #1a1109; background: var(--mel); }
+  .btn { border-color: rgba(255, 236, 205, .18); padding: 7px 14px; color: var(--ink); }
+  .links { display: flex; gap: 8px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: var(--mute); margin: 0 0 12px; }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+  .sheet { background: linear-gradient(180deg, #1e1711, #130e0b); border: 1px solid rgba(255, 236, 205, .09); border-radius: 18px; padding: 18px 18px 8px; }
+  .sheet svg { display: block; width: 100%; height: auto; margin-bottom: 10px; overflow: visible; }
+  .note { margin-top: 14px; font-size: 12px; color: var(--mute); line-height: 1.8; }
+  svg text { font-family: "Segoe UI", system-ui, sans-serif; }
+  .str { stroke: var(--line); stroke-width: .8; }
+  .bl { stroke: var(--bar); stroke-width: 1; }
+  .bl.end { stroke-width: 3; }
+  .num { font-size: 10.5px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .num.mel { fill: var(--mel); } .num.comp { fill: var(--comp); } .num.bass { fill: var(--bass); }
+  .sus { stroke-width: 1.6; stroke-linecap: round; opacity: .35; }
+  .sus.mel { stroke: var(--mel); } .sus.comp { stroke: var(--comp); } .sus.bass { stroke: var(--bass); }
+  .knock { fill: var(--paper); }
+  .chord { font-family: Georgia, serif; font-style: italic; font-size: 14px; fill: var(--ink); }
+  .barno { font-size: 8.5px; fill: var(--mute); }
+  .secbox { fill: rgba(255, 210, 122, .16); } .sectx { font-size: 9.5px; fill: var(--sec); font-weight: 600; }
+  .sname { font-size: 8.5px; fill: var(--mute); text-anchor: middle; dominant-baseline: central; font-family: Georgia, serif; }
+  .stem { stroke: var(--mute); stroke-width: .9; }
+  .beam { stroke: var(--mute); stroke-width: 2.4; }
+  .roll { fill: none; stroke: var(--ink); stroke-width: 1; }
+  @media print {
+    :root { --bg: #fff; --paper: #fff; --ink: #111; --mute: #555; --line: #999; --bar: #333; --mel: #a0620a; --comp: #0e7468; --bass: #b23a17; --sec: #7a4a00; }
+    body { background: #fff; } .tools { display: none; } .sheet { border: 0; padding: 0; background: none; }
+    .sheet svg { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Brisa de <span>Novembro</span></h1>
+      <div class="sub" data-i18n="sub"></div>
+      <div class="meta" id="meta"></div>
+    </div>
+    <div class="tools">
+      <div class="langs" id="langs">
+        <button data-lang="pt" lang="pt-BR">Português</button>
+        <button data-lang="en" lang="en">English</button>
+        <button data-lang="ja" lang="ja">日本語</button>
+      </div>
+      <div class="links">
+        <a class="btn" href="index.html" data-i18n="back"></a>
+        <button class="btn" onclick="print()" data-i18n="print"></button>
+      </div>
+    </div>
+  </header>
+  <div class="legend" id="legend"></div>
+  <div class="sheet" id="sheet"></div>
+  <div class="note" data-i18n="note"></div>
+</div>
+
+<script src="song.js"></script>
+<script>
+(() => {
+'use strict';
+const I18N = {
+  pt: {
+    title: 'Brisa de Novembro — Tablatura', sub: 'Tablatura completa para violão solo',
+    tempo: 'Andamento', key: 'Tom', tuning: 'Afinação', tuningV: 'padrão (E A D G B E)', form: 'Forma', bars: 'compassos',
+    mel: 'Melodia (cordas 1–2)', comp: 'Acordes (i·m·a)', bass: 'Baixo (polegar)', rhythm: 'Hastes = ataques em colcheias',
+    back: '← Voltar à demonstração', print: 'Imprimir',
+    note: 'Os números são as casas; 0 = corda solta. A linha fina depois de cada número mostra quanto tempo a nota soa. Todas as digitações foram verificadas: a mão esquerda nunca abre mais de 4 casas (5 a partir da 5ª casa) nem usa mais de 4 dedos (pestana permitida). O último acorde é arpejado lentamente.',
+  },
+  en: {
+    title: 'Brisa de Novembro — Tablature', sub: 'Complete tablature for solo guitar',
+    tempo: 'Tempo', key: 'Key', tuning: 'Tuning', tuningV: 'standard (E A D G B E)', form: 'Form', bars: 'bars',
+    mel: 'Melody (strings 1–2)', comp: 'Chords (i·m·a)', bass: 'Bass (thumb)', rhythm: 'Stems = onsets on the eighth-note grid',
+    back: '← Back to the demo', print: 'Print',
+    note: 'Numbers are frets; 0 = open string. The thin line after each number shows how long the note rings. Every fingering is checked: the left hand never spans more than 4 frets (5 from the 5th fret up) and never needs more than 4 fingers (barre allowed). The final chord is rolled slowly.',
+  },
+  ja: {
+    title: 'Brisa de Novembro — タブ譜', sub: 'ソロギターのための全曲タブ譜',
+    tempo: 'テンポ', key: '調', tuning: 'チューニング', tuningV: 'レギュラー (E A D G B E)', form: '形式', bars: '小節',
+    mel: '旋律（1・2弦）', comp: 'コード（i・m・a）', bass: 'ベース（親指）', rhythm: '符尾＝8分音符グリッド上の発音位置',
+    back: '← デモに戻る', print: '印刷',
+    note: '数字はフレット、0 は開放弦。数字の後ろの細い線は音が鳴っている長さです。すべての運指を検証済み：左手の開きは4フレット以内（5フレットより上では5フレット）、指は4本以内（セーハ可）。最後のコードはゆっくりアルペジオで。',
+  },
+};
+const LANG_TAG = { pt: 'pt-BR', en: 'en', ja: 'ja' };
+let lang = (() => {
+  const norm = (v) => { v = String(v || '').toLowerCase(); return v.startsWith('pt') ? 'pt' : v.startsWith('ja') ? 'ja' : v.startsWith('en') ? 'en' : null; };
+  let saved = null; try { saved = localStorage.getItem('lang'); } catch (e) {}
+  for (const c of [new URLSearchParams(location.search).get('lang'), saved].concat(navigator.languages || [navigator.language])) { const l = norm(c); if (l) return l; }
+  return 'pt';
+})();
+const t = (k) => I18N[lang][k] || I18N.pt[k] || k;
+
+const song = window.GuitarSong.buildSong();
+const nBars = song.bars.length;
+const byBar = Array.from({ length: nBars }, () => []);
+for (const n of song.notes) byBar[Math.floor(n.e / 8 + 1e-6)].push(n);
+const secAt = {}; song.sections.forEach((s) => { secAt[s.bar] = s.name; });
+
+// ---- 1段（system）を SVG で描く ----
+const LM = 30, PAD = 12, SLOT = 24, BW = PAD * 2 + SLOT * 8, Y0 = 52, DY = 13, NAMES = ['e', 'B', 'G', 'D', 'A', 'E'];
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function system(from, count, last) {
+  const W = LM + BW * count + 4, yB = Y0 + 5 * DY, H = yB + 34;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `bars ${from + 1}–${from + count}` });
+  const x0 = LM, x1 = LM + BW * count;
+  for (let i = 0; i < 6; i++) {
+    el('line', { x1: x0, x2: x1, y1: Y0 + i * DY, y2: Y0 + i * DY, class: 'str' }, svg);
+    el('text', { x: 12, y: Y0 + i * DY, class: 'sname' }, svg, NAMES[i]);
+  }
+  for (let b = 0; b <= count; b++) {
+    const x = x0 + b * BW, end = last && b === count;
+    el('line', { x1: x, x2: x, y1: Y0, y2: yB, class: 'bl' + (end ? ' end' : '') }, svg);
+    if (end) el('line', { x1: x - 5, x2: x - 5, y1: Y0, y2: yB, class: 'bl' }, svg);
+  }
+  for (let k = 0; k < count; k++) {
+    const bi = from + k, bx = x0 + k * BW, X = (e) => bx + PAD + (e - bi * 8) * SLOT + SLOT / 2;
+    el('text', { x: bx + 3, y: Y0 - 7, class: 'barno' }, svg, bi + 1);
+    if (secAt[bi]) {
+      const w = secAt[bi].length * 6.2 + 12;
+      el('rect', { x: bx + 2, y: 2, width: w, height: 14, rx: 7, class: 'secbox' }, svg);
+      el('text', { x: bx + 8, y: 12.5, class: 'sectx' }, svg, secAt[bi]);
+    }
+    song.bars[bi].chords.forEach((c, ci) => el('text', { x: bx + PAD + ci * 4 * SLOT + (secAt[bi] && ci === 0 ? 0 : 0), y: 33, class: 'chord' }, svg, c.name));
+
+    const notes = byBar[bi];
+    // 持続線（先に描いて数字の下に）
+    for (const n of notes) {
+      const xa = X(n.e) + 6, xb = Math.min(x1 - 2, X(n.e) - SLOT / 2 + n.de * SLOT);
+      if (xb > xa + 2) el('line', { x1: xa, x2: xb, y1: Y0 + (n.s - 1) * DY, y2: Y0 + (n.s - 1) * DY, class: 'sus ' + n.role }, svg);
+    }
+    // 数字
+    for (const n of notes) {
+      const x = X(n.e), y = Y0 + (n.s - 1) * DY, w = n.fret >= 10 ? 13 : 8;
+      el('rect', { x: x - w / 2, y: y - 5.5, width: w, height: 11, class: 'knock' }, svg);
+      el('text', { x, y: y + 0.5, class: 'num ' + n.role }, svg, n.fret);
+    }
+    // アルペジオ（ゆっくり弾く和音）
+    const groups = {};
+    for (const n of notes) (groups[n.e] = groups[n.e] || []).push(n);
+    const onsets = Object.keys(groups).map(Number).sort((a, b) => a - b);
+    for (const e of onsets) {
+      const g = groups[e], ts = g.map((n) => n.t);
+      if (Math.max(...ts) - Math.min(...ts) > 0.1) {
+        const ss = g.map((n) => n.s), ya = Y0 + (Math.min(...ss) - 1) * DY - 5, yb = Y0 + (Math.max(...ss) - 1) * DY + 5, x = X(e) - 10;
+        let d = `M${x},${yb}`;
+        for (let y = yb; y > ya; y -= 6) d += ` q-3,-1.5 0,-3 q3,-1.5 0,-3`;
+        el('path', { d, class: 'roll' }, svg);
+      }
+    }
+    // リズム：発音位置に符尾、連続する8分を連桁でつなぐ
+    const ys = yB + 8, ye = yB + 20;
+    onsets.forEach((e) => el('line', { x1: X(e), x2: X(e), y1: ys, y2: ye, class: 'stem' }, svg));
+    for (let i = 0; i + 1 < onsets.length; i++) {
+      const a = onsets[i] - bi * 8, b = onsets[i + 1] - bi * 8;
+      if (b - a === 1 && Math.floor(a / 2) === Math.floor(b / 2)) el('line', { x1: X(onsets[i]), x2: X(onsets[i + 1]), y1: ye, y2: ye, class: 'beam' }, svg);
+    }
+  }
+  return svg;
+}
+
+function render() {
+  const w = document.getElementById('sheet').clientWidth;
+  const per = w < 560 ? 1 : w < 820 ? 2 : w < 1080 ? 3 : 4;
+  const sheet = document.getElementById('sheet'); sheet.textContent = '';
+  for (let b = 0; b < nBars; b += per) sheet.appendChild(system(b, Math.min(per, nBars - b), b + per >= nBars));
+}
+function applyLang() {
+  document.documentElement.lang = LANG_TAG[lang]; document.title = t('title');
+  document.querySelectorAll('[data-i18n]').forEach((e) => { e.textContent = t(e.dataset.i18n); });
+  document.querySelectorAll('#langs button').forEach((b) => b.classList.toggle('on', b.dataset.lang === lang));
+  const form = song.sections.map((s) => s.name).join(' – ');
+  document.getElementById('meta').innerHTML =
+    `<span>${t('tempo')} <b>♩ = ${song.bpm}</b></span><span>${t('key')} <b>Am</b></span><span>${t('tuning')} <b>${t('tuningV')}</b></span><span>${t('form')} <b>${form}</b>（${nBars} ${t('bars')}）</span>`;
+  document.getElementById('legend').innerHTML = ['mel', 'comp', 'bass'].map((k) => `<span><i style="background:var(--${k})"></i>${t(k)}</span>`).join('') + `<span>${t('rhythm')}</span>`;
+}
+document.querySelectorAll('#langs button').forEach((b) => { b.onclick = () => { lang = b.dataset.lang; try { localStorage.setItem('lang', lang); } catch (e) {} applyLang(); }; });
+applyLang(); render();
+let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 120); });
+})();
+</script>
+</body>
+</html>

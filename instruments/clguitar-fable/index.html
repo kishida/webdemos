@@ -46,6 +46,8 @@
   .langs { flex-basis: 100%; display: flex; justify-content: flex-end; gap: 4px; margin-bottom: 4px; }
   .langs button { font: inherit; font-size: 12px; color: var(--mute); background: none; border: 1px solid transparent; border-radius: 999px; padding: 4px 11px; cursor: pointer; }
   .langs button:hover { color: var(--ink); }
+  .langs .tablink { font-size: 12px; color: var(--ink); text-decoration: none; border: 1px solid rgba(255, 236, 205, .18); border-radius: 999px; padding: 4px 12px; margin-right: 8px; }
+  .langs .tablink:hover { background: rgba(255, 255, 255, .08); }
   .langs button.on { color: #1a1109; background: var(--mel); }
   .chip { font-size: 11.5px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); color: #d9cbb4; background: rgba(255, 255, 255, .03); white-space: nowrap; }
   .card { background: linear-gradient(180deg, #1e1711, #130e0b); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; position: relative; box-shadow: 0 30px 60px -30px #000; }
@@ -111,6 +113,7 @@
     </div>
     <div class="chips">
       <div class="langs" id="langs">
+        <a class="tablink" href="tab.html" data-i18n="tabLink"></a>
         <button data-lang="pt" lang="pt-BR">Português</button>
         <button data-lang="en" lang="en">English</button>
         <button data-lang="ja" lang="ja">日本語</button>
@@ -193,6 +196,7 @@ const I18N = {
     p_body: 'Ressonância do corpo', p_body_l: 'Só as cordas', p_body_r: 'Rica',
     p_symp: 'Cordas simpáticas', p_symp_l: 'Nenhuma', p_symp_r: 'Forte',
     p_reverb: 'Reverberação da sala', p_reverb_l: 'Seca', p_reverb_r: 'Sala de concerto',
+    tabLink: 'Ver tablatura ↗',
     legMel: 'Melodia (cordas 1 e 2)', legComp: 'Acordes (i·m·a)', legBass: 'Baixo (polegar)',
     footer: 'Cada corda é um modelo de ondas progressivas que parte do deslocamento inicial de quem “puxa a corda em triângulo e solta”; a força no cavalete excita o conjunto de modos de ressonância do corpo. '
       + 'Clique ou arraste sobre as cordas para tocar você mesmo (no braço = aquela casa; entre a boca e o cavalete = corda solta, variando o ponto de toque). '
@@ -217,6 +221,7 @@ const I18N = {
     p_body: 'Body resonance', p_body_l: 'Strings only', p_body_r: 'Rich',
     p_symp: 'Sympathetic strings', p_symp_l: 'None', p_symp_r: 'Strong',
     p_reverb: 'Room reverb', p_reverb_l: 'Dead', p_reverb_r: 'Hall',
+    tabLink: 'View tablature ↗',
     legMel: 'Melody (strings 1–2)', legComp: 'Chords (i·m·a)', legBass: 'Bass (thumb)',
     footer: 'Each string is a travelling-wave model started from the initial displacement of a finger pulling the string into a triangle and letting go; the force on the bridge drives the body’s resonance modes. '
       + 'Click or drag across the strings to play it yourself (on the fingerboard = that fret; between the soundhole and the bridge = open string at that pluck position). '
@@ -241,6 +246,7 @@ const I18N = {
     p_body: 'ボディ共鳴', p_body_l: '弦だけ', p_body_r: '豊か',
     p_symp: '共鳴弦', p_symp_l: 'なし', p_symp_r: '強い',
     p_reverb: '部屋の残響', p_reverb_l: 'デッド', p_reverb_r: 'ホール',
+    tabLink: 'タブ譜を見る ↗',
     legMel: '旋律（1・2弦）', legComp: 'コード（i・m・a）', legBass: 'ベース（親指）',
     footer: '弦は「指で三角形に引いて離す」初期変位を載せた進行波モデルで、ブリッジにかかる力がボディの共振モード群を駆動します。'
       + 'ギターの弦をクリック／ドラッグすると自分でも弾けます（指板上＝そのフレット、サウンドホール〜ブリッジ間＝開放弦を撥弦位置を変えて）。'

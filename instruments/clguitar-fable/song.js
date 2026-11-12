@@ -264,7 +264,7 @@
     const add = (role, e, durE, s, fret, vel, extra) => {
       const t = tAt(e) + (extra || 0) + jit(0.005);
       const d = Math.max(0.08, tAt(e + durE) - tAt(e));
-      const o = { role, t, dur: d, s, fret, midi: OPEN[s] + fret, vel: Math.min(1, Math.max(0.15, vel * dyn + jit(0.04))) };
+      const o = { role, t, dur: d, e, de: durE, s, fret, midi: OPEN[s] + fret, vel: Math.min(1, Math.max(0.15, vel * dyn + jit(0.04))) };
       if (role === 'mel') { o.beta = 0.11; o.touch = 0.65; }
       else if (role === 'comp') { o.beta = 0.14; o.touch = 0.9; }
       else { o.beta = 0.16; o.touch = 1.2; }
