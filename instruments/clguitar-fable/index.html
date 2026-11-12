@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="Brisa de Novembro — クラシックギター物理シミュレーション">
+<meta property="og:description" content="Fable 5.2での物理モデリングと作曲">
+<meta property="og:image" content="https://kishida.github.io/webdemos/instruments/clguitar-fable/ogp.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/instruments/clguitar-fable/index.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<title>Brisa de Novembro — クラシックギター物理シミュレーション</title>
+<style>
+  :root {
+    --bg: #100c09; --panel: #1a1410; --line: rgba(255, 236, 205, .09);
+    --ink: #f3e9d8; --dim: #a8998570; --mute: #a89985;
+    --mel: #ffd27a; --comp: #6fd6c8; --bass: #ff8f6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font-family: "Yu Gothic UI", "Hiragino Sans", "Segoe UI", system-ui, sans-serif;
+    background: radial-gradient(1200px 700px at 70% -10%, #3a2413 0%, transparent 60%),
+                radial-gradient(900px 600px at 0% 100%, #1d2a28 0%, transparent 55%), var(--bg);
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 28px 20px 40px; }
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 18px; }
+  h1 { font-family: Georgia, "Yu Mincho", "Hiragino Mincho ProN", serif; font-style: italic; font-weight: 400;
+       font-size: clamp(30px, 4.4vw, 52px); margin: 0; letter-spacing: .01em; line-height: 1.05; }
+  h1 span { color: var(--mel); }
+  .sub { color: var(--mute); margin-top: 8px; font-size: 14px; letter-spacing: .08em; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; max-width: 560px; }
+  .chip { font-size: 11.5px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); color: #d9cbb4; background: rgba(255, 255, 255, .03); white-space: nowrap; }
+  .card { background: linear-gradient(180deg, #1e1711, #130e0b); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; position: relative; box-shadow: 0 30px 60px -30px #000; }
+  canvas { display: block; width: 100%; }
+  #guitar { cursor: crosshair; touch-action: none; }
+  #tabCard { margin-top: 12px; }
+  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+             background: rgba(12, 8, 6, .62); backdrop-filter: blur(3px); transition: opacity .35s; z-index: 3; }
+  .overlay.hide { opacity: 0; pointer-events: none; }
+  .bigplay { font: inherit; font-size: 18px; letter-spacing: .12em; color: #1a1109; background: linear-gradient(180deg, #ffe0a0, #e8a94a);
+             border: 0; border-radius: 999px; padding: 16px 34px; cursor: pointer; box-shadow: 0 10px 40px -8px #e8a94a99; }
+  .bigplay:hover { filter: brightness(1.08); }
+  .prog { width: 280px; height: 4px; background: rgba(255, 255, 255, .12); border-radius: 4px; overflow: hidden; }
+  .prog i { display: block; height: 100%; width: 0; background: var(--mel); }
+  .ovtext { font-size: 13px; color: var(--mute); letter-spacing: .1em; }
+  .bar { display: flex; align-items: center; gap: 14px; margin-top: 12px; padding: 12px 16px; }
+  .btn { font: inherit; color: var(--ink); background: rgba(255, 255, 255, .06); border: 1px solid var(--line); border-radius: 999px; height: 40px; padding: 0 16px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+  .btn:hover { background: rgba(255, 255, 255, .12); }
+  .btn.play { width: 48px; height: 48px; padding: 0; font-size: 18px; background: linear-gradient(180deg, #ffe0a0, #e8a94a); color: #1a1109; border: 0; flex: none; }
+  .time { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--mute); min-width: 92px; text-align: center; }
+  /* 操作パネルでは文字を選択・ドラッグさせない（選択された文字がスライダー操作を横取りするため） */
+  .bar, .params, .scopebox, .overlay { user-select: none; -webkit-user-select: none; }
+  /* 掴める範囲は高さ22px、見た目のレールは4px */
+  input[type=range] { -webkit-appearance: none; appearance: none; height: 22px; margin: 0; background: transparent; outline: none; cursor: pointer; touch-action: none; }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: rgba(255, 255, 255, .14); }
+  input[type=range]::-moz-range-track { height: 4px; border-radius: 4px; background: rgba(255, 255, 255, .14); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--mel); cursor: pointer; box-shadow: 0 0 0 4px rgba(255, 210, 122, .15); }
+  input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: var(--mel); cursor: pointer; }
+  #seek { flex: 1; min-width: 80px; }
+  #vol { width: 90px; }
+  .lab { font-size: 12px; color: var(--mute); }
+  .grid { display: grid; grid-template-columns: 1fr 340px; gap: 12px; margin-top: 12px; }
+  .params { padding: 18px 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px 26px; }
+  .params h3, .scopebox h3 { grid-column: 1 / -1; margin: 0; font-size: 12px; letter-spacing: .18em; color: var(--mute); font-weight: 500; }
+  .p label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 2px; pointer-events: none; }
+  .p label b { font-weight: 500; }
+  .p label em { font-style: normal; color: var(--mel); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .p input { width: 100%; }
+  .p .ends { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--mute); margin-top: 0; pointer-events: none; }
+  .scopebox { padding: 18px 20px; }
+  .scopebox canvas { margin-top: 12px; border-radius: 10px; background: #0d0907; }
+  footer { margin-top: 18px; color: var(--mute); font-size: 12px; line-height: 1.8; }
+  /* 横に広いとき：調整部を右に置き、ギター側は画面の高さに収まる幅までしか広げない */
+  @media (min-width: 1100px) {
+    .wrap { max-width: none; padding-top: 20px; }
+    header, footer { max-width: calc(max(860px, (100vh - 235px) * 1.84) + 364px); margin-left: auto; margin-right: auto; }
+    header { margin-bottom: 14px; }
+    .layout { display: grid; gap: 14px; align-items: start; justify-content: center;
+              grid-template-columns: minmax(0, max(860px, calc((100vh - 235px) * 1.84))) 350px; }
+    .grid { grid-template-columns: 1fr; margin-top: 0; position: sticky; top: 16px; }
+    .params { grid-template-columns: 1fr; gap: 12px; padding: 16px 18px; }
+    .scopebox { padding: 16px 18px; }
+  }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .chips { justify-content: flex-start; } #vol, .vlab { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Brisa de <span>Novembro</span></h1>
+      <div class="sub">十一月のそよ風 ── 物理モデルのクラシックギターが弾くボサノヴァ・ソロ</div>
+    </div>
+    <div class="chips">
+      <span class="chip">ウェーブガイド弦 ×6（2偏波）</span>
+      <span class="chip">三角形の撥弦初期変位</span>
+      <span class="chip">周波数依存の弦損失</span>
+      <span class="chip">ブリッジ結合の共鳴弦</span>
+      <span class="chip" id="chipModes">ボディモード</span>
+      <span class="chip">AudioWorklet でリアルタイム合成</span>
+    </div>
+  </header>
+
+  <div class="layout">
+  <div class="main">
+  <div class="card" id="stage">
+    <canvas id="guitar"></canvas>
+    <div class="overlay" id="overlay">
+      <div class="ovtext" id="ovtext">サンプル音源なし ── 弦と胴の振動をその場で計算して鳴らします</div>
+      <button class="bigplay" id="bigplay">▶　演奏を聴く</button>
+    </div>
+  </div>
+
+  <div class="card" id="tabCard"><canvas id="tab"></canvas></div>
+
+  <div class="card bar">
+    <button class="btn play" id="play" title="再生 / 一時停止 (Space)">▶</button>
+    <button class="btn" id="rew" title="最初から">⏮</button>
+    <span class="time" id="time">0:00 / 0:00</span>
+    <input type="range" id="seek" min="0" max="1000" value="0">
+    <span class="lab vlab">音量</span>
+    <input type="range" id="vol" min="0" max="100" value="85">
+    <button class="btn" id="wav">WAV保存</button>
+  </div>
+  </div>
+
+  <div class="grid">
+    <div class="card params" id="params">
+      <h3>物理パラメータ（演奏中にそのまま効きます）</h3>
+    </div>
+    <div class="card scopebox">
+      <h3>スペクトル ／ 波形</h3>
+      <canvas id="scope"></canvas>
+    </div>
+  </div>
+  </div>
+
+  <footer>
+    弦は「指で三角形に引いて離す」初期変位を載せた進行波モデルで、ブリッジにかかる力がボディの共振モード群を駆動します。
+    ギターの弦をクリック／ドラッグすると自分でも弾けます（指板上＝そのフレット、サウンドホール〜ブリッジ間＝開放弦を撥弦位置を変えて）。
+    画面の弦の揺れは、実際の撥弦波形（キンクが弦を往復する運動）をスローモーションで描いたものです。
+  </footer>
+</div>
+
+<script src="guitar-synth.js"></script>
+<script src="song.js"></script>
+<script>
+(() => {
+'use strict';
+const P = window.GuitarPhys;
+const song = window.GuitarSong.buildSong();
+const COL = { mel: '#ffd27a', comp: '#6fd6c8', bass: '#ff8f6b', user: '#ffffff' };
+const $ = (id) => document.getElementById(id);
+
+// ---------------- パラメータUI ----------------
+const params = Object.assign({}, P.DEFAULTS);
+const PDEF = [
+  { k: 'betaScale', name: '撥弦位置', min: 0.4, max: 2.4, step: 0.05, l: 'ブリッジ寄り（硬い）', r: '指板寄り（甘い）', f: (v) => '×' + v.toFixed(2) },
+  { k: 'touchScale', name: 'タッチ', min: 0.3, max: 3, step: 0.05, l: '爪', r: '指頭', f: (v) => '×' + v.toFixed(2) },
+  { k: 'body', name: 'ボディ共鳴', min: 0, max: 2, step: 0.05, l: '弦だけ', r: '豊か', f: (v) => Math.round(v * 100) + '%' },
+  { k: 'symp', name: '共鳴弦', min: 0, max: 3, step: 0.1, l: 'なし', r: '強い', f: (v) => Math.round(v * 100) + '%' },
+  { k: 'reverb', name: '部屋の残響', min: 0, max: 0.5, step: 0.01, l: 'デッド', r: 'ホール', f: (v) => Math.round(v * 100) + '%' },
+];
+PDEF.forEach((d) => {
+  const div = document.createElement('div'); div.className = 'p';
+  div.innerHTML = `<label><b>${d.name}</b><em></em></label><input type="range" min="${d.min}" max="${d.max}" step="${d.step}" value="${params[d.k]}"><div class="ends"><span>${d.l}</span><span>${d.r}</span></div>`;
+  const inp = div.querySelector('input'), em = div.querySelector('em');
+  em.textContent = d.f(params[d.k]);
+  inp.addEventListener('input', () => {
+    params[d.k] = parseFloat(inp.value); em.textContent = d.f(params[d.k]);
+    sendParams();
+  });
+  $('params').appendChild(div);
+});
+$('chipModes').textContent = 'ボディ共振モード ×' + new P.GuitarSynth(44100).nModes;
+
+// ---------------- オーディオ（AudioWorklet でリアルタイム合成） ----------------
+let ctx = null, master = null, analyser = null, node = null, initP = null;
+let playing = false, startAt = 0, offset = 0;
+const timeData = new Float32Array(2048), freqData = new Float32Array(1024);
+
+// 音源のソースをそのままオーディオスレッドへ渡す（file:// で開いても動くよう Blob 経由）
+const WORKLET = `const P = (${GuitarPhysFactory.toString()})(globalThis);
+class GuitarProc extends AudioWorkletProcessor {
+  constructor(o) {
+    super();
+    const syn = this.syn = new P.GuitarSynth(sampleRate, o.processorOptions.params);
+    syn.running = false; syn.schedule(o.processorOptions.notes);
+    this.port.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === 'play') { syn.seek(m.offset); syn.running = true; }
+      else if (m.type === 'pause') { syn.running = false; syn.allOff(); }
+      else if (m.type === 'params') syn.setParams(m.params);
+      else if (m.type === 'pluck') syn.userPluck(m.s, m.fret, m.vel, m.beta, m.touch);
+    };
+  }
+  process(inputs, outputs) {
+    const o = outputs[0], L = o[0], R = o[1] || o[0], n = L.length;
+    this.syn.process(L, R, 0, n);
+    for (let i = 0; i < n; i++) { // 音量合わせ＋ソフトクリップ
+      let x = L[i] * 0.3; L[i] = x > 0.7 ? 0.7 + 0.3 * Math.tanh((x - 0.7) / 0.3) : x < -0.7 ? -0.7 + 0.3 * Math.tanh((x + 0.7) / 0.3) : x;
+      x = R[i] * 0.3; R[i] = x > 0.7 ? 0.7 + 0.3 * Math.tanh((x - 0.7) / 0.3) : x < -0.7 ? -0.7 + 0.3 * Math.tanh((x + 0.7) / 0.3) : x;
+    }
+    return true;
+  }
+}
+registerProcessor('guitar', GuitarProc);`;
+
+function ensureCtx() {
+  if (initP) return initP;
+  ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+  master = ctx.createGain(); master.gain.value = $('vol').value / 100;
+  analyser = ctx.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.75;
+  master.connect(analyser); analyser.connect(ctx.destination);
+  const url = URL.createObjectURL(new Blob([WORKLET], { type: 'application/javascript' }));
+  initP = ctx.audioWorklet.addModule(url).then(() => {
+    node = new AudioWorkletNode(ctx, 'guitar', {
+      numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
+      processorOptions: { params, notes: song.notes.map((n) => ({ t: n.t, dur: n.dur, s: n.s, fret: n.fret, vel: n.vel, beta: n.beta, touch: n.touch })) },
+    });
+    node.onprocessorerror = (e) => console.error('worklet error', e);
+    node.connect(master);
+  });
+  return initP;
+}
+const pos = () => (playing ? Math.min(song.duration, Math.max(offset, ctx.currentTime - startAt + offset)) : offset);
+
+async function play() {
+  await ensureCtx(); await ctx.resume();
+  if (playing) return;
+  if (offset >= song.duration - 0.05) offset = 0;
+  node.port.postMessage({ type: 'play', offset });
+  startAt = ctx.currentTime + (ctx.baseLatency || 0) + (ctx.outputLatency || 0);
+  playing = true; $('overlay').classList.add('hide'); ui();
+}
+function pause() {
+  if (!playing) return;
+  offset = pos(); playing = false;
+  node.port.postMessage({ type: 'pause' });
+  ui();
+}
+function ui() { $('play').textContent = playing ? '❚❚' : '▶'; }
+function sendParams() { if (node) node.port.postMessage({ type: 'params', params }); }
+
+$('bigplay').onclick = play;
+$('play').onclick = () => (playing ? pause() : play());
+$('rew').onclick = () => { const w = playing; pause(); offset = 0; if (w) play(); };
+$('vol').oninput = () => { if (master) master.gain.value = $('vol').value / 100; };
+let seeking = false;
+$('seek').addEventListener('input', () => { seeking = true; const w = playing; if (w) pause(); offset = ($('seek').value / 1000) * song.duration; if (w) play(); });
+$('seek').addEventListener('change', () => { seeking = false; });
+addEventListener('keydown', (e) => { if (e.code === 'Space' && e.target.tagName !== 'BUTTON') { e.preventDefault(); playing ? pause() : play(); } });
+$('wav').onclick = async () => { // 書き出しだけはオフラインで計算
+  const btn = $('wav'); if (btn.disabled) return;
+  btn.disabled = true;
+  const FS = 44100;
+  const pcm = await P.renderAsync(song.notes, song.duration, FS, params, (p) => { btn.textContent = '計算中 ' + Math.round(p * 100) + '%'; });
+  P.applyGain(pcm, 0.89 / Math.max(1e-6, P.peakOf(pcm)));
+  const n = pcm.L.length, dv = new DataView(new ArrayBuffer(44 + n * 4));
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); dv.setUint32(4, 36 + n * 4, true); w(8, 'WAVEfmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true);
+  dv.setUint32(24, FS, true); dv.setUint32(28, FS * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 4, true);
+  for (let i = 0; i < n; i++) { dv.setInt16(44 + i * 4, Math.max(-1, Math.min(1, pcm.L[i])) * 32767, true); dv.setInt16(46 + i * 4, Math.max(-1, Math.min(1, pcm.R[i])) * 32767, true); }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([dv], { type: 'audio/wav' })); a.download = 'brisa-de-novembro.wav'; a.click();
+  btn.textContent = 'WAV保存'; btn.disabled = false;
+};
+
+// ---------------- ギターの幾何 ----------------
+const W = 1280, H = 500, CY = 250, NUT = 150, SL = 800, BR = NUT + SL, HOLE = NUT + 0.742 * SL, HOLE_R = 53;
+const fx = (f) => NUT + SL * (1 - Math.pow(2, -f / 12));
+const FB_END = fx(19) + 9;
+// i=0 が1弦（画面上側）、i=5 が6弦
+const sy = (i, x) => CY + (i - 2.5) * (10.6 + (14.3 - 10.6) * (x - NUT) / SL);
+
+function bodyPath(g) {
+  g.beginPath();
+  g.moveTo(550, CY);
+  g.bezierCurveTo(550, CY - 110, 590, CY - 172, 665, CY - 172);
+  g.bezierCurveTo(730, CY - 172, 750, CY - 146, 800, CY - 146);
+  g.bezierCurveTo(850, CY - 146, 880, CY - 228, 975, CY - 228);
+  g.bezierCurveTo(1090, CY - 228, 1153, CY - 130, 1153, CY);
+  g.bezierCurveTo(1153, CY + 130, 1090, CY + 228, 975, CY + 228);
+  g.bezierCurveTo(880, CY + 228, 850, CY + 146, 800, CY + 146);
+  g.bezierCurveTo(750, CY + 146, 730, CY + 172, 665, CY + 172);
+  g.bezierCurveTo(590, CY + 172, 550, CY + 110, 550, CY);
+  g.closePath();
+}
+function rr(g, x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+
+function drawStatic(g) {
+  // ボディ
+  g.save(); g.shadowColor = 'rgba(0,0,0,.7)'; g.shadowBlur = 50; g.shadowOffsetY = 18;
+  bodyPath(g); g.fillStyle = '#c98f47'; g.fill(); g.restore();
+  g.save(); bodyPath(g); g.clip();
+  let gr = g.createRadialGradient(860, CY, 40, 860, CY, 380);
+  gr.addColorStop(0, '#f3d49c'); gr.addColorStop(0.55, '#e3b26b'); gr.addColorStop(1, '#b97a35');
+  g.fillStyle = gr; g.fillRect(500, 0, 700, H);
+  let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 150; i++) { // 木目
+    const y = CY - 235 + rnd() * 470;
+    g.strokeStyle = `rgba(110,62,20,${0.03 + rnd() * 0.07})`; g.lineWidth = 0.5 + rnd() * 1.2;
+    g.beginPath(); g.moveTo(540, y); g.bezierCurveTo(700, y + rnd() * 3 - 1.5, 950, y + rnd() * 3 - 1.5, 1160, y + rnd() * 2 - 1); g.stroke();
+  }
+  gr = g.createLinearGradient(0, CY - 230, 0, CY + 230);
+  gr.addColorStop(0, 'rgba(255,255,255,.10)'); gr.addColorStop(0.5, 'rgba(255,255,255,0)'); gr.addColorStop(1, 'rgba(40,15,0,.22)');
+  g.fillStyle = gr; g.fillRect(500, 0, 700, H);
+  g.restore();
+  bodyPath(g); g.strokeStyle = '#2b160b'; g.lineWidth = 9; g.stroke();
+  bodyPath(g); g.strokeStyle = 'rgba(255,232,190,.5)'; g.lineWidth = 1.2; g.stroke();
+
+  // ロゼッタとサウンドホール
+  g.lineWidth = 26; g.strokeStyle = '#3b2415'; g.beginPath(); g.arc(HOLE, CY, 71, 0, 7); g.stroke();
+  g.lineWidth = 11; g.setLineDash([5, 4]);
+  g.strokeStyle = '#c9773a'; g.beginPath(); g.arc(HOLE, CY, 71, 0, 7); g.stroke();
+  g.lineDashOffset = 4.5; g.strokeStyle = '#efdcae'; g.setLineDash([2.5, 6.5]); g.beginPath(); g.arc(HOLE, CY, 71, 0, 7); g.stroke();
+  g.setLineDash([]); g.lineDashOffset = 0; g.lineWidth = 1.3; g.strokeStyle = '#efdcae';
+  for (const r of [59.5, 63, 79, 82.5]) { g.beginPath(); g.arc(HOLE, CY, r, 0, 7); g.stroke(); }
+  gr = g.createRadialGradient(HOLE + 10, CY + 6, 5, HOLE, CY, HOLE_R);
+  gr.addColorStop(0, '#1d130c'); gr.addColorStop(1, '#070403');
+  g.fillStyle = gr; g.beginPath(); g.arc(HOLE, CY, HOLE_R, 0, 7); g.fill();
+
+  // ブリッジ
+  g.save(); g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 10; g.shadowOffsetY = 3;
+  gr = g.createLinearGradient(936, 0, 976, 0); gr.addColorStop(0, '#3a2216'); gr.addColorStop(1, '#22130c');
+  g.fillStyle = gr; rr(g, 936, CY - 112, 40, 224, 5); g.fill(); g.restore();
+  g.fillStyle = '#4a2c1c'; rr(g, 958, CY - 50, 14, 100, 2); g.fill();
+  g.fillStyle = '#f1e9d8'; g.fillRect(BR - 1.5, CY - 44, 3.2, 88);
+
+  // 指板
+  g.save(); g.shadowColor = 'rgba(0,0,0,.55)'; g.shadowBlur = 14; g.shadowOffsetY = 5;
+  g.beginPath(); g.moveTo(NUT, CY - 33); g.lineTo(FB_END, CY - 40.5); g.lineTo(FB_END, CY + 40.5); g.lineTo(NUT, CY + 33); g.closePath();
+  gr = g.createLinearGradient(0, CY - 40, 0, CY + 40); gr.addColorStop(0, '#2b1b12'); gr.addColorStop(0.5, '#1d120c'); gr.addColorStop(1, '#150d09');
+  g.fillStyle = gr; g.fill(); g.restore();
+  const half = (x) => 33 + 7.5 * (x - NUT) / (FB_END - NUT);
+  for (const f of [5, 7, 9, 12]) { const x = (fx(f) + fx(f - 1)) / 2; g.fillStyle = 'rgba(255,240,215,.13)'; g.beginPath(); g.arc(x, CY, 3.6, 0, 7); g.fill(); }
+  for (let f = 1; f <= 19; f++) {
+    const x = fx(f), h = half(x);
+    g.strokeStyle = '#8f887a'; g.lineWidth = 2.6; g.beginPath(); g.moveTo(x, CY - h); g.lineTo(x, CY + h); g.stroke();
+    g.strokeStyle = '#e9e4d8'; g.lineWidth = 0.9; g.beginPath(); g.moveTo(x - 0.5, CY - h); g.lineTo(x - 0.5, CY + h); g.stroke();
+  }
+  g.fillStyle = 'rgba(255,240,215,.34)'; g.font = '10px Georgia, serif'; g.textAlign = 'center';
+  for (const f of [3, 5, 7, 9, 12, 15]) g.fillText(f, (fx(f) + fx(f - 1)) / 2, CY + half(fx(f)) + 16);
+
+  // ヘッド
+  g.save(); g.shadowColor = 'rgba(0,0,0,.6)'; g.shadowBlur = 20; g.shadowOffsetY = 8;
+  g.beginPath(); g.moveTo(NUT - 4, CY - 36); g.lineTo(52, CY - 45); g.quadraticCurveTo(26, CY - 44, 24, CY - 22); g.quadraticCurveTo(34, CY, 24, CY + 22);
+  g.quadraticCurveTo(26, CY + 44, 52, CY + 45); g.lineTo(NUT - 4, CY + 36); g.closePath();
+  gr = g.createLinearGradient(0, CY - 45, 0, CY + 45); gr.addColorStop(0, '#6a4026'); gr.addColorStop(1, '#3d2314');
+  g.fillStyle = gr; g.fill(); g.restore();
+  for (const sgn of [-1, 1]) {
+    g.fillStyle = '#0e0806'; rr(g, 50, CY + sgn * 20 - 8.5, 84, 17, 8); g.fill();
+    for (const x of [64, 90, 116]) {
+      g.fillStyle = '#e9dfc9'; g.fillRect(x - 3.5, CY + sgn * 20 - 8.5, 7, 17);
+      g.strokeStyle = '#b9b2a2'; g.lineWidth = 2.4; g.beginPath(); g.moveTo(x, CY + sgn * 44); g.lineTo(x, CY + sgn * 58); g.stroke();
+      g.fillStyle = '#f2ead8'; g.beginPath(); g.ellipse(x, CY + sgn * 64, 9, 6.5, 0, 0, 7); g.fill();
+    }
+  }
+  g.strokeStyle = 'rgba(240,232,215,.7)';
+  for (let i = 0; i < 6; i++) {
+    const top = i < 3, k = top ? i : 5 - i;
+    g.lineWidth = i < 3 ? 1 : 1.5;
+    g.beginPath(); g.moveTo(NUT - 4, sy(i, NUT)); g.lineTo([116, 90, 64][k], CY + (top ? -20 : 20)); g.stroke();
+  }
+  g.fillStyle = '#f1e9d8'; g.fillRect(NUT - 5, CY - 34, 5.5, 68);
+}
+
+// ---------------- キャンバス管理 ----------------
+const gc = $('guitar'), g = gc.getContext('2d');
+const tc = $('tab'), tg = tc.getContext('2d');
+const sc = $('scope'), sg = sc.getContext('2d');
+const TABH = 196, SCW = 300, SCH = 130;
+let scale = 1, dpr = 1, staticLayer = null;
+function resize() {
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  const cw = $('stage').clientWidth; scale = cw / W;
+  gc.width = Math.round(cw * dpr); gc.height = Math.round(H * scale * dpr); gc.style.height = H * scale + 'px';
+  tc.width = Math.round(cw * dpr); tc.height = Math.round(TABH * scale * dpr); tc.style.height = TABH * scale + 'px';
+  const sw = sc.parentElement.clientWidth - 40;
+  sc.width = Math.round(sw * dpr); sc.height = Math.round(SCH * dpr); sc.style.height = SCH + 'px';
+  staticLayer = document.createElement('canvas'); staticLayer.width = gc.width; staticLayer.height = gc.height;
+  const sl = staticLayer.getContext('2d'); sl.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0); drawStatic(sl);
+}
+addEventListener('resize', resize); resize();
+
+// ---------------- 弦の状態（表示用） ----------------
+const userNotes = []; // {wall, dur, s, fret, vel, beta, role:'user'}
+function currentPerString(p) {
+  // 各弦で「いちばん最近弾かれた音」を返す: {n, age}
+  const res = [null, null, null, null, null, null];
+  const notes = song.notes;
+  if (playing || p > 0) {
+    for (let k = 0; k < notes.length; k++) {
+      const n = notes[k]; if (n.t > p) break;
+      if (p - n.t < 9) res[n.s - 1] = { n, age: p - n.t };
+    }
+  }
+  const now = performance.now() / 1000;
+  for (const u of userNotes) {
+    const age = now - u.wall, r = res[u.s - 1];
+    if (age >= 0 && (!r || age < r.age || r.age > r.n.dur + 0.3)) res[u.s - 1] = { n: u, age };
+  }
+  while (userNotes.length && now - userNotes[0].wall > 6) userNotes.shift();
+  return res;
+}
+
+const NH = 14, NP = 56;
+function stringShape(n, age, i, out) {
+  // 撥弦された理想弦の運動（キンクの往復）を fv[Hz] のスローモーションで
+  const beta = Math.min(0.45, Math.max(0.04, (n.beta || 0.14) * params.betaScale));
+  const tau = P.T60_F0[5 - i] / 6.9 * 1.3;
+  let env = Math.exp(-age / tau) * n.vel;
+  if (age > n.dur) env *= Math.exp(-(age - n.dur) / 0.06);
+  if (env < 0.004) return 0;
+  const phi = 2 * Math.PI * (2.6 + 0.22 * i) * age;
+  const k = 2 / (Math.PI * Math.PI * beta * (1 - beta));
+  for (let j = 0; j <= NP; j++) {
+    const u = j / NP; let y = 0;
+    for (let h = 1; h <= NH; h++) y += k * Math.sin(h * Math.PI * beta) / (h * h) * Math.sin(h * Math.PI * u) * Math.cos(h * phi) * Math.exp(-age * (h - 1) * 0.9);
+    out[j] = y;
+  }
+  return env;
+}
+
+let level = 0;
+const shape = new Float32Array(NP + 1);
+function drawGuitar(p) {
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, gc.width, gc.height);
+  g.drawImage(staticLayer, 0, 0);
+  g.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+
+  // サウンドホールから漏れる響き
+  if (level > 0.002) {
+    const a = Math.min(0.75, level * 5);
+    const gr = g.createRadialGradient(HOLE, CY, 10, HOLE, CY, 150 + level * 500);
+    gr.addColorStop(0, `rgba(255,196,110,${a})`); gr.addColorStop(0.35, `rgba(255,170,80,${a * 0.35})`); gr.addColorStop(1, 'rgba(255,170,80,0)');
+    g.save(); g.globalCompositeOperation = 'lighter'; g.fillStyle = gr; g.fillRect(HOLE - 420, CY - 420, 840, 840); g.restore();
+  }
+
+  const cur = currentPerString(p);
+  for (let i = 0; i < 6; i++) {
+    const c = cur[i], wound = i >= 3, lw = [1.25, 1.45, 1.7, 1.9, 2.3, 2.8][i];
+    const rest = wound ? '#d6ccb9' : 'rgba(250,244,232,.88)';
+    let env = 0, xs = NUT, col = rest;
+    if (c) { env = stringShape(c.n, c.age, i, shape); xs = c.n.fret > 0 ? fx(c.n.fret) : NUT; col = COL[c.n.role]; }
+    g.lineCap = 'round';
+    if (env > 0) {
+      // ナット〜押弦位置は静止
+      g.strokeStyle = rest; g.lineWidth = lw; g.beginPath(); g.moveTo(NUT, sy(i, NUT)); g.lineTo(xs, sy(i, xs)); g.stroke();
+      const amp = 9 * env, Lv = BR - xs;
+      for (const [ph, al] of [[-1, 0.22], [1, 1]]) { // 逆位相のゴースト＋本体
+        g.beginPath();
+        for (let j = 0; j <= NP; j++) { const x = BR - Lv * j / NP, y = sy(i, x) - ph * amp * shape[j]; j ? g.lineTo(x, y) : g.moveTo(x, y); }
+        g.save(); g.globalAlpha = al; g.strokeStyle = col; g.lineWidth = lw + 0.4;
+        if (ph === 1) { g.shadowColor = col; g.shadowBlur = 10 * Math.min(1, env * 2.5); }
+        g.stroke(); g.restore();
+      }
+    } else {
+      g.strokeStyle = rest; g.lineWidth = lw; g.beginPath(); g.moveTo(NUT, sy(i, NUT)); g.lineTo(BR, sy(i, BR)); g.stroke();
+    }
+    if (wound) { g.strokeStyle = 'rgba(60,40,25,.35)'; g.lineWidth = 0.6; g.setLineDash([1, 2.2]); g.beginPath(); g.moveTo(NUT, sy(i, NUT)); g.lineTo(BR, sy(i, BR)); g.stroke(); g.setLineDash([]); }
+    // ブリッジ後ろの結び目
+    g.strokeStyle = rest; g.lineWidth = lw * 0.8; g.beginPath(); g.moveTo(BR, sy(i, BR)); g.lineTo(BR + 20, sy(i, BR)); g.stroke();
+
+    if (!c) continue;
+    const n = c.n, held = c.age <= n.dur + 0.02;
+    // 左手：押さえている位置
+    if (held) {
+      g.save(); g.shadowColor = col; g.shadowBlur = 16;
+      if (n.fret > 0) {
+        const x = fx(n.fret) - 0.38 * (fx(n.fret) - fx(n.fret - 1));
+        g.fillStyle = col; g.beginPath(); g.arc(x, sy(i, x), 7.2, 0, 7); g.fill();
+        g.shadowBlur = 0; g.fillStyle = 'rgba(20,12,6,.85)'; g.font = 'bold 9px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(n.fret, x, sy(i, x) + 0.5);
+      } else {
+        g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.arc(NUT - 12, sy(i, NUT), 4.5, 0, 7); g.stroke();
+      }
+      g.restore();
+    }
+    // 右手：撥弦の瞬間
+    if (c.age < 0.4) {
+      const beta = Math.min(0.45, Math.max(0.04, (n.beta || 0.14) * params.betaScale));
+      const x = BR - (BR - xs) * beta, k = c.age / 0.4;
+      g.save(); g.globalCompositeOperation = 'lighter'; g.strokeStyle = col; g.globalAlpha = (1 - k) * 0.9; g.lineWidth = 2.2 * (1 - k) + 0.4;
+      g.beginPath(); g.arc(x, sy(i, x), 4 + 34 * k * n.vel, 0, 7); g.stroke();
+      g.globalAlpha = (1 - k) * (1 - k); g.fillStyle = '#fff'; g.beginPath(); g.arc(x, sy(i, x), 3.2, 0, 7); g.fill(); g.restore();
+    }
+  }
+
+  // コード名とセクション
+  let chord = '', next = '', sec = '';
+  for (const s of song.sections) if (s.t <= p + 0.05) sec = s.name;
+  const flat = []; song.bars.forEach((b) => b.chords.forEach((c) => flat.push(c)));
+  for (let k = 0; k < flat.length; k++) if (flat[k].t <= p + 0.05) { chord = flat[k].name; next = flat[k + 1] ? flat[k + 1].name : ''; }
+  if (!playing && p === 0) { chord = flat[0].name; next = flat[1].name; sec = 'Intro'; }
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  g.fillStyle = 'rgba(168,153,133,.9)'; g.font = '12px "Yu Gothic UI", system-ui'; g.fillText(('SECTION  ' + sec).split('').join(' '), 40, 48);
+  g.fillStyle = '#f6ecd9'; g.font = 'italic 58px Georgia, serif'; g.fillText(chord, 38, 108);
+  const cwid = g.measureText(chord).width;
+  g.fillStyle = 'rgba(246,236,217,.3)'; g.font = 'italic 26px Georgia, serif'; if (next) g.fillText('→ ' + next, 52 + cwid, 106);
+
+  // 凡例
+  g.font = '12px "Yu Gothic UI", system-ui'; let lx = 40;
+  for (const [k, t] of [['mel', '旋律（1弦）'], ['comp', 'コード（i・m・a）'], ['bass', 'ベース（親指）']]) {
+    g.fillStyle = COL[k]; g.beginPath(); g.arc(lx, H - 36, 5, 0, 7); g.fill();
+    g.fillStyle = 'rgba(243,233,216,.75)'; g.fillText(t, lx + 11, H - 32); lx += g.measureText(t).width + 34;
+  }
+  g.fillStyle = 'rgba(168,153,133,.8)'; g.fillText('♩= ' + song.bpm + '　Bossa Nova　Am', 40, 132);
+}
+
+// ---------------- TAB譜ロール ----------------
+function drawTab(p) {
+  const k = scale * dpr; tg.setTransform(k, 0, 0, k, 0, 0); tg.clearRect(0, 0, W, TABH);
+  const PH = 330, PPS = 150, y0 = 62, dy = 22, t0 = p - PH / PPS - 0.5, t1 = p + (W - PH) / PPS + 0.5;
+  const X = (t) => PH + (t - p) * PPS;
+  tg.strokeStyle = 'rgba(255,236,205,.12)'; tg.lineWidth = 1;
+  for (let i = 0; i < 6; i++) { tg.beginPath(); tg.moveTo(0, y0 + i * dy); tg.lineTo(W, y0 + i * dy); tg.stroke(); }
+  tg.textBaseline = 'middle';
+  for (const b of song.bars) {
+    if (b.t1 < t0 || b.t0 > t1) continue;
+    tg.strokeStyle = 'rgba(255,236,205,.22)'; tg.beginPath(); tg.moveTo(X(b.t0), y0 - 8); tg.lineTo(X(b.t0), y0 + 5 * dy + 8); tg.stroke();
+    tg.fillStyle = 'rgba(168,153,133,.6)'; tg.font = '10px system-ui'; tg.textAlign = 'left'; tg.fillText(b.index + 1, X(b.t0) + 4, y0 + 5 * dy + 18);
+    for (const c of b.chords) { tg.fillStyle = c.t <= p ? 'rgba(246,236,217,.5)' : '#f6ecd9'; tg.font = 'italic 19px Georgia, serif'; tg.fillText(c.name, X(c.t) + 4, 30); }
+  }
+  for (const s of song.sections) {
+    const x = X(s.t); if (x < -60 || x > W) continue;
+    tg.font = '10px system-ui'; const w = tg.measureText(s.name).width + 14;
+    tg.fillStyle = 'rgba(255,210,122,.16)'; tg.beginPath(); tg.roundRect(x + 4, 4, w, 14, 7); tg.fill();
+    tg.fillStyle = '#ffd27a'; tg.textAlign = 'left'; tg.fillText(s.name, x + 11, 11.5);
+  }
+  tg.font = 'bold 11px system-ui'; tg.textAlign = 'center';
+  for (const n of song.notes) {
+    if (n.t + n.dur < t0) continue; if (n.t > t1) break;
+    const x = X(n.t), w = Math.max(17, n.dur * PPS - 3), y = y0 + (n.s - 1) * dy;
+    const act = p >= n.t && p <= n.t + n.dur, past = p > n.t + n.dur;
+    tg.save();
+    tg.globalAlpha = act ? 1 : past ? 0.22 : 0.62;
+    if (act) { tg.shadowColor = COL[n.role]; tg.shadowBlur = 14; }
+    tg.fillStyle = COL[n.role]; tg.globalAlpha *= act ? 1 : 0.45;
+    tg.beginPath(); tg.roundRect(x, y - 8.5, w, 17, 8.5); tg.fill();
+    tg.restore();
+    tg.globalAlpha = past ? 0.4 : 1;
+    tg.fillStyle = act ? '#1a1109' : '#fff6e6'; tg.fillText(n.fret, x + 8.5, y + 0.5); tg.globalAlpha = 1;
+  }
+  // 再生ヘッド
+  const gr = tg.createLinearGradient(PH - 60, 0, PH, 0); gr.addColorStop(0, 'rgba(255,210,122,0)'); gr.addColorStop(1, 'rgba(255,210,122,.13)');
+  tg.fillStyle = gr; tg.fillRect(PH - 60, 0, 60, TABH);
+  tg.strokeStyle = '#ffd27a'; tg.lineWidth = 1.5; tg.beginPath(); tg.moveTo(PH, 0); tg.lineTo(PH, TABH); tg.stroke();
+  tg.fillStyle = 'rgba(168,153,133,.7)'; tg.font = '10px Georgia, serif'; tg.textAlign = 'left';
+  ['e', 'B', 'G', 'D', 'A', 'E'].forEach((s, i) => tg.fillText(s, 8, y0 + i * dy - 7));
+}
+
+// ---------------- スペクトル／波形 ----------------
+function drawScope() {
+  const w = sc.width / dpr, h = SCH; sg.setTransform(dpr, 0, 0, dpr, 0, 0); sg.clearRect(0, 0, w, h);
+  let rms = 0;
+  if (analyser) {
+    analyser.getFloatTimeDomainData(timeData); analyser.getFloatFrequencyData(freqData);
+    for (let i = 0; i < timeData.length; i++) rms += timeData[i] * timeData[i];
+    rms = Math.sqrt(rms / timeData.length);
+    const nb = 56, f0 = 60, f1 = 9000, bw = w / nb, sr = ctx.sampleRate;
+    for (let b = 0; b < nb; b++) {
+      const fa = f0 * Math.pow(f1 / f0, b / nb), fb = f0 * Math.pow(f1 / f0, (b + 1) / nb);
+      const ia = Math.max(1, Math.floor(fa / sr * 2048)), ib = Math.max(ia + 1, Math.ceil(fb / sr * 2048));
+      let m = -200; for (let i = ia; i < ib && i < 1024; i++) if (freqData[i] > m) m = freqData[i];
+      const v = Math.max(0, Math.min(1, (m + 95) / 70));
+      const gr = sg.createLinearGradient(0, h, 0, h - v * h); gr.addColorStop(0, 'rgba(111,214,200,.25)'); gr.addColorStop(1, 'rgba(255,210,122,.9)');
+      sg.fillStyle = gr; sg.fillRect(b * bw + 1, h - v * (h - 6), bw - 2, v * (h - 6));
+    }
+    sg.strokeStyle = 'rgba(255,255,255,.85)'; sg.lineWidth = 1.2; sg.beginPath();
+    for (let i = 0; i < 700; i++) { const x = i / 700 * w, y = h * 0.42 - timeData[i] * h * 0.9; i ? sg.lineTo(x, y) : sg.moveTo(x, y); }
+    sg.stroke();
+  }
+  level += (rms - level) * (rms > level ? 0.5 : 0.12);
+  sg.fillStyle = 'rgba(168,153,133,.7)'; sg.font = '9px system-ui'; sg.textBaseline = 'alphabetic';
+  sg.textAlign = 'left'; sg.fillText('60Hz', 5, h - 4); sg.textAlign = 'right'; sg.fillText('9kHz', w - 5, h - 4);
+}
+
+// ---------------- 弦を直接弾く ----------------
+let lastStr = -1, down = false;
+function pluckAt(ev, force) {
+  const r = gc.getBoundingClientRect(), x = (ev.clientX - r.left) / scale, y = (ev.clientY - r.top) / scale;
+  if (x < NUT - 14 || x > BR - 6) { lastStr = -1; return; }
+  let best = -1, bd = 8.5;
+  for (let i = 0; i < 6; i++) { const d = Math.abs(y - sy(i, x)); if (d < bd) { bd = d; best = i; } }
+  if (best < 0) { lastStr = -1; return; }
+  if (best === lastStr && !force) return;
+  lastStr = best;
+  let fret = 0, beta = 0.14;
+  if (x <= FB_END) { while (fret < 19 && fx(fret) < x) fret++; if (x <= NUT) fret = 0; }
+  else beta = Math.min(0.45, Math.max(0.03, (BR - x) / SL)) / params.betaScale;
+  const note = { t: 0.01, dur: 3.2, s: best + 1, fret, vel: 0.9, beta, touch: 1 };
+  ensureCtx().then(() => {
+    ctx.resume(); node.port.postMessage({ type: 'pluck', s: note.s, fret, vel: 0.9, beta, touch: 1 });
+    userNotes.push({ wall: performance.now() / 1000 + 0.02, dur: 3.2, s: best + 1, fret, vel: 0.9, beta, role: 'user' });
+  });
+}
+gc.addEventListener('pointerdown', (e) => { down = true; gc.setPointerCapture(e.pointerId); pluckAt(e, true); });
+gc.addEventListener('pointermove', (e) => { if (down) pluckAt(e, false); });
+gc.addEventListener('pointerup', () => { down = false; lastStr = -1; });
+gc.addEventListener('pointercancel', () => { down = false; lastStr = -1; });
+
+// ---------------- ループ ----------------
+const fmt = (t) => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
+function frame() {
+  const p = ctx ? Math.max(0, pos()) : 0;
+  if (playing && p >= song.duration) { pause(); offset = 0; }
+  drawScope(); drawGuitar(p); drawTab(p);
+  $('time').textContent = fmt(p) + ' / ' + fmt(song.duration);
+  if (!seeking) $('seek').value = Math.round(p / song.duration * 1000);
+  requestAnimationFrame(frame);
+}
+window.__demo = { song, params, pos, state: () => ({ playing, node: !!node, level, ctxState: ctx && ctx.state, sr: ctx && ctx.sampleRate }) };
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
