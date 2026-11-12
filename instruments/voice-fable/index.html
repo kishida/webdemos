@@ -37,6 +37,8 @@
   .transport { margin-left: auto; display: flex; align-items: center; gap: 14px; }
   button.play { appearance: none; border: 0; cursor: pointer; width: 58px; height: 58px; border-radius: 50%; background: linear-gradient(145deg, #ffa07f, #ff6a4a); color: #1b0d08; font-size: 22px; box-shadow: 0 6px 24px #ff6a4a55, inset 0 1px 0 #fff6; transition: transform .12s; }
   button.play:hover { transform: scale(1.06); }
+  button.rew { appearance: none; cursor: pointer; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: #131a2e; color: var(--ink); font-size: 15px; transition: transform .12s; }
+  button.rew:hover { transform: scale(1.08); border-color: var(--voice); }
   .time { font-variant-numeric: tabular-nums; color: var(--dim); font-size: 13px; min-width: 86px; }
   .grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); gap: 14px; }
   .panel { background: linear-gradient(180deg, #111830cc, #0b101dcc); border: 1px solid var(--line); border-radius: 14px; position: relative; overflow: hidden; }
@@ -54,6 +56,10 @@
   .lyrics .idle { font-size: 15px; letter-spacing: .1em; color: var(--dim); font-family: "Yu Gothic UI", sans-serif; }
   #roll { height: 190px; cursor: grab; touch-action: pan-y; }
   #roll.drag { cursor: grabbing; }
+  .rollBtns { position: absolute; left: 10px; top: 5px; z-index: 3; display: flex; gap: 6px; align-items: center; }
+  .rollBtns button.rew { width: 26px; height: 26px; font-size: 11px; }
+  .rollBtns button.play { width: 26px; height: 26px; font-size: 11px; box-shadow: 0 2px 10px #ff6a4a55; }
+  #rollP h2 { left: 82px; }
   #rollBack { position: absolute; right: 12px; top: 8px; z-index: 3; display: none; appearance: none; cursor: pointer; border: 1px solid var(--line); background: #131a2ee6; color: var(--air); border-radius: 999px; font-size: 11.5px; padding: 4px 12px; }
   .seg { display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
   .seg button { appearance: none; border: 0; cursor: pointer; background: #131a2e; color: var(--dim); font-size: 13px; padding: 8px 16px; font-family: inherit; }
@@ -72,6 +78,20 @@
   .note b { color: var(--ink); font-weight: 600; }
   .note i { font-style: normal; color: var(--air); }
   .controls a { color: var(--air); text-decoration: none; }
+  /* 横に広い画面: コントロールを右端に縦に並べる */
+  @media (min-width: 1100px) {
+    .wrap { max-width: 1640px; display: grid; grid-template-columns: minmax(0, 1fr) clamp(190px, 16vw, 250px); column-gap: 16px; }
+    .wrap > * { grid-column: 1 / -1; }
+    .wrap > .grid { grid-column: 1; }
+    .wrap > .controls { grid-column: 2; grid-row: 2; align-self: stretch; margin-top: 0;
+      flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 16px; padding: 18px 16px;
+      background: linear-gradient(180deg, #111830cc, #0b101dcc); border: 1px solid var(--line); border-radius: 14px; }
+    .controls label { flex-direction: column; align-items: stretch; gap: 6px; }
+    .controls input[type=range] { width: 100%; }
+    .controls .vowels { margin-left: 0; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid var(--line); }
+    .controls .vowels input[type=range] { flex-basis: 100%; }
+    .controls a { padding-top: 14px; border-top: 1px solid var(--line); }
+  }
   @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .right { height: auto; } .right .panel { height: 170px; } h1 { font-size: 26px; } .lyrics { font-size: 24px; } }
 </style>
 </head>
@@ -82,6 +102,7 @@
     <div class="transport">
       <div class="seg" id="voiceSeg" title="歌い手の体の寸法を切り替える"><button data-t="male" class="on">男声</button><button data-t="female">女声</button></div>
       <span class="time" id="time">0:00 / 0:00</span>
+      <button class="rew" id="rew" title="先頭に戻す">⏮</button>
       <button class="play" id="play" title="再生 / 停止">▶</button>
     </div>
   </header>
@@ -96,7 +117,7 @@
   </div>
 
   <div class="lyrics" id="lyrics"><span class="idle">▶ を押すと、計算された声が歌い出します</span></div>
-  <div class="panel"><h2><b>音高</b>　帯＝楽譜　線＝声帯が実際に出した高さ　｜　ドラッグ・ホイールでスクロール　Ctrl+ホイールで拡大　クリックで再生位置を移動</h2><button id="rollBack">再生位置へ戻る</button><canvas id="roll"></canvas></div>
+  <div class="panel" id="rollP"><div class="rollBtns"><button class="rew" id="rew2" title="先頭に戻す">⏮</button><button class="play" id="play2" title="再生 / 停止">▶</button></div><h2><b>音高</b>　帯＝楽譜　線＝声帯が実際に出した高さ　｜　ドラッグ・ホイールでスクロール　Ctrl+ホイールで拡大　クリックで再生位置を移動</h2><button id="rollBack">再生位置へ戻る</button><canvas id="roll"></canvas></div>
   <div class="panel" id="keysP"><canvas id="keys"></canvas></div>
   <div class="seek" id="seek"><i id="seekbar"></i></div>
 
@@ -104,7 +125,7 @@
     <label>歌 <input type="range" id="vVol" min="0" max="1.6" step="0.01" value="1"></label>
     <label>ピアノ <input type="range" id="pVol" min="0" max="3" step="0.01" value="1.5"></label>
     <label>ビブラート <input type="range" id="vib" min="0" max="2.5" step="0.01" value="1"></label>
-    <label>息まじり <input type="range" id="breath" min="0" max="6" step="0.01" value="1"></label>
+    <label>息まじり <input type="range" id="breath" min="0" max="6" step="0.01" value="6"></label>
     <a id="wav" href="out/song.wav" download="naminokatachi.wav">WAV（書き出し済み）</a>
     <div class="vowels">自分で鳴らす
       <input type="range" id="freeP" min="50" max="67" step="1" value="60" title="音の高さ">
@@ -158,11 +179,11 @@ async function initAudio() {
     const d = e.data;
     if (d.type === 'snap') {
       snap = d; snapAt = performance.now(); songT = d.t; if (d.playing) { f0Hist.push({ t: d.t, f: d.f0 }); if (f0Hist.length > 4000) f0Hist.splice(0, 1000); }
-    } else if (d.type === 'end') { playing = false; $('play').textContent = '▶'; }
+    } else if (d.type === 'end') { playing = false; setIcon('▶'); }
   };
   node.port.postMessage({ type: 'voice', kind: voiceType });
   node.port.postMessage({ type: 'load', events: song.events, dur: song.dur });
-  sendParams();
+  sendParams(); node.port.postMessage({ type: 'breath', value: +$('breath').value }); // 再生前に動かしたスライダーも反映する
 }
 function sendParams() {
   if (!node) return;
@@ -178,9 +199,17 @@ for (const id of ['vVol', 'pVol', 'vib', 'breath']) $(id).addEventListener('inpu
 async function play(from) {
   await initAudio(); await ctx.resume();
   f0Hist.length = 0; songT = from || 0; rollFollow = true;
-  node.port.postMessage({ type: 'play', t: from || 0 }); playing = true; started = true; $('play').textContent = '■';
+  node.port.postMessage({ type: 'play', t: from || 0 }); playing = true; started = true; setIcon('■');
 }
-function stop() { if (node) node.port.postMessage({ type: 'stop' }); playing = false; $('play').textContent = '▶'; }
+function stop() { if (node) node.port.postMessage({ type: 'stop' }); playing = false; setIcon('▶'); }
+// 先頭に戻す: 再生中は先頭から鳴らし直し、停止中は位置だけ戻す
+function rewind() {
+  if (playing) { play(0); return; }
+  songT = 0; rollT = 0; rollFollow = true; f0Hist.length = 0; shownLine = -2;
+  if (node) node.port.postMessage({ type: 'seek', t: 0 });
+}
+$('rew').onclick = rewind; $('rew2').onclick = rewind; $('play2').onclick = () => $('play').click();
+function setIcon(s) { $('play').textContent = s; $('play2').textContent = s; }
 $('play').onclick = () => playing ? stop() : play(songT > song.dur - 1 ? 0 : (started ? songT : 0));
 $('seek').onclick = e => { const r = $('seek').getBoundingClientRect(); play(Math.max(0, (e.clientX - r.left) / r.width * song.dur - 0.01)); };
 document.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); $('play').click(); } });
@@ -206,7 +235,7 @@ function setVoice(type) {
   if (playing) stop();
   voiceType = type; song = FableSong.buildSong({ voice: type }); setSong();
   for (const b of $('voiceSeg').children) b.classList.toggle('on', b.dataset.t === type);
-  playing = false; started = false; songT = 0; rollT = 0; rollFollow = true; f0Hist.length = 0; $('play').textContent = '▶';
+  playing = false; started = false; songT = 0; rollT = 0; rollFollow = true; f0Hist.length = 0; setIcon('▶');
   const fp = $('freeP'), d = song.transpose; fp.min = 50 + d; fp.max = 67 + d; fp.value = 60 + d;
   $('wav').href = type === 'female' ? 'out/song-female.wav' : 'out/song.wav'; $('wav').download = type === 'female' ? 'naminokatachi-female.wav' : 'naminokatachi.wav';
   if (node) { node.port.postMessage({ type: 'voice', kind: type }); node.port.postMessage({ type: 'load', events: song.events, dur: song.dur }); sendParams(); node.port.postMessage({ type: 'breath', value: +$('breath').value }); }

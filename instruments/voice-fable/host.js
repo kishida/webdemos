@@ -22,7 +22,7 @@ function hostFactory() {
         case 'load': this.ev = d.events; this.dur = d.dur; break;
         case 'play': this.seek(d.t || 0); this.playing = true; break;
         case 'seek': if (!this.playing) this.seek(d.t || 0); break; // 停止中に再生位置だけ動かす（音は出さない）
-        case 'stop': this.playing = false; p.allOff(false); v.ramp('ps', 0, 0.15); v.ramp('vib', 0, 0.1); for (const q of ['lab', 'alv', 'pal', 'vel']) v.release(q, 0.05); v.ramp('velum', 0, 0.05); v.ramp('abd', 0.05e-4, 0.05); break;
+        case 'stop': this.playing = false; p.allOff(false); v.ramp('ps', 0, 0.15); v.ramp('vib', 0, 0.1); v.ramp('air', 1, 0.05); for (const q of ['lab', 'alv', 'pal', 'vel']) v.release(q, 0.05); v.ramp('velum', 0, 0.05); v.ramp('abd', 0.05e-4, 0.05); break;
         case 'param': if (d.name in this) this[d.name] = d.value; else if (d.target === 'voice') v[d.name] = d.value; break;
         // 自由演奏: 母音と音高を直接指定
         case 'breath': v.ramp('breath', 0.01e-4 * d.value, 0.1); v.aspGain = 0.012 * (0.5 + 0.5 * d.value); break;

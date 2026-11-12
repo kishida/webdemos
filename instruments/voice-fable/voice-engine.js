@@ -55,7 +55,7 @@ function voiceEngineFactory() {
   // 調音位置（声門からの距離の割合）
   const PLACES = { lab: 1.0, alv: 0.87, pal: 0.79, vel: 0.62 };
   const PLACE_NAMES = ['lab', 'alv', 'pal', 'vel'];
-  const PARAMS = ['pitch', 'ps', 'abd', 'velum', 'vib', 'breath', 'gLab', 'gAlv', 'gPal', 'gVel', 'cLab', 'cAlv', 'cPal', 'cVel'];
+  const PARAMS = ['pitch', 'ps', 'abd', 'velum', 'vib', 'breath', 'gLab', 'gAlv', 'gPal', 'gVel', 'cLab', 'cAlv', 'cPal', 'cVel', 'air'];
   const PI_ = {}; PARAMS.forEach((n, i) => PI_[n] = i);
 
   // 声の種類: 体の寸法だけが違う（声道の長さ、声帯の長さ・質量）。式は同じ。
@@ -127,14 +127,15 @@ function voiceEngineFactory() {
       this.Q = 1; this.corr = 1; this.pitchFb = opts.pitchFb === undefined ? 0.25 : opts.pitchFb;
       this.xm = 0; this.xPrev = 0; this.cyc = 0; this.fMeas = 0; this.fTarget = 0; this.voiced = 0; this.lastCycAge = 0;
       this.Ug = 0; this.ga = 0; this.inj = 0;
-      this.aspGain = 0.012; this.fricGain = opts.fricGain === undefined ? 0.045 : opts.fricGain;
+      this.bLim = 1; this.bWait = 0; this.bCut = false; this.bCap = {}; this.bLast = 0; this.bErr = 0; this.bHold = 0; // 息まじりの自動調整
+      this.aspGain = 0.012; this.wideGain = 1.5; this.fricGain = opts.fricGain === undefined ? 0.045 : opts.fricGain;
       this.jc = -1; this.jZ1 = 0; this.jZ2 = 0; this.jq = 0; this.jUs = 0; this.nzHp = 0; this.fricAmp = 0; this.fricPos = N - 1; this.fricRe = 0; this.seed = 22222;
 
       // 制御パラメータ（すべて滑らかな補間つき）
       const P = PARAMS.length;
       this.cur = new Float64Array(P); this.from = new Float64Array(P); this.to = new Float64Array(P);
       this.rt = new Float64Array(P); this.rd = new Float64Array(P);
-      this.set('pitch', 60); this.set('ps', 0); this.set('abd', 0.05e-4); this.set('velum', 0); this.set('vib', 0); this.set('breath', 0.01e-4);
+      this.set('pitch', 60); this.set('ps', 0); this.set('abd', 0.05e-4); this.set('velum', 0); this.set('vib', 0); this.set('breath', 0.01e-4); this.set('air', 1);
       this.vibPh = 0; this.vibRate = 5.4; this.drift = 0; this.driftT = 0; this.flutter = 2.5; // cent
       this.stepCount = 0; this.dec = 0;
       this.gain = opts.gain || 0.11;
@@ -178,7 +179,7 @@ function voiceEngineFactory() {
       this.R.fill(0); this.L.fill(0); this.nR.fill(0); this.nL.fill(0); this.x1 = this.x2 = this.v1 = this.v2 = 0;
       this.lipLp = this.noseLp = this.Uprev = 0; this.corr = 1; this.voiced = 0;
       for (const n of ['gLab', 'gAlv', 'gPal', 'gVel', 'ps', 'velum', 'vib']) this.set(n, 0);
-      this.set('abd', 0.05e-4); this.setVowel('x', 0.01);
+      this.set('abd', 0.05e-4); this.set('air', 1); this.setVowel('x', 0.01);
     }
     rand() { let s = this.seed; s ^= s << 13; s ^= s >>> 17; s ^= s << 5; this.seed = s; return (s >>> 0) / 2147483648 - 1; }
 
@@ -235,6 +236,33 @@ function voiceEngineFactory() {
       } else { this.fricRe = 0; this.jc = -1; }
       this.fricAmp += (amp - this.fricAmp) * 0.3;
 
+      // 息まじりの自動調整: 声門のすき間が広すぎると声帯は鳴り出せない（閉じた母音ほど限界が低い）。
+      // 鳴るはずなのに鳴っていなければすき間を絞り、鳴り出した広さを母音ごとに覚えて次からはそこまでにする。
+      const ck = cur[5] * this.aScale;
+      if (Math.abs(cur[5] - this.bLast) > 0.002e-4) { this.bLast = cur[5]; this.bCap = {}; } // 設定が変わったら覚え直す
+      if (ck > 0.02e-4) {
+        const floor = 0.01e-4 / ck;
+        const narrow = this.vowel === 'i' || this.vowel === 'u' || this.vowel === 'o', high = this.fTarget > 2.6 * this.fBase;
+        const vw = this.vowel + (high ? '^' : ''); // 高い音は別に覚える
+        const want = cur[1] > 500 && cur[2] < 0.08e-4 && !anyC;
+        // 鳴ってはいるが音程に届かない（張りを上げ続けても 大きくずれたまま）のも、すき間が広すぎるしるし
+        // （音程が上下に暴れることもあるので、ずれの大きさをならして見る）
+        const ce = this.voiced ? Math.min(300, Math.abs(1200 * Math.log2(this.fMeas / this.fTarget))) : 0;
+        this.bErr += (ce - this.bErr) * tick / 0.03;
+        // 音の変わり目と歌い出しは音程が動いて当然なので、落ち着くまで判定しない
+        if (!this.voiced || this.rt[0] < this.rd[0]) this.bHold = 0.09; else if (this.bHold > 0) this.bHold -= tick;
+        const strain = want && this.voiced && this.bHold <= 0 && this.bErr > 60;
+        let cap = this.bCap[vw] || (narrow ? Math.min(1, (high ? 0.015e-4 : 0.03e-4) / ck) : 1); // 口の狭い母音は初めから控えめに、高い音ではさらに控えめに
+        if ((want && !this.voiced) || strain) {
+          this.bWait += tick;
+          if (this.bWait > (strain ? 0.05 : 0.04)) { this.bLim = Math.max(floor, this.bLim - tick / 0.06); this.bCut = true; }
+        } else {
+          this.bWait = 0;
+          if (this.voiced && this.bCut) { this.bCut = false; this.bCap[vw] = cap = Math.max(floor, this.bLim * 0.8); }
+        }
+        if (!this.bCut) this.bLim = this.bLim < cap ? Math.min(cap, this.bLim + tick / 0.5) : Math.max(cap, this.bLim - tick / 0.03);
+      } else { this.bLim = 1; this.bCut = false; this.bWait = 0; }
+
       // 音高: 目標（ビブラート・ゆらぎ込み）→ 張力 Q
       this.vibPh += 2 * PI * this.vibRate * (1 + 0.04 * Math.sin(this.vibPh * 0.13)) * tick;
       if (this.vibPh > 2e4) this.vibPh -= 2 * PI * 1000;
@@ -263,7 +291,7 @@ function voiceEngineFactory() {
         for (let h = 0; h < 2; h++) {
           if (this.stepCount === 0) { this.x1 = x1; this.control(false); }
           if (++this.stepCount >= this.STEPS) this.stepCount = 0;
-          const ps = cur[1], a0 = cur[2] * this.aScale, chink = cur[5] * this.aScale;
+          const ps = cur[1], a0 = cur[2] * this.aScale, chink = cur[5] * this.aScale * this.bLim;
           // ---- 声門 ----
           const a1 = a0 + two_l * x1, a2 = a0 + two_l * x2;
           const amin = a1 < a2 ? a1 : a2;
@@ -298,7 +326,11 @@ function voiceEngineFactory() {
           // 気息雑音（声門のジェット）
           const w = this.rand(); this.nzHp += (w - this.nzHp) * 0.05; const nz = w - this.nzHp;
           const jet = dP < 0 ? -dP : dP;
-          const pn = nz * this.aspGain * jet * Math.sqrt(Af < 0.3e-4 ? Af / 0.1e-4 : 3);
+          // 声門を大きく開くと（息継ぎ、歌い終わりの息）流れ全体が乱流になり、息の音がはっきり聞こえる
+          const wide = cur[2] > 0.36e-4 ? 1 + this.wideGain * (cur[2] - 0.36e-4) / 0.1e-4 : 1;
+          // air（歌い終わりの息）は、もともと息まじりの強い声では足さない: 息の量はすでに十分ある
+          const bs = this.aspGain / 0.012, air = 1 + (cur[14] - 1) / (bs * bs * bs);
+          const pn = nz * this.aspGain * wide * air * jet * Math.sqrt(Af < 0.3e-4 ? Af / 0.1e-4 : 3);
           // ---- 声道 ----
           jR[0] = L0 + Z0 * U + pn + this.inj; this.inj = 0;
           for (let i = 1; i < N; i++) { const ki = k[i] += dk[i]; const w2 = ki * (R[i - 1] - L[i]); jR[i] = R[i - 1] + w2; jL[i] = L[i] + w2; }
@@ -354,7 +386,7 @@ function voiceEngineFactory() {
       const n = nRing || 512, ug = new Float32Array(n), ga = new Float32Array(n), x1 = new Float32Array(n), x2 = new Float32Array(n);
       for (let i = 0; i < n; i++) { const j = (this.ringI - n + i) & (this.ringN - 1); ug[i] = this.ugRing[j]; ga[i] = this.gaRing[j]; x1[i] = this.x1Ring[j]; x2[i] = this.x2Ring[j]; }
       return { area: a, ug, ga, x1, x2, velum: this.cur[3] * 1e4, f0: this.voiced ? this.fMeas : 0, ft: this.fTarget, ps: this.cur[1], abd: this.cur[2] * this.aScale * 1e4, Q: this.Q,
-        fric: this.fricAmp, fricPos: this.fricPos / N, re: this.fricRe, vowel: this.vowel, J: this.J / N, lg: this.lg };
+        fric: this.fricAmp, fricPos: this.fricPos / N, re: this.fricRe, vowel: this.vowel, bLim: this.bLim, J: this.J / N, lg: this.lg };
     }
   }
 
