@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="Quartetto in Sol maggiore — 物理モデリング弦楽四重奏">
+<meta property="og:description" content="Fable 5.2での物理モデリングと作曲">
+<meta property="og:image" content="https://kishida.github.io/webdemos/instruments/ogp-stringfable.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/instruments/strings-fable.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<title>Quartetto in Sol maggiore — 物理モデリング弦楽四重奏</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&display=swap" rel="stylesheet">
+<style>
+  :root { --gold:#e9c98a; --ink:#0b0710; --serif:"Cormorant Garamond","Hoefler Text",Garamond,Georgia,"Yu Mincho","Hiragino Mincho ProN",serif; }
+  html,body { margin:0; height:100%; background:var(--ink); overflow:hidden; color:var(--gold); font-family:var(--serif); }
+  canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  #controls { position:fixed; top:18px; right:26px; display:flex; gap:14px; align-items:center; z-index:3;
+    padding:8px 16px; border:1px solid rgba(233,201,138,.28); border-radius:999px; background:rgba(14,8,18,.55); backdrop-filter:blur(6px);
+    opacity:0; transition:opacity .8s; }
+  #controls.on { opacity:1; }
+  #controls button { all:unset; cursor:pointer; width:30px; height:30px; display:grid; place-items:center; border-radius:50%;
+    color:var(--gold); font-size:15px; border:1px solid rgba(233,201,138,.35); transition:background .2s; }
+  #controls button:hover { background:rgba(233,201,138,.16); }
+  #controls button:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+  #controls label { font-size:13px; font-style:italic; letter-spacing:.04em; display:flex; align-items:center; gap:7px; opacity:.85; }
+  input[type=range] { -webkit-appearance:none; appearance:none; width:58px; height:2px; background:rgba(233,201,138,.4); outline:none; }
+  #controls output { font-style:normal; font-variant-numeric:tabular-nums; min-width:2.1em; text-align:right; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:11px; height:11px; border-radius:50%; background:var(--gold); cursor:pointer; }
+  #overlay { position:fixed; inset:0; z-index:5; display:grid; place-items:center; text-align:center;
+    background:radial-gradient(ellipse at 50% 45%, rgba(20,10,24,.55), rgba(6,3,9,.93)); transition:opacity 1.2s; }
+  #overlay.off { opacity:0; pointer-events:none; }
+  #overlay h1 { font-weight:400; font-style:italic; font-size:clamp(30px,5.2vw,68px); margin:0; letter-spacing:.02em; color:#f4dfb2;
+    text-shadow:0 0 40px rgba(233,170,90,.35); }
+  #overlay .sub { font-size:clamp(13px,1.5vw,19px); letter-spacing:.32em; margin:.9em 0 .4em; opacity:.8; text-transform:uppercase; }
+  #overlay .jp { font-size:clamp(12px,1.25vw,16px); opacity:.62; letter-spacing:.14em; margin-bottom:2.6em; }
+  #start { all:unset; cursor:pointer; padding:.7em 2.4em; font-size:clamp(16px,1.7vw,22px); font-style:italic; letter-spacing:.12em;
+    border:1px solid rgba(233,201,138,.6); border-radius:999px; color:#f4dfb2; transition:all .3s; }
+  #start:hover { background:rgba(233,201,138,.14); box-shadow:0 0 34px rgba(233,170,90,.35); }
+  #start:focus-visible { outline:2px solid var(--gold); outline-offset:4px; }
+  .orn { font-size:22px; opacity:.55; letter-spacing:.6em; margin-bottom:1.2em; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="controls">
+  <button id="bPlay" title="再生 / 一時停止 (Space)" aria-label="再生 / 一時停止">❚❚</button>
+  <button id="bRestart" title="最初から" aria-label="最初から">↺</button>
+  <label>Volume <input id="vol" type="range" min="0" max="1" step="0.01" value="0.8"></label>
+  <label>Sala <input id="rev" type="range" min="0" max="1" step="0.01" value="0.42"></label>
+  <label title="弓の擦れる音の量">Attrito <input id="rub" type="range" min="0" max="0.5" step="0.01" value="0.1"><output id="rubVal" for="rub">0.10</output></label>
+</div>
+
+<div id="overlay">
+  <div>
+    <div class="orn">❦</div>
+    <h1>Quartetto in Sol maggiore</h1>
+    <div class="sub">Allegro · alla maniera di Mozart · versione II</div>
+    <div class="jp">擦弦の物理モデル（デジタル・ウェーブガイド）がリアルタイムに奏でる弦楽四重奏</div>
+    <button id="start">▶&ensp;演奏を始める</button>
+  </div>
+</div>
+
+<!-- ======================================================================
+     AudioWorklet: 擦弦楽器の物理モデル音源
+     弦   … 弓の接点で二分した双方向デジタル・ウェーブガイド（ナット側 / 駒側）
+     弓   … 弓速と弦速の差から摩擦を求める非線形テーブル（スティック・スリップ）
+     駒   … 周波数依存の損失（1次ローパス）付き反射
+     胴   … 胴体共鳴モード（A0, B1-, B1+ … ブリッジ・ヒル）の並列共振器
+     ====================================================================== -->
+<script type="text/plain" id="worklet-src">
+'use strict';
+const CFG = [
+  { key:'vn1', beta:0.125, pole:0.54, vibRate:5.8, vibDepth:0.0052, pizzT60:0.5, fc:9500, dry:0.16, gain:0.5, pan:-0.55,
+    modes:[[275,11,.9],[460,16,1],[550,16,1],[700,9,.5],[1000,7,.55],[1500,5,.45],[2600,2.6,.55],[3500,4,.25]] },
+  { key:'vn2', beta:0.132, pole:0.57, vibRate:5.4, vibDepth:0.0046, pizzT60:0.5, fc:8500, dry:0.16, gain:0.36, pan:-0.2,
+    modes:[[282,11,.9],[448,16,1],[562,16,1],[720,9,.5],[980,7,.5],[1450,5,.45],[2450,2.6,.5],[3300,4,.22]] },
+  { key:'va',  beta:0.128, pole:0.60, vibRate:5.2, vibDepth:0.0046, pizzT60:0.6, fc:7000, dry:0.16, gain:0.6, pan:0.22,
+    modes:[[225,11,.9],[370,15,1],[452,15,1],[600,9,.55],[850,7,.5],[1200,5,.45],[2050,2.6,.55],[2900,4,.22]] },
+  { key:'vc',  beta:0.12,  pole:0.64, vibRate:5.0, vibDepth:0.0042, pizzT60:1.1, fc:5600, dry:0.2, gain:0.4, pan:0.55,
+    modes:[[104,8,.6],[172,13,1],[205,13,.9],[290,9,.6],[450,7,.5],[800,5,.45],[1450,2.6,.7],[2300,4,.3]] },
+];
+const TUNE_C = -0.18;   // ループ全体の遅延補正（サンプル）
+const N = 4096, M = N - 1, KICK = 0, START = 0.8;
+const SCRATCH = 0.6;   // 発音時の噛みつき雑音の強さ
+let RUB = globalThis.__RUB !== undefined ? globalThis.__RUB : 0.2;   // 弓の擦れの量
+
+class Voice {
+  constructor(sr) {
+    this.sr = sr; this.nb = new Float32Array(N); this.bb = new Float32Array(N);
+    this.wi = 0; this.active = false; this.released = true; this.pizz = false;
+    this.y1 = 0; this.bowVel = 0; this.bowTarget = 0; this.bowRate = 0; this.slope = 2; this.contact = 0;
+    this.base = 100; this.baseTarget = 100; this.vibAmt = 0; this.vibTarget = 0; this.vibPhase = 0; this.vibInc = 0;
+    this.beta = 0.127; this.pole = 0.6; this.g = 0.95; this.offAt = 0; this.tail = 0; this.midi = 0; this.born = 0;
+    this.pluckN = 0; this.pluckI = 0; this.pluckAmp = 0; this.nL = 80; this.bL = 12; this.nz = 0; this.dn = 0; this.wn1 = 0; this.sla = 0.15; this.rubK = 1; this.scr = 0; this.scrDecay = 0.999;
+  }
+  lenFor(freq) { return this.sr / freq - this.pole / (1 - this.pole) - TUNE_C; }
+  start(freq, vel, dir, pizz, durS, cfg, midi, born) {
+    this.nb.fill(0); this.bb.fill(0); this.y1 = 0; this.wi = 0;
+    this.active = true; this.released = false; this.pizz = pizz; this.midi = midi; this.born = born;
+    this.beta = cfg.beta; this.vibPhase = Math.random() * 6.28; this.vibInc = 2 * Math.PI * cfg.vibRate / this.sr; this.vibAmt = 0;
+    if (pizz) {
+      this.pole = 0.42; this.g = Math.exp(-6.91 / (freq * cfg.pizzT60));
+      this.contact = 0; this.bowVel = 0; this.bowTarget = 0; this.vibTarget = 0;
+      this.base = this.baseTarget = this.lenFor(freq);
+      this.pluckN = Math.max(6, Math.round(this.base * 0.16)); this.pluckI = 0; this.pluckAmp = (0.25 + 0.75 * vel) * dir;
+      this.tail = Math.round(cfg.pizzT60 * 1.3 * this.sr); this.released = true;
+    } else {
+      this.pole = cfg.pole; this.g = 0.95; this.contact = 1;
+      this.base = this.baseTarget = this.lenFor(freq);
+      this.bowTarget = dir * (0.02 + 0.19 * vel) * Math.min(1, Math.sqrt(520 / freq)); this.bowVel = this.bowTarget * START;
+      this.pluckN = Math.max(4, Math.round(this.base * 0.12)); this.pluckI = 0; this.pluckAmp = this.bowTarget * KICK;
+      this.bowRate = Math.abs(this.bowTarget) / ((durS > 0.4 ? 0.05 : 0.022) * this.sr);
+      this.slope = 5 - 4 * (0.52 + 0.3 * vel);
+      this.scr = (0.4 + 0.6 * vel) * SCRATCH * Math.min(1, durS / 0.4); this.rubK = Math.max(0.45, Math.min(1, Math.sqrt(durS / 0.3))); this.scrDecay = Math.exp(-1 / (0.03 * this.sr));
+      this.vibTarget = durS > 0.3 ? cfg.vibDepth : 0;
+    }
+  }
+  // 弓の返し: 遅延線（弦の振動）は消さず、弓の向きだけ反転させる
+  rebow(freq, vel, dir, durS, cfg) {
+    this.released = false; this.contact = 1;
+    this.bowTarget = dir * (0.02 + 0.19 * vel) * Math.min(1, Math.sqrt(520 / freq));
+    this.bowRate = Math.abs(this.bowTarget - this.bowVel) / (0.02 * this.sr) + 1e-9;
+    this.slope = 5 - 4 * (0.62 + 0.33 * vel);
+    this.scr = Math.max(this.scr, 0.25 * (0.4 + 0.6 * vel) * SCRATCH * Math.min(1, durS / 0.4));
+    this.vibTarget = durS > 0.3 ? cfg.vibDepth : 0;
+    this.rubK = Math.max(0.45, Math.min(1, Math.sqrt(durS / 0.3)));   // 短い弓ほど軽く
+  }
+  retune(freq, durS, cfg, midi) {
+    this.baseTarget = this.lenFor(freq); this.midi = midi;
+    this.vibTarget = durS > 0.3 ? cfg.vibDepth : 0;
+  }
+  release() {
+    if (this.released) return;
+    this.released = true; this.bowTarget = 0;
+    this.bowRate = Math.abs(this.bowVel) / (0.045 * this.sr) + 1e-9;
+    this.tail = Math.round(0.3 * this.sr);
+  }
+  tick() {
+    this.dn = 0;
+    if (this.released && --this.tail <= 0) { this.active = false; return 0; }
+    const dB = this.bowTarget - this.bowVel;
+    if (dB !== 0) this.bowVel = Math.abs(dB) <= this.bowRate ? this.bowTarget : this.bowVel + (dB > 0 ? this.bowRate : -this.bowRate);
+    this.base += (this.baseTarget - this.base) * 0.004;
+    this.vibAmt += (this.vibTarget - this.vibAmt) * 0.00012;
+    this.vibPhase += this.vibInc;
+    const total = this.base * (1 + this.vibAmt * Math.sin(this.vibPhase));
+    const bL = Math.max(1.5, total * this.beta), nL = total - bL;
+    this.nL = nL; this.bL = bL;
+    const wi = this.wi, nb = this.nb, bb = this.bb;
+    let p = wi - nL, i0 = Math.floor(p), fr = p - i0;
+    const readN = nb[i0 & M] * (1 - fr) + nb[(i0 + 1) & M] * fr;
+    p = wi - bL; i0 = Math.floor(p); fr = p - i0;
+    const readB = bb[i0 & M] * (1 - fr) + bb[(i0 + 1) & M] * fr;
+    this.y1 = this.g * (1 - this.pole) * readB + this.pole * this.y1;   // 駒での損失
+    const bridgeRefl = -this.y1, nutRefl = -readN;
+    let newVel = 0;
+    if (this.contact > 0) {                                             // 弓の摩擦
+      this.nz += (Math.random() - 0.5 - this.nz) * 0.2;
+      const dv = this.bowVel * (1 + 0.5 * this.nz) - (bridgeRefl + nutRefl);
+      let s = Math.abs((dv + 0.001) * this.slope) + 0.75;
+      s = 1 / (s * s * s * s);
+      if (s > 0.98) s = 0.98; else if (s < 0.01) s = 0.01;
+      newVel = dv * s;
+      // 松脂のざらつき: 滑っている間だけ摩擦力が揺らぐ（ピッチに同期した雑音パルス）＋ 発音時の噛みつき
+      const wn = Math.random() * 2 - 1, slip = 1 - s / 0.98;
+      this.sla += (slip - this.sla) * 0.001;
+      const na = RUB * this.rubK * Math.abs(this.bowVel) * (0.12 + 0.88 * slip * Math.min(1, 0.16 / (this.sla + 1e-3)) + 1.5 * this.scr);
+      this.scr *= this.scrDecay;
+      newVel += na * wn * 0.08;                    // 弦の中へ（滑りのタイミングが揺れる）
+      this.dn = na * (wn - this.wn1); this.wn1 = wn; // 駒へ直接届く高域成分
+    }
+    if (this.pluckI < this.pluckN) {                                    // ピチカート
+      newVel += this.pluckAmp * 0.5 * (1 - Math.cos(2 * Math.PI * this.pluckI / this.pluckN)) * 1.2;
+      this.pluckI++;
+    }
+    nb[wi & M] = bridgeRefl + newVel;
+    bb[wi & M] = nutRefl + newVel;
+    this.wi = wi + 1;
+    return this.y1;
+  }
+  // 進行波から弦の変位形状（ヘルムホルツ運動）を復元する
+  shape(out) {
+    const K = out.length, nL = this.nL, bL = this.bL, half = (nL + bL) / 2, w = this.wi - 1, nb = this.nb, bb = this.bb;
+    let y = 0;
+    for (let k = 0; k < K; k++) {
+      const dn = (k + 0.5) / K * half; let sl;
+      if (dn < nL / 2) { const d = nL / 2 - dn; sl = nb[(w - Math.round(d)) & M] + nb[(w - Math.round(nL - d)) & M]; }
+      else { const d = dn - nL / 2; sl = -(bb[(w - Math.round(d)) & M] + bb[(w - Math.round(bL - d)) & M]); }
+      y += sl * half / K; out[k] = y;
+    }
+    for (let k = 0; k < K; k++) out[k] -= y * (k + 1) / K;
+  }
+}
+
+class Instrument {
+  constructor(sr, cfg) {
+    this.sr = sr; this.cfg = cfg; this.voices = [0, 1, 2, 3].map(() => new Voice(sr));
+    this.last = null; this.dir = 1; this.level = 0; this.lpy = 0; this.lpa = 1 - Math.exp(-2 * Math.PI * cfg.fc / sr);
+    const n = cfg.modes.length; this.n = n;
+    this.b0 = new Float64Array(n); this.a1 = new Float64Array(n); this.a2 = new Float64Array(n);
+    this.z1 = new Float64Array(n); this.z2 = new Float64Array(n); this.mg = new Float64Array(n);
+    cfg.modes.forEach(([f, q, g], k) => {
+      const w = 2 * Math.PI * f / sr, al = Math.sin(w) / (2 * q), a0 = 1 + al;
+      this.b0[k] = al / a0; this.a1[k] = -2 * Math.cos(w) / a0; this.a2[k] = (1 - al) / a0; this.mg[k] = g;
+    });
+    const a = (cfg.pan + 1) * Math.PI / 4; this.gl = Math.cos(a); this.gr = Math.sin(a);
+    this.dcx = 0; this.dcy = 0; this.ny = 0;
+  }
+  noteOn(midi, vel, flags, durS, offAt, pos) {
+    const freq = 440 * Math.pow(2, (midi - 69) / 12), cfg = this.cfg;
+    const l = this.last;
+    if ((flags & 1) && l && l.active && !l.released && !l.pizz) { l.retune(freq, durS, cfg, midi); l.offAt = offAt; return; }
+    if (!(flags & 2)) for (const c of this.voices) if (c.active && !c.pizz && c.midi === midi) {   // 同じ音の連打
+      if (!(flags & 4)) this.dir = -this.dir;
+      c.rebow(freq, vel, this.dir, durS, cfg); c.offAt = offAt; c.born = pos; this.last = c; return;
+    }
+    let v = null;
+    for (const c of this.voices) if (!c.active) { v = c; break; }
+    if (!v) { for (const c of this.voices) if (c.released && (!v || c.born < v.born)) v = c; }
+    if (!v) { for (const c of this.voices) if (!v || c.born < v.born) v = c; }
+    if (!(flags & 4)) this.dir = -this.dir;
+    v.start(freq, vel, this.dir, !!(flags & 2), durS, cfg, midi, pos);
+    v.offAt = offAt; this.last = v;
+  }
+  allOff() { for (const v of this.voices) { if (v.pizz) v.tail = Math.min(v.tail, 2000); else v.release(); } }
+  tick(pos) {
+    let x = 1e-18, nz = 0;
+    const vs = this.voices;
+    for (let i = 0; i < 4; i++) { const v = vs[i]; if (v.active) { if (!v.released && pos >= v.offAt) v.release(); x += v.tick(); nz += v.dn; } }
+    x += nz * 3.5;
+    let y = this.cfg.dry * x;
+    const b0 = this.b0, a1 = this.a1, a2 = this.a2, z1 = this.z1, z2 = this.z2, mg = this.mg;
+    for (let k = 0; k < this.n; k++) {                                  // 胴の共鳴
+      const o = b0[k] * x + z1[k];
+      z1[k] = z2[k] - a1[k] * o; z2[k] = -b0[k] * x - a2[k] * o;
+      y += mg[k] * o;
+    }
+    this.lpy += this.lpa * (y - this.lpy);
+    this.ny += 0.6 * (nz - this.ny);
+    const o = this.lpy - this.dcx + 0.995 * this.dcy; this.dcx = this.lpy; this.dcy = o;
+    const out = (o + this.ny * 1.6) * this.cfg.gain, a = out < 0 ? -out : out;
+    this.level = a > this.level ? a : this.level * 0.9996;
+    return out;
+  }
+}
+
+if (typeof registerProcessor === 'function') {
+  registerProcessor('quartet', class extends AudioWorkletProcessor {
+    constructor() {
+      super();
+      this.inst = CFG.map(c => new Instrument(sampleRate, c));
+      this.ev = []; this.idx = 0; this.pos = 0; this.playing = false; this.endPos = 0; this.cnt = 0; this.ended = false;
+      this.port.onmessage = e => {
+        const d = e.data;
+        if (d.type === 'load') { this.ev = d.events.map(v => ({ t: Math.round(v[0] * sampleRate), off: Math.round(v[1] * sampleRate), i: v[2], m: v[3], v: v[4], f: v[5], d: v[1] - v[0] })); this.endPos = Math.round(d.duration * sampleRate); this.seek(0); }
+        else if (d.type === 'play') { if (this.ended) this.seek(0); this.playing = true; }
+        else if (d.type === 'pause') { this.playing = false; for (const i of this.inst) i.allOff(); }
+        else if (d.type === 'seek') this.seek(Math.round(d.t * sampleRate));
+        else if (d.type === 'rub') RUB = d.v;
+      };
+    }
+    seek(p) {
+      this.pos = Math.max(0, p); this.ended = false; for (const i of this.inst) i.allOff();
+      let k = 0; while (k < this.ev.length && this.ev[k].t < this.pos) k++; this.idx = k;
+    }
+    process(_, outputs) {
+      const L = outputs[0][0], R = outputs[0][1] || L, n = L.length, inst = this.inst, ev = this.ev;
+      for (let s = 0; s < n; s++) {
+        if (this.playing) {
+          while (this.idx < ev.length && ev[this.idx].t <= this.pos) { const e = ev[this.idx++]; inst[e.i].noteOn(e.m, e.v, e.f, e.d, e.off, this.pos); }
+          this.pos++;
+          if (this.pos >= this.endPos) { this.playing = false; this.ended = true; }
+        }
+        let l = 0, r = 0;
+        for (let i = 0; i < 4; i++) { const o = inst[i].tick(this.pos); l += o * inst[i].gl; r += o * inst[i].gr; }
+        L[s] = l; if (R !== L) R[s] = r;
+      }
+      this.cnt += n;
+      if (this.cnt >= 768) {
+        this.cnt = 0;
+        const I = inst.map(it => {
+          const notes = []; let pv = null;
+          for (const v of it.voices) if (v.active && (!v.released || v.pizz)) { notes.push(v.midi); if (!pv || v.born > pv.born) pv = v; }
+          const s = new Float32Array(48); if (pv) pv.shape(s);
+          return { l: it.level, n: notes, d: it.dir, s, z: pv ? pv.pizz : false };
+        });
+        this.port.postMessage({ t: this.pos / sampleRate, playing: this.playing, ended: this.ended, I });
+      }
+      return true;
+    }
+  });
+}
+if (typeof globalThis.__TEST !== 'undefined') globalThis.__TEST = { Voice, Instrument, CFG };
+</script>
+
+<script>
+'use strict';
+/* ======================================================================
+   楽譜 — Quartetto in Sol maggiore (Allegro), オリジナル・モーツァルト風
+   記法: 音名+オクターブ+音価 (w=全 h=2分 q=4分 e=8分 s=16分, "."=付点)
+         r=休符  [..]=重音  -=スラー  p=ピチカート  ~X=トリル(上隣接音X)
+         _=タイ  >=アクセント  *n=反復  (..)*n=グループ反復  !f !p など=強弱
+   各小節 = [Vn I, Vn II, Va, Vc]
+   ====================================================================== */
+const BPM = 128;
+// 弱起（アウフタクト）の小節。以後、各フレーズの弱起は前の小節の末尾に書く
+const P = [['!mf re D5e G5e B5e', 'rh', 'rh', 'rh']];
+const A = [
+  ['!mf D6h B5q G5q', '!p D4e*8', '!p B3e*8', '!p G2q rq G2q rq'],
+  ['A5q. C6e A5q F#5q', 'C4e*8', 'F#3e*8', 'D3q rq D3q rq'],
+  ['B5q. G5e E5q C6q', 'D4e*4 E4e*4', 'B3e*4 G3e*4', 'G2q rq C3q rq'],
+  ['B5q- A5q re D5e G5e B5e', 'G4q F#4q rh', 'D4q D4q rh', 'D3q D2q rh'],
+  ['D6h B5q G5q', 'D4e*8', 'B3e*8', 'G2q rq G2q rq'],
+  ['A5q. C6e F#5q A5q', 'C4e*8', 'F#3e*8', 'D3q rq D3q rq'],
+  ['E6q- C6q B5q A5q~B5', 'E4e*4 D4e*2 C4e*2', 'G3e*6 F#3e*2', 'C3q C3q D3q D3q'],
+  ['!f G5q G4q G4q rq', '!f B3q D4q D4q rq', '!f G3q B3q B3q rq', '!f G2q G2q G2q rq'],
+];
+const T = [
+  ['!f G5e B5s A5s G5e B5s A5s G5e D6e B5e G5e', '!mf B4s*16', '!mf D4s*16', '!f G2q B2q D3q G3q'],
+  ['E5e G5s F#5s E5e G5s F#5s E5e B5e G5e E5e', 'B4s*16', 'G4s*16', 'E2q G2q B2q E3q'],
+  ['C#5e E5s D5s C#5e E5s D5s C#5e A5e G5e E5e', 'A4s*16', 'E4s*16', 'A2q C#3q E3q A3q'],
+  ['D5s E5s F#5s G5s A5s B5s C#6s D6s D6q rq', 'A4s*8 A4q rq', 'F#4s*8 F#4q rq', 'D3e*4 D3q rq'],
+  ['B5q. G5e A5q. F#5e', 'G5q. E5e F#5q. D5e', 'D4e*8', 'G2q rq F#2q rq'],
+  ['G5q F#5e E5e E5h~F#5', 'B4q B4q C#5h', 'E4q E4q G4h', 'G2q G2q A2q A2q'],
+  ['D5q [A4 F#5]q [A4 F#5]q !mp A5q', 'F#4q [D4 A4]q [D4 A4]q rq', 'A3q F#3q F#3q rq', 'D3q D2q D2q rq'],
+];
+const B = [
+  ['!mp F#5q. G5e A5q D6q', '!p A4w', '!p (F#3e A3e D4e A3e)*2', '!mf D3qp rq A2qp rq'],
+  ['C#6q- B5e A5e G5q- E5q', 'G4w', '(E3e A3e C#4e A3e)*2', 'E3qp rq A2qp rq'],
+  ['E5q. F#5e G5q- B5q', 'G4w', '(G3e A3e C#4e A3e)*2', 'A2qp rq C#3qp rq'],
+  ['A5h- F#5q A5q', 'F#4h. rq', '(F#3e A3e D4e A3e)*2', 'D3qp rq A2qp rq'],
+  ['B5q. C#6e D6q B5q', 'G4w', '(G3e B3e D4e B3e)*2', 'G2qp rq B2qp rq'],
+  ['A5q. B5e A5q F#5q', 'F#4w', '(A3e D4e F#4e D4e)*2', 'A2qp rq A2qp rq'],
+  ['G5e F#5e E5e G5e E5h~F#5', 'B4h C#5h', 'G3e B3e E4e B3e G3e A3e E4e A3e', 'G2qp rq A2qp A2qp'],
+  ['D5q rq rh', 'D5q F#4e A4e D5q rq', 'F#3q A3e D4e F#4q rq', 'D3qp rq D2qp rq'],
+];
+const K = [
+  ['!f D6q A5s F#5s A5s F#5s B5q G5s D5s G5s D5s', '!mf A4s*8 B4s*8', '!mf D4s*16', '!f D3q F#3q G3q G2q'],
+  ['A5q F#5s D5s F#5s D5s E5q.~F#5 D5e', 'F#4s*8 G4s*8', 'D4s*8 C#4s*8', 'A2q A2q A2q A2q'],
+  ['D5q [A4 F#5]q re !p A4e D5e F5e', 'F#4q [D4 A4]q rh', 'A3q F#3q rh', 'D3q D2q rh'],
+];
+const D = [
+  ['!p A5h F5q D5q', '!p F4e*8', '!p D4e*8', '!p D3q rq D3q rq'],
+  ['E5q G5q re D5e G5e Bb5e', 'E4e*8', 'C#4e*8', 'A2q rq A2q rq'],
+  ['!mp D6h Bb5q G5q', 'Bb4e*8', 'D4e*8', 'G2q rq G2q rq'],
+  ['A5q. C6e A5q F#5q', 'A4e*8', 'F#4e*8', 'D3q rq D3q rq'],
+  ['!mf Bb5q. G5e Eb5q G5q', '!mp G4e*8', '!mp Eb4e*8', '!mp Eb3q rq Eb3q rq'],
+  ['!f Bb5q G5q Eb5q C#5q', '!mf Bb4e*8', '!mf G4e*8', '!f Eb3q*4'],
+  ['D5h. rq', '!p A4e*8', '!p F#4e*8', '!mp D3q*4'],
+  ['!p C6q. A5e- F#5e !mf D5e G5e B5e', 'A4h rh', 'F#4h rh', '!p D3h rh'],
+];
+const C = [
+  ['!f G5q D5s B4s D5s B4s E5q C5s G4s C5s G4s', '!mf D4s*8 E4s*8', '!mf B3s*8 C4s*8', '!f G2q B2q C3q C3q'],
+  ['D5q B4s G4s B4s G4s A4q.~B4 G4e', 'D4s*8 C4s*8', 'G3s*8 F#3s*8', 'D3q D3q D3q D3q'],
+  ['G4s A4s B4s C5s D5s E5s F#5s G5s A5s B5s C6s D6s E6q', '[D4 B4]q rq [D4 B4]q [E4 C5]q', 'G3q rq G3q G3q', 'G2q rq G2q C3q'],
+  ['D6q B5q A5h~B5', 'B4q G4q F#4h', 'D4q D4q C4h', 'D3q D3q D2h'],
+  ['!ff G5q rq [D4 A4 F#5]q rq', '!ff [G3 D4 B4]q rq [D4 C5]q rq', '!ff [G3 D4]q rq [D4 A4]q rq', '!ff G2q rq D2q rq'],
+  ['[G3 D4 B4 G5]h. rq', '[G3 D4 B4]h. rq', '[G3 D4 B4]h. rq', '[G2 D3]h. rq'],
+];
+const SECTIONS = [
+  { it: 'Esposizione — Primo tema', jp: '提示部・第一主題（弱起）', bars: P.concat(A) },
+  { it: 'Transizione', jp: '推移', bars: T },
+  { it: 'Secondo tema, dolce', jp: '第二主題（弱起・チェロはピチカート）', bars: B },
+  { it: 'Codetta', jp: '小結尾', bars: K },
+  { it: 'Sviluppo', jp: '展開部', bars: D },
+  { it: 'Ripresa', jp: '再現部', bars: A },
+  { it: 'Coda', jp: 'コーダ', bars: C, tempo: [1, 1, 1, .93, .84, .74] },
+];
+const DYN = { pp: .22, p: .34, mp: .48, mf: .62, f: .84, ff: 1 };
+const BAL = [1, .8, .8, .92];
+const LEAD = 0.6;
+
+function midiOf(n) {
+  const m = n.match(/^([A-G])([#b]?)(\d)$/); if (!m) throw new Error('bad note ' + n);
+  return { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0) + 12 * (+m[3] + 1);
+}
+function expand(s) {
+  s = s.replace(/\[[^\]]+\]/g, c => c.replace(/\s+/g, ','));
+  let prev; do { prev = s; s = s.replace(/\(([^()]+)\)\*(\d+)/g, (_, a, n) => Array(+n).fill(a).join(' ')); } while (s !== prev);
+  return s.trim().split(/\s+/).flatMap(t => { const m = t.match(/^(.*)\*(\d+)$/); return m ? Array(+m[2]).fill(m[1]) : [t]; });
+}
+function partBeats(s) {
+  let c = 0;
+  for (const t of expand(s)) { const m = t.match(/^(?:\[[^\]]+\]|[A-G][#b]?\d|r)(w|h|q|e|s)(\.?)/); if (m) c += { w: 4, h: 2, q: 1, e: .5, s: .25 }[m[1]] * (m[2] ? 1.5 : 1); }
+  return c;
+}
+function buildScore() {
+  const spb = 60 / BPM, bars = [], secs = [];
+  let t = LEAD;
+  for (const s of SECTIONS) {
+    secs.push({ it: s.it, jp: s.jp, t, bar: bars.length });
+    s.bars.forEach((b, k) => { const d = spb / (s.tempo ? s.tempo[k] : 1); const len = partBeats(b[0]); bars.push({ parts: b, t, beat: d, len }); t += len * d; });
+  }
+  const end = t, events = [], notes = [[], [], [], []], errs = [];
+  const rnd = (() => { let x = 12345; return () => (x = (x * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff; })();
+  for (let i = 0; i < 4; i++) {
+    let dyn = 'mf', slur = false, tie = null;
+    bars.forEach((bar, bi) => {
+      let c = 0;
+      for (const tok of expand(bar.parts[i])) {
+        if (tok[0] === '!') { dyn = tok.slice(1); continue; }
+        const m = tok.match(/^(\[[^\]]+\]|[A-G][#b]?\d|r)(w|h|q|e|s)(\.?)(?:~([A-G][#b]?\d))?([-'p>_]*)$/);
+        if (!m) { errs.push(`bar ${bi + 1} part ${i}: ${tok}`); continue; }
+        const dur = { w: 4, h: 2, q: 1, e: .5, s: .25 }[m[2]] * (m[3] ? 1.5 : 1);
+        const t0 = bar.t + c * bar.beat, len = dur * bar.beat; c += dur;
+        if (m[1] === 'r') { slur = false; tie = null; continue; }
+        const ms = m[1][0] === '[' ? m[1].slice(1, -1).split(',').map(midiOf).sort((a, b) => a - b) : [midiOf(m[1])];
+        const pizz = m[5].includes('p'), tied = m[5].includes('_'), out = m[5].includes('-') || tied;
+        const beatPos = c - dur, acc = beatPos === 0 ? 1.08 : beatPos === 2 ? 1.03 : 1;
+        const vel = Math.min(1, DYN[dyn] * BAL[i] * acc * (m[5].includes('>') ? 1.22 : 1) * (0.95 + 0.1 * rnd()));
+        if (m[4]) {                                    // トリル
+          const up = midiOf(m[4]), u = bar.beat / 6; let n = Math.floor(len / u + 1e-6); if (n % 2 === 0) n--;
+          for (let k = 0; k < n; k++) {
+            const a = t0 + k * u, b = k === n - 1 ? t0 + len : a + u, last = k === n - 1;
+            events.push([a, last ? b - 0.04 : b + 0.03, i, k % 2 ? up : ms[0], vel, (k > 0 || slur) ? 1 : 0]);
+            notes[i].push({ t: a, end: b, m: k % 2 ? up : ms[0], pizz: false });
+          }
+          slur = false; continue;
+        }
+        const gate = out ? len + 0.03 : pizz ? len : len <= bar.beat * 0.5 + 1e-6 ? len * 0.8 : Math.max(len * 0.8, len - 0.07);
+        if (tie && ms.length === 1 && tie.m === ms[0]) {   // タイ: 前の音を延長
+          tie.ev[1] = t0 + gate; tie.note.end = t0 + gate; if (!tied) tie = null; slur = m[5].includes('-'); continue;
+        }
+        tie = null;
+        const cv2 = ms.length > 2 ? vel * 0.78 : vel;
+        ms.forEach((mi, k) => {
+          const jit = (slur || ms.length > 1) ? 0 : (rnd() - 0.5) * 0.008, a = t0 + jit + (ms.length > 2 ? k * 0.022 : 0);
+          events.push([a, t0 + gate, i, mi, cv2, (slur && ms.length === 1 ? 1 : 0) | (pizz ? 2 : 0) | (k > 0 ? 4 : 0)]);
+          notes[i].push({ t: a, end: t0 + (pizz ? Math.min(len, 0.25) : gate), m: mi, pizz });
+        });
+        if (tied && ms.length === 1) tie = { ev: events[events.length - 1], note: notes[i][notes[i].length - 1], m: ms[0] };
+        slur = out && ms.length === 1;
+      }
+      if (Math.abs(c - bar.len) > 1e-6 || (bar.len !== 4 && bi > 0)) errs.push(`bar ${bi + 1} part ${i}: ${c} beats`);
+    });
+  }
+  events.sort((a, b) => a[0] - b[0]);
+  if (errs.length) console.error('SCORE ERRORS', errs);
+  return { off: bars[0].len < 4 ? 0 : 1, events, notes, bars, secs, end, duration: end + 2.8, errs };
+}
+const SCORE = buildScore();
+if (typeof module !== 'undefined') module.exports = { SCORE };
+</script>
+
+<script>
+'use strict';
+/* ============================ オーディオ ============================ */
+let ac, node, master, wet, started = false;
+let frame = { t: 0, playing: false, ended: false, I: [0, 1, 2, 3].map(() => ({ l: 0, n: [], d: 1, s: new Float32Array(48), z: false })) };
+let frameAt = performance.now();
+
+function makeIR(ctx) {
+  const len = Math.floor(ctx.sampleRate * 2.6), buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch); let lp = 0;
+    for (let i = 0; i < len; i++) {
+      const t = i / ctx.sampleRate, k = 0.55 * Math.exp(-t * 1.6) + 0.06;
+      lp += k * ((Math.random() * 2 - 1) - lp);
+      d[i] = lp * Math.exp(-t / 0.42) * (t < 0.012 ? 0 : 1) * 1.6;
+    }
+    for (const [ms, g] of [[17, .5], [29, -.4], [41, .32], [57, -.25], [73, .2]]) d[Math.floor((ms + ch * 3.7) * ctx.sampleRate / 1000)] += g * 0.5;
+  }
+  return buf;
+}
+async function startAudio() {
+  ac = new AudioContext({ latencyHint: 'playback' });
+  const src = document.getElementById('worklet-src').textContent;
+  const url = URL.createObjectURL(new Blob([src], { type: 'application/javascript' }));
+  await ac.audioWorklet.addModule(url);
+  node = new AudioWorkletNode(ac, 'quartet', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+  master = ac.createGain(); wet = ac.createGain();
+  const conv = ac.createConvolver(); conv.buffer = makeIR(ac);
+  const comp = ac.createDynamicsCompressor(); comp.threshold.value = -9; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.2;
+  node.connect(master); node.connect(conv); conv.connect(wet); wet.connect(master); master.connect(comp); comp.connect(ac.destination);
+  setVol(); setRev(); setRub();
+  node.port.onmessage = e => { frame = e.data; frameAt = performance.now(); };
+  node.port.postMessage({ type: 'load', events: SCORE.events, duration: SCORE.duration });
+  node.port.postMessage({ type: 'play' });
+  started = true;
+}
+const $ = id => document.getElementById(id);
+function setVol() { if (master) master.gain.value = +$('vol').value * 1.3; }
+function setRev() { if (wet) wet.gain.value = +$('rev').value * 0.9; }
+function setRub() { $('rubVal').textContent = (+$('rub').value).toFixed(2); if (node) node.port.postMessage({ type: 'rub', v: +$('rub').value * 2 }); }
+function toggle() {
+  if (!started) return;
+  if (ac.state === 'suspended') ac.resume();
+  node.port.postMessage({ type: frame.playing ? 'pause' : 'play' });
+}
+$('vol').oninput = setVol; $('rev').oninput = setRev; $('rub').oninput = setRub;
+$('bPlay').onclick = toggle;
+$('bRestart').onclick = () => { if (started) { node.port.postMessage({ type: 'seek', t: 0 }); node.port.postMessage({ type: 'play' }); } };
+$('start').onclick = async () => {
+  $('start').textContent = '…';
+  try { await startAudio(); $('overlay').classList.add('off'); $('controls').classList.add('on'); }
+  catch (err) { $('start').textContent = 'エラー: ' + err.message; console.error(err); }
+};
+addEventListener('keydown', e => { if (e.code === 'Space' && started) { e.preventDefault(); toggle(); } });
+
+/* ============================ 描画 ============================ */
+const cv = $('c'), g = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1, bg = null, LAY = [];
+const COL = ['#ffd58a', '#ff9f8f', '#9fe3c9', '#a9b9ff'];
+const RGB = ['255,213,138', '255,159,143', '159,227,201', '169,185,255'];
+const NAMES = ['Violino I', 'Violino II', 'Viola', 'Violoncello'];
+const OPEN = [[55, 62, 69, 76], [55, 62, 69, 76], [48, 55, 62, 69], [36, 43, 50, 57]];
+const KSC = [1, 1, 1.13, 1.46];
+const WOOD = [['#eba64a', '#b4571c', '#4d1a08'], ['#e39a44', '#a94d1b', '#451607'], ['#d98c3c', '#9a4218', '#3d1306'], ['#c9762f', '#86320f', '#300d04']];
+const NN = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'B'];
+const SERIF = getComputedStyle(document.documentElement).getPropertyValue('--serif');
+const lv = [0, 0, 0, 0], bowPos = [0, 0, 0, 0], peak = [1e-6, 1e-6, 1e-6, 1e-6], hist = [[], [], [], []], ptr = [0, 0, 0, 0];
+const embers = [], rings = [], dust = [];
+let lastT = 0, lastNow = performance.now();
+
+const SEG = [[[.20, 0], [.33, .06], [.33, .20]], [[.33, .28], [.28, .33], [.25, .36]], [[.17, .40], [.17, .52], [.26, .57]], [[.33, .61], [.40, .68], [.40, .80]], [[.40, .94], [.22, 1], [0, 1]]];
+function bodyPath() {
+  const p = new Path2D(); p.moveTo(0, 0);
+  for (const [a, b, c] of SEG) p.bezierCurveTo(a[0], a[1], b[0], b[1], c[0], c[1]);
+  for (let i = SEG.length - 1; i >= 0; i--) { const [a, b] = SEG[i], e = i ? SEG[i - 1][2] : [0, 0]; p.bezierCurveTo(-b[0], b[1], -a[0], a[1], -e[0], e[1]); }
+  p.closePath(); return p;
+}
+const BODY = bodyPath();
+
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = Math.max(320, innerWidth); H = Math.max(240, innerHeight);
+  cv.width = W * DPR; cv.height = H * DPR;
+  const floor = H * 0.665, stageH = floor - H * 0.13, u = Math.min(stageH / 2.72, W * 0.165);
+  const xs = [0.15, 0.36, 0.58, 0.83];
+  LAY = xs.map((x, i) => { const s = u * KSC[i], pin = i === 3 ? 0.14 * s : 0; return { cx: W * x, s, by: floor - s - pin, floor, i }; });
+  // 背景をキャッシュ
+  bg = document.createElement('canvas'); bg.width = cv.width; bg.height = cv.height;
+  const b = bg.getContext('2d'); b.scale(DPR, DPR);
+  let gr = b.createRadialGradient(W / 2, H * 0.42, 0, W / 2, H * 0.42, Math.max(W, H) * 0.75);
+  gr.addColorStop(0, '#2a1626'); gr.addColorStop(0.45, '#170c19'); gr.addColorStop(1, '#070409');
+  b.fillStyle = gr; b.fillRect(0, 0, W, H);
+  // 緞帳のひだ
+  for (let k = 0; k < 46; k++) {
+    const x = (k + 0.5) / 46 * W, w = W / 46;
+    gr = b.createLinearGradient(x - w / 2, 0, x + w / 2, 0);
+    gr.addColorStop(0, 'rgba(120,30,40,0)'); gr.addColorStop(0.5, `rgba(150,40,48,${0.05 + 0.03 * Math.sin(k * 1.7)})`); gr.addColorStop(1, 'rgba(120,30,40,0)');
+    b.fillStyle = gr; b.fillRect(x - w / 2, 0, w, floor);
+  }
+  gr = b.createLinearGradient(0, 0, 0, floor); gr.addColorStop(0, 'rgba(7,4,9,.25)'); gr.addColorStop(1, 'rgba(7,4,9,.82)');
+  b.fillStyle = gr; b.fillRect(0, 0, W, floor);
+  // 床
+  gr = b.createLinearGradient(0, floor, 0, H); gr.addColorStop(0, '#24121a'); gr.addColorStop(0.25, '#120a12'); gr.addColorStop(1, '#070409');
+  b.fillStyle = gr; b.fillRect(0, floor, W, H - floor);
+  b.strokeStyle = 'rgba(233,201,138,.22)'; b.lineWidth = 1; b.beginPath(); b.moveTo(0, floor + .5); b.lineTo(W, floor + .5); b.stroke();
+  // 額縁
+  const m = 10; b.strokeStyle = 'rgba(233,201,138,.3)'; b.lineWidth = 1; b.strokeRect(m + .5, m + .5, W - 2 * m - 1, H - 2 * m - 1);
+  b.strokeStyle = 'rgba(233,201,138,.13)'; b.strokeRect(m + 5.5, m + 5.5, W - 2 * m - 11, H - 2 * m - 11);
+  for (const [sx, sy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+    b.save(); b.translate(sx > 0 ? m : W - m, sy > 0 ? m : H - m); b.scale(sx, sy);
+    b.strokeStyle = 'rgba(233,201,138,.5)'; b.lineWidth = 1.2; b.beginPath();
+    b.moveTo(6, 44); b.bezierCurveTo(6, 16, 16, 6, 44, 6); b.moveTo(14, 34); b.bezierCurveTo(30, 34, 34, 30, 34, 14);
+    b.moveTo(14, 34); b.bezierCurveTo(8, 34, 8, 26, 14, 26); b.moveTo(34, 14); b.bezierCurveTo(34, 8, 26, 8, 26, 14); b.stroke();
+    b.fillStyle = 'rgba(233,201,138,.6)'; b.beginPath(); b.arc(20, 20, 2, 0, 7); b.fill(); b.restore();
+  }
+  dust.length = 0;
+  for (let k = 0; k < 90; k++) dust.push({ x: Math.random() * W, y: Math.random() * H, r: 0.4 + Math.random() * 1.6, v: 3 + Math.random() * 9, ph: Math.random() * 7, d: (Math.random() - .5) * 6 });
+}
+addEventListener('resize', resize); resize();
+
+function strPt(k, f) {   // 弦k上の位置 (f=0 ナット, 1 駒)
+  const xn = (k - 1.5) * 0.013, xb = (k - 1.5) * 0.032;
+  return [xn + (xb - xn) * f, -0.62 + 1.22 * f];
+}
+function drawInstrument(L, now) {
+  const { cx, by, s, i } = L, l = lv[i], F = frame.I[i];
+  // 床の光だまり & 後光
+  g.save(); g.globalCompositeOperation = 'lighter';
+  let gr = g.createRadialGradient(cx, L.floor, 0, cx, L.floor, s * 0.9);
+  gr.addColorStop(0, `rgba(${RGB[i]},${0.10 + 0.3 * l})`); gr.addColorStop(1, `rgba(${RGB[i]},0)`);
+  g.save(); g.translate(cx, L.floor); g.scale(1, 0.16); g.translate(-cx, -L.floor); g.fillStyle = gr; g.fillRect(cx - s, L.floor - s, 2 * s, 2 * s); g.restore();
+  gr = g.createRadialGradient(cx, by + s * 0.55, s * 0.1, cx, by + s * 0.55, s * 1.25);
+  gr.addColorStop(0, `rgba(${RGB[i]},${0.05 + 0.34 * l})`); gr.addColorStop(1, `rgba(${RGB[i]},0)`);
+  g.fillStyle = gr; g.fillRect(cx - s * 1.3, by - s * 0.8, s * 2.6, s * 2.7);
+  g.restore();
+
+  g.save(); g.translate(cx, by); g.scale(s, s);
+  const breathe = 1 + 0.004 * l * Math.sin(now * 0.03);
+  g.scale(breathe, breathe);
+  const [w0, w1, w2] = WOOD[i];
+  if (i === 3) { g.strokeStyle = '#b9b3a8'; g.lineWidth = 0.012; g.beginPath(); g.moveTo(0, 1); g.lineTo(0, 1.14); g.stroke(); }
+  // ネック・糸巻・スクロール
+  g.fillStyle = w2; g.fillRect(-0.03, -0.64, 0.06, 0.68);
+  g.strokeStyle = w1; g.lineWidth = 0.018; g.lineCap = 'round';
+  for (const [y, sd] of [[-0.66, -1], [-0.69, 1], [-0.72, -1], [-0.75, 1]]) { g.beginPath(); g.moveTo(0, y); g.lineTo(sd * 0.085, y); g.stroke(); }
+  g.fillStyle = w1; g.beginPath(); g.roundRect(-0.034, -0.78, 0.068, 0.16, 0.02); g.fill();
+  g.beginPath(); g.arc(0, -0.80, 0.045, 0, 7); g.fill();
+  g.strokeStyle = w2; g.lineWidth = 0.008; g.beginPath();
+  for (let a = 0; a < 9; a += 0.3) { const r = 0.004 + a * 0.0042; g.lineTo(Math.cos(a) * r, -0.80 + Math.sin(a) * r); } g.stroke();
+  // 胴
+  gr = g.createRadialGradient(-0.07, 0.42, 0.03, 0, 0.5, 0.72);
+  gr.addColorStop(0, w0); gr.addColorStop(0.55, w1); gr.addColorStop(1, w2);
+  g.shadowColor = `rgba(${RGB[i]},${0.25 + 0.6 * l})`; g.shadowBlur = (8 + 34 * l) * DPR;
+  g.fillStyle = gr; g.fill(BODY); g.shadowBlur = 0;
+  g.strokeStyle = 'rgba(30,8,2,.9)'; g.lineWidth = 0.012; g.stroke(BODY);
+  g.save(); g.translate(0, 0.5); g.scale(0.93, 0.955); g.translate(0, -0.5); g.strokeStyle = 'rgba(20,6,2,.55)'; g.lineWidth = 0.006; g.stroke(BODY); g.restore();
+  // ニスの艶
+  g.save(); g.clip(BODY); gr = g.createLinearGradient(-0.4, 0, 0.3, 1);
+  gr.addColorStop(0.18, 'rgba(255,240,210,0)'); gr.addColorStop(0.3, 'rgba(255,240,210,.20)'); gr.addColorStop(0.42, 'rgba(255,240,210,0)');
+  g.fillStyle = gr; g.fillRect(-0.5, 0, 1, 1); g.restore();
+  // f字孔
+  g.strokeStyle = '#150603'; g.fillStyle = '#150603'; g.lineWidth = 0.016;
+  for (const sd of [-1, 1]) {
+    g.beginPath(); g.moveTo(0.125 * sd, 0.44); g.bezierCurveTo(0.075 * sd, 0.50, 0.195 * sd, 0.58, 0.145 * sd, 0.645); g.stroke();
+    g.beginPath(); g.arc(0.135 * sd, 0.435, 0.013, 0, 7); g.arc(0.135 * sd, 0.65, 0.016, 0, 7); g.fill();
+  }
+  // 指板・テールピース・駒
+  g.fillStyle = '#120c0b'; g.beginPath(); g.moveTo(-0.03, -0.63); g.lineTo(0.03, -0.63); g.lineTo(0.052, 0.36); g.lineTo(-0.052, 0.36); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(-0.055, 0.70); g.lineTo(0.055, 0.70); g.lineTo(0.022, 0.94); g.lineTo(-0.022, 0.94); g.closePath(); g.fill();
+  g.strokeStyle = '#e8cf9c'; g.lineWidth = 0.014; g.beginPath(); g.moveTo(-0.075, 0.60); g.lineTo(0.075, 0.60); g.stroke();
+  // 弦
+  const used = {}, act = [];
+  for (const m of [...F.n].sort((a, b) => b - a)) {
+    let k = 3; while (k > 0 && (OPEN[i][k] > m || used[k])) k--;
+    if (used[k]) continue; used[k] = 1; act.push([k, m]);
+  }
+  g.lineCap = 'butt';
+  for (let k = 0; k < 4; k++) {
+    const a = strPt(k, 0), b = strPt(k, 1);
+    g.strokeStyle = used[k] ? 'rgba(255,250,235,.25)' : 'rgba(235,228,210,.75)'; g.lineWidth = 0.0045 + (3 - k) * 0.0012;
+    g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.lineTo((k - 1.5) * 0.022, 0.71); g.stroke();
+  }
+  for (const [k, m] of act) {            // 振動している弦
+    const f = Math.max(0, Math.min(0.72, 1 - Math.pow(2, (OPEN[i][k] - m) / 12))), a = strPt(k, f), b = strPt(k, 1);
+    const amp = (0.006 + 0.022 * l) * (1 - f * 0.6);
+    g.save(); g.globalCompositeOperation = 'lighter'; g.shadowColor = COL[i]; g.shadowBlur = 10 * DPR;
+    g.fillStyle = `rgba(${RGB[i]},.28)`; g.beginPath(); g.moveTo(a[0], a[1]);
+    for (let q = 0; q <= 16; q++) { const u = q / 16; g.lineTo(a[0] + (b[0] - a[0]) * u + amp * Math.sin(Math.PI * u), a[1] + (b[1] - a[1]) * u); }
+    for (let q = 16; q >= 0; q--) { const u = q / 16; g.lineTo(a[0] + (b[0] - a[0]) * u - amp * Math.sin(Math.PI * u), a[1] + (b[1] - a[1]) * u); }
+    g.fill();
+    g.strokeStyle = '#fff6df'; g.lineWidth = 0.006;
+    for (const ph of [now * 0.045 + k, now * 0.071 + 2 * k]) {
+      const sw = Math.sin(ph); g.beginPath(); g.moveTo(a[0], a[1]);
+      for (let q = 1; q <= 16; q++) { const u = q / 16; g.lineTo(a[0] + (b[0] - a[0]) * u + amp * sw * Math.sin(Math.PI * u), a[1] + (b[1] - a[1]) * u); }
+      g.stroke();
+    }
+    if (f > 0.01) { g.fillStyle = '#fff'; g.beginPath(); g.arc(a[0], a[1], 0.016, 0, 7); g.fill(); }
+    g.restore();
+  }
+  // 弓
+  const arco = !F.z && l > 0.04, on = arco ? 1 : 0;
+  L.bowA = (L.bowA || 0) + (on - (L.bowA || 0)) * 0.12;
+  const ba = L.bowA, BL = 1.12;
+  g.save(); g.translate(0, 0.49 - (1 - ba) * 0.05); g.rotate(-0.13 + (1 - ba) * -0.25); g.translate(bowPos[i] * BL * 0.33 + (1 - ba) * 0.3, 0);
+  g.globalAlpha = 0.35 + 0.65 * ba;
+  g.strokeStyle = '#f4efe2'; g.lineWidth = 0.011; g.beginPath(); g.moveTo(-BL / 2, 0); g.lineTo(BL / 2, 0); g.stroke();
+  g.strokeStyle = '#6a2c12'; g.lineWidth = 0.014; g.lineCap = 'round'; g.beginPath(); g.moveTo(-BL / 2, -0.012); g.quadraticCurveTo(0, -0.012, BL / 2, -0.04); g.stroke();
+  g.fillStyle = '#1a0f0c'; g.fillRect(BL / 2 - 0.09, -0.042, 0.085, 0.042);
+  g.fillStyle = '#6a2c12'; g.beginPath(); g.moveTo(-BL / 2, -0.02); g.lineTo(-BL / 2 - 0.025, 0.004); g.lineTo(-BL / 2 + 0.02, 0.004); g.fill();
+  g.restore();
+  g.restore();
+}
+
+function drawScope(L, now) {
+  const { cx, i } = L, F = frame.I[i], l = lv[i];
+  const y0 = L.floor + H * 0.078, w = Math.min(W * 0.17, 240), hh = H * 0.021;
+  // ラベル
+  g.textAlign = 'center'; g.fillStyle = `rgba(${RGB[i]},${0.7 + 0.3 * l})`;
+  g.font = `italic 600 ${Math.max(13, H * 0.024)}px ${SERIF}`; g.fillText(NAMES[i], cx, L.floor + H * 0.036); const nw = g.measureText(NAMES[i]).width;
+  const nn = F.n.length ? [...F.n].sort((a, b) => a - b).map(m => NN[m % 12] + (Math.floor(m / 12) - 1)).join(' ') + (F.z ? '  pizz.' : '') : '·';
+  g.font = `${Math.max(10, H * 0.0155)}px ${SERIF}`; g.fillStyle = 'rgba(233,201,138,.6)'; g.textAlign = 'left'; g.fillText(nn, cx + nw / 2 + 9, L.floor + H * 0.036);
+  // 弦のスコープ（ウェーブガイド内部状態から復元した弦の形）
+  let mx = 0; for (const v of F.s) mx = Math.max(mx, Math.abs(v));
+  peak[i] = Math.max(mx, peak[i] * 0.97, 1e-6);
+  const h = hist[i]; if (L.lastS !== F.s) { L.lastS = F.s; h.push(F.s); if (h.length > 7) h.shift(); }
+  g.fillStyle = 'rgba(233,201,138,.6)'; g.fillRect(cx - w / 2 - 2, y0 - 5, 2, 10); g.fillRect(cx + w / 2, y0 - 5, 2, 10);
+  g.save(); g.globalCompositeOperation = 'lighter'; g.lineWidth = 1.4; g.lineJoin = 'round';
+  h.forEach((sarr, q) => {
+    g.strokeStyle = `rgba(${RGB[i]},${(q + 1) / h.length * (0.22 + 0.5 * Math.min(1, l * 1.5))})`;
+    g.beginPath(); g.moveTo(cx - w / 2, y0);
+    for (let k = 0; k < sarr.length; k++) g.lineTo(cx - w / 2 + (k + 1) / (sarr.length + 1) * w, y0 - sarr[k] / peak[i] * hh * Math.min(1, 0.25 + l));
+    g.lineTo(cx + w / 2, y0); g.stroke();
+  });
+  g.restore();
+}
+
+function drawRibbon(t) {
+  const y0 = H * 0.815, y1 = H * 0.955, x0 = 30, x1 = W - 30, laneH = (y1 - y0) / 4, pps = Math.max(90, W / 8.5), px = x0 + (x1 - x0) * 0.27;
+  g.save(); g.beginPath(); g.rect(x0, y0 - 6, x1 - x0, y1 - y0 + 12); g.clip();
+  for (let i = 0; i < 4; i++) {
+    g.fillStyle = i % 2 ? 'rgba(233,201,138,.022)' : 'rgba(233,201,138,.045)'; g.fillRect(x0, y0 + i * laneH, x1 - x0, laneH);
+  }
+  // 小節線
+  g.font = `italic ${Math.max(10, H * 0.014)}px ${SERIF}`; g.textAlign = 'left';
+  SCORE.bars.forEach((b, k) => {
+    const x = px + (b.t - t) * pps; if (x < x0 - 40 || x > x1 + 5) return;
+    g.fillStyle = 'rgba(233,201,138,.2)'; g.fillRect(x, y0, 1, y1 - y0);
+    g.fillStyle = 'rgba(233,201,138,.42)'; if (k + SCORE.off > 0) g.fillText(k + SCORE.off, x + 4, y0 - 0);
+  });
+  for (let i = 0; i < 4; i++) {
+    const ns = SCORE.notes[i], R = RANGE[i], ly = y0 + i * laneH, nh = Math.max(3, laneH / (R[1] - R[0] + 3));
+    for (const n of ns) {
+      const xa = px + (n.t - t) * pps; if (xa > x1) break;
+      const xb = px + (n.end - t) * pps; if (xb < x0) continue;
+      const y = ly + laneH - 3 - (n.m - R[0] + 1) / (R[1] - R[0] + 2) * (laneH - 6);
+      const on = t >= n.t && t < n.end + 0.02, past = t >= n.end;
+      g.fillStyle = on ? '#fffaf0' : `rgba(${RGB[i]},${past ? 0.25 : 0.85})`;
+      if (on) { g.shadowColor = COL[i]; g.shadowBlur = 14 * DPR; }
+      g.beginPath();
+      if (n.pizz) g.arc(xa + nh, y, nh * 0.9, 0, 7); else g.roundRect(xa, y - nh / 2, Math.max(2, xb - xa - 1), nh, nh / 2);
+      g.fill(); g.shadowBlur = 0;
+    }
+  }
+  // 再生位置
+  const gr = g.createLinearGradient(px - 60, 0, px, 0); gr.addColorStop(0, 'rgba(255,240,200,0)'); gr.addColorStop(1, 'rgba(255,240,200,.13)');
+  g.fillStyle = gr; g.fillRect(px - 60, y0, 60, y1 - y0);
+  g.fillStyle = '#fff3d6'; g.shadowColor = '#ffcf7a'; g.shadowBlur = 12 * DPR; g.fillRect(px - 0.75, y0 - 6, 1.5, y1 - y0 + 12); g.shadowBlur = 0;
+  g.restore();
+  // 左右フェード
+  for (const [xa, xb] of [[x0, x0 + 50], [x1, x1 - 70]]) {
+    const f = g.createLinearGradient(xa, 0, xb, 0); f.addColorStop(0, 'rgba(8,5,10,1)'); f.addColorStop(1, 'rgba(8,5,10,0)');
+    g.fillStyle = f; g.fillRect(Math.min(xa, xb), y0 - 8, Math.abs(xb - xa), y1 - y0 + 16);
+  }
+  // 進行バー
+  const pr = Math.max(0, Math.min(1, (t - LEAD) / (SCORE.end - LEAD)));
+  g.fillStyle = 'rgba(233,201,138,.18)'; g.fillRect(x0, H - 22, x1 - x0, 1);
+  g.fillStyle = '#e9c98a'; g.fillRect(x0, H - 22.5, (x1 - x0) * pr, 2);
+  g.beginPath(); g.arc(x0 + (x1 - x0) * pr, H - 21.5, 3, 0, 7); g.fill();
+  for (const s of SCORE.secs) { const x = x0 + (x1 - x0) * (s.t - LEAD) / (SCORE.end - LEAD); g.fillStyle = 'rgba(233,201,138,.5)'; g.fillRect(x, H - 26, 1, 9); }
+}
+const RANGE = SCORE.notes.map(ns => [Math.min(...ns.map(n => n.m)), Math.max(...ns.map(n => n.m))]);
+cv.addEventListener('click', e => {
+  if (!started || e.clientY < H - 40) return;
+  const f = Math.max(0, Math.min(1, (e.clientX - 30) / (W - 60)));
+  node.port.postMessage({ type: 'seek', t: Math.max(0, LEAD + f * (SCORE.end - LEAD) - 0.05) });
+  if (!frame.playing) node.port.postMessage({ type: 'play' });
+});
+
+function draw() {
+  requestAnimationFrame(draw);
+  const now = performance.now(), dt = Math.min(0.05, (now - lastNow) / 1000); lastNow = now;
+  const t = frame.playing ? frame.t + Math.min(0.1, (now - frameAt) / 1000) : frame.t;
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  g.drawImage(bg, 0, 0, W, H);
+
+  // 発音検出 → 火の粉と波紋
+  const jump = t < lastT - 0.05 || t > lastT + 0.5;
+  for (let i = 0; i < 4; i++) {
+    const ns = SCORE.notes[i];
+    if (jump) { let k = 0; while (k < ns.length && ns[k].t < t) k++; ptr[i] = k; }
+    while (ptr[i] < ns.length && ns[ptr[i]].t <= t) {
+      const n = ns[ptr[i]++], L = LAY[i], long = n.end - n.t;
+      if (long > 0.2 || n.pizz) rings.push({ x: L.cx, y: L.by + L.s * 0.55, r: L.s * 0.3, a: n.pizz ? 0.55 : 0.32, i, v: L.s * (n.pizz ? 1.5 : 0.9) });
+      const cnt = n.pizz ? 9 : long > 0.2 ? 5 : 2;
+      for (let q = 0; q < cnt; q++) embers.push({ x: L.cx + (Math.random() - .5) * L.s * 0.3, y: L.by + L.s * (0.45 + Math.random() * 0.2), vx: (Math.random() - .5) * 60, vy: -30 - Math.random() * 90, life: 0, max: 1.2 + Math.random() * 1.8, i, r: 0.8 + Math.random() * 1.8 });
+    }
+    const target = Math.min(1, frame.I[i].l * 6.5);
+    lv[i] += (target - lv[i]) * (target > lv[i] ? 0.35 : 0.1);
+    if (!frame.I[i].z) bowPos[i] = Math.max(-1, Math.min(1, bowPos[i] + frame.I[i].d * dt * (0.5 + 2.2 * lv[i]) * (lv[i] > 0.04 ? 1 : 0)));
+  }
+  lastT = t;
+
+  // スポットライト
+  g.save(); g.globalCompositeOperation = 'lighter';
+  for (const L of LAY) {
+    const a = 0.05 + 0.2 * lv[L.i], gr = g.createLinearGradient(0, 0, 0, L.floor);
+    gr.addColorStop(0, `rgba(${RGB[L.i]},${a})`); gr.addColorStop(1, `rgba(${RGB[L.i]},${a * 0.15})`);
+    g.fillStyle = gr; g.beginPath(); g.moveTo(L.cx - W * 0.012, 0); g.lineTo(L.cx + W * 0.012, 0); g.lineTo(L.cx + L.s * 0.72, L.floor); g.lineTo(L.cx - L.s * 0.72, L.floor); g.fill();
+  }
+  // 塵
+  const tot = (lv[0] + lv[1] + lv[2] + lv[3]) / 4;
+  for (const d of dust) {
+    d.y -= d.v * dt * (1 + 2 * tot); d.x += d.d * dt + Math.sin(now * 0.0006 + d.ph) * 0.12;
+    if (d.y < -5) { d.y = H + 5; d.x = Math.random() * W; }
+    g.fillStyle = `rgba(255,225,170,${0.10 + 0.14 * Math.sin(now * 0.0016 + d.ph) ** 2 + 0.15 * tot})`;
+    g.beginPath(); g.arc(d.x, d.y, d.r, 0, 7); g.fill();
+  }
+  g.restore();
+
+  for (const L of LAY) drawInstrument(L, now);
+
+  g.save(); g.globalCompositeOperation = 'lighter';
+  for (let k = rings.length - 1; k >= 0; k--) {
+    const r = rings[k]; r.r += r.v * dt; r.a -= dt * 0.45; if (r.a <= 0) { rings.splice(k, 1); continue; }
+    g.strokeStyle = `rgba(${RGB[r.i]},${r.a})`; g.lineWidth = 1.2; g.beginPath(); g.ellipse(r.x, r.y, r.r * 0.75, r.r, 0, 0, 7); g.stroke();
+  }
+  for (let k = embers.length - 1; k >= 0; k--) {
+    const e = embers[k]; e.life += dt; if (e.life > e.max) { embers.splice(k, 1); continue; }
+    e.vy -= 14 * dt; e.vx += Math.sin(now * 0.002 + e.x) * 20 * dt; e.x += e.vx * dt; e.y += e.vy * dt;
+    const a = Math.sin(Math.PI * e.life / e.max);
+    g.fillStyle = `rgba(${RGB[e.i]},${a * 0.85})`; g.beginPath(); g.arc(e.x, e.y, e.r * (0.6 + a), 0, 7); g.fill();
+  }
+  if (embers.length > 900) embers.splice(0, embers.length - 900);
+  g.restore();
+
+  for (const L of LAY) drawScope(L, now);
+  drawRibbon(t);
+
+  // 見出し
+  g.textAlign = 'left'; g.fillStyle = '#f1dcae';
+  g.font = `italic ${Math.max(20, H * 0.042)}px ${SERIF}`; g.fillText('Quartetto in Sol maggiore', 38, (W < 960 ? 76 : 30) + H * 0.035);
+  g.font = `${Math.max(10, H * 0.015)}px ${SERIF}`; g.fillStyle = 'rgba(233,201,138,.6)';
+  g.fillText('ALLEGRO  ·  ALLA MANIERA DI MOZART  ·  VERSIONE II — IN LEVARE', 40, (W < 960 ? 76 : 30) + H * 0.035 + Math.max(16, H * 0.026), W - 80);
+  let sec = SCORE.secs[0]; for (const s of SCORE.secs) if (t >= s.t - 0.05) sec = s;
+  let bar = 0; SCORE.bars.forEach((b, k) => { if (t >= b.t) bar = k + SCORE.off; });
+  const yy = H * 0.797;
+  g.font = `italic 600 ${Math.max(14, H * 0.025)}px ${SERIF}`; g.fillStyle = '#f1dcae'; g.fillText(sec.it, 38, yy);
+  const wIt = g.measureText(sec.it).width;
+  g.font = `${Math.max(10, H * 0.015)}px ${SERIF}`; g.fillStyle = 'rgba(233,201,138,.6)'; if (38 + wIt + 14 + g.measureText(sec.jp).width < W - 250) g.fillText(sec.jp, 38 + wIt + 14, yy);
+  g.textAlign = 'right'; g.font = `italic ${Math.max(11, H * 0.017)}px ${SERIF}`;
+  const tt = Math.max(0, t - LEAD), f2 = v => String(Math.floor(v)).padStart(2, '0');
+  g.fillText(`battuta ${bar} / ${SCORE.bars.length - 1 + SCORE.off}   ·   ${Math.floor(tt / 60)}:${f2(tt % 60)}`, W - 38, yy);
+
+  $('bPlay').textContent = frame.playing ? '❚❚' : '▶';
+}
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="Waveguide Blues">
+<meta property="og:description" content="Fable 5.2での物理モデリングと作曲">
+<meta property="og:image" content="https://kishida.github.io/webdemos/instruments/jazz-fable/ogp.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/instruments/jazz-fable/index.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<title>Waveguide Blues</title>
+<style>
+  :root { --bg:#0d0b0a; --panel:#17130f; --line:#2c241c; --ink:#efe6d8; --dim:#8f8272; --sax:#f2b24a; --pno:#e9e2d2; --bass:#c9784a; --serif: Georgia, "Yu Mincho", "Hiragino Mincho ProN", serif; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background: radial-gradient(1200px 700px at 50% -10%, #2a1d12 0%, var(--bg) 60%); color:var(--ink); font-family: system-ui, "Yu Gothic UI", "Hiragino Sans", sans-serif; min-height:100%; }
+  main { max-width: 980px; margin: 0 auto; padding: 28px 16px 40px; }
+  h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(30px, 6vw, 52px); letter-spacing: .02em; margin: 0; }
+  .sub { color: var(--dim); margin: 6px 0 22px; font-size: 14px; }
+  .bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:18px; }
+  button { font: inherit; color: #1a120a; background: var(--sax); border:0; border-radius: 999px; padding: 10px 22px; font-weight: 600; cursor: pointer; }
+  button:hover { filter: brightness(1.08); }
+  .time { font-variant-numeric: tabular-nums; color: var(--dim); min-width: 92px; }
+  label { color: var(--dim); font-size: 13px; display:flex; gap:8px; align-items:center; }
+  input[type=range] { accent-color: var(--sax); width: 110px; }
+  .leads { display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; align-items:center; }
+  .leads span { color: var(--dim); font-size: 13px; margin-right: 4px; }
+  .leads button { background: var(--panel); color: var(--dim); border:1px solid var(--line); font-weight: 500; padding: 7px 16px; }
+  .leads button.on { background: var(--sax); color:#1a120a; border-color: var(--sax); }
+  .now { margin-left:auto; font-family: var(--serif); font-size: 20px; }
+  .players { display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
+  .pl { background: var(--panel); border:1px solid var(--line); border-radius: 14px; padding: 14px; position:relative; overflow:hidden; transition: border-color .3s; }
+  .pl.solo { border-color: currentColor; }
+  .pl h2 { margin:0; font-family: var(--serif); font-weight: 400; font-size: 20px; }
+  .pl small { color: var(--dim); display:block; margin-top:2px; font-size:12px; line-height:1.5; }
+  .pl canvas { width:100%; height:70px; display:block; margin-top:10px; }
+  .pl .tag { position:absolute; top:12px; right:12px; font-size:11px; letter-spacing:.12em; opacity:0; transition: opacity .3s; }
+  .pl.solo .tag { opacity:1; }
+  .mute { position:absolute; bottom:10px; right:12px; font-size:11px; color:var(--dim); background:none; border:1px solid var(--line); padding:3px 10px; font-weight:400; }
+  .mute.on { color:#1a120a; background:var(--dim); }
+  .form { display:flex; gap:3px; height: 38px; margin-bottom: 12px; cursor:pointer; }
+  .form div { background: var(--panel); border:1px solid var(--line); border-radius:6px; font-size:11px; color:var(--dim); display:flex; align-items:center; justify-content:center; overflow:hidden; white-space:nowrap; position:relative; min-width:0; }
+  .form div.on { color: var(--ink); border-color: var(--sax); }
+  .form div i { position:absolute; left:0; top:0; bottom:0; background: rgba(242,178,74,.16); pointer-events:none; }
+  .chart { display:grid; grid-template-columns: repeat(4, 1fr); gap:4px; }
+  .chart div { background: var(--panel); border:1px solid var(--line); border-radius:8px; padding: 12px 10px; font-family: var(--serif); font-size: 18px; display:flex; justify-content:space-around; min-height: 48px; }
+  .chart div.on { background:#3a2a14; border-color: var(--sax); }
+  .note { color: var(--dim); font-size: 13px; line-height: 1.8; margin-top: 22px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .note b { color: var(--ink); font-weight: 600; }
+  @media (max-width: 640px) { .players { grid-template-columns: 1fr; } .now { margin-left:0; width:100%; } .chart div { font-size:15px; padding:10px 4px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Waveguide Blues</h1>
+  <div class="sub">リード・ピアノ・ウッドベース — すべて物理モデルがリアルタイムに鳴らすジャズトリオ（F のブルース, ♩=132）</div>
+  <div class="bar">
+    <button id="play">▶ 演奏を始める</button>
+    <span class="time" id="time">0:00 / 0:00</span>
+    <label>音量 <input type="range" id="vol" min="0" max="1.5" step="0.01" value="1"></label>
+    <span class="now" id="now">—</span>
+  </div>
+  <div class="leads" id="leads"><span>リード楽器</span></div>
+  <div class="players">
+    <div class="pl" id="p0" style="color:var(--sax)"><span class="tag">SOLO</span><h2 id="leadName">Tenor Sax</h2><small id="leadDesc">リード弁 + 円錐管の導波路</small><canvas></canvas><button class="mute" data-i="0">mute</button></div>
+    <div class="pl" id="p1" style="color:var(--pno)"><span class="tag">SOLO</span><h2>Piano</h2><small>ハンマー + 弦 + 響板（piano-fable）</small><canvas></canvas><button class="mute" data-i="1">mute</button></div>
+    <div class="pl" id="p2" style="color:var(--bass)"><span class="tag">SOLO</span><h2>Bass</h2><small>撥弦の導波路 + 胴の共鳴（mozart-fable 由来）</small><canvas></canvas><button class="mute" data-i="2">mute</button></div>
+  </div>
+  <div class="form" id="form"></div>
+  <div class="chart" id="chart"></div>
+  <div class="note">
+    <b>リード楽器</b>は演奏中でも差し替えられる。テーマは共通で、ソロと奏法は楽器ごとに別の譜面（サックスは中音域のビバップ、トランペットは同音連打と倍音のアルペジオからハイ C へ、フルートは 1 オクターブ上のレガートと走句）。<br>
+    <b>サックス</b>: 息の圧力と歌口内圧の差で開閉するリード（ベルヌーイ流 + リードの共振 + 叩き）を、円錐管を表す長短 2 本の導波路に接合。
+    <b>トランペット</b>: trumpet-fable の音源（質量-バネの唇 + 管 + ベル。運指と倍音で音高を選ぶ）。
+    <b>フルート</b>: 両端が開いた管（全部の倍音が共鳴する）を、歌口のエッジに当たる息のジェットで鳴らす。ジェットの揺れは半周期遅れて管へ吹き込まれ、エッジからのずれが偶数倍音を作る。<br>
+    <b>ピアノ</b>: piano-fable のエンジンをそのまま使用。<b>ベース</b>: mozart-fable の弦モデルをコントラバスのピチカートに置き換えたもの。<br>
+    サンプル音源は使っていません。上の進行表かフォームをクリックするとその位置から再生します。
+  </div>
+</main>
+
+<script src="engine/piano.js?v=18"></script>
+<script src="engine/sax.js?v=18"></script>
+<script src="engine/brass.js?v=18"></script>
+<script src="engine/flute.js?v=18"></script>
+<script src="engine/trumpet-cal.js?v=18"></script>
+<script src="engine/lead.js?v=18"></script>
+<script src="engine/bass.js?v=18"></script>
+<script src="engine/trio.js?v=18"></script>
+<script src="score.js?v=18"></script>
+<script>
+'use strict';
+const SONGS = {}; const songOf = k => SONGS[k] || (SONGS[k] = buildSong(k));
+let SONG = songOf('sax');
+const $ = id => document.getElementById(id);
+const fmt = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+const LEADS = leadsFactory(null, null, null, null).INFO;
+let lead = 'sax'; try { const v = localStorage.getItem('trio-lead'); if (LEADS[v]) lead = v; } catch (e) {}
+let ctx, node, gain, state = { t: 0, playing: false, ended: false, lv: [0, 0, 0] }, stateAt = 0, started = false;
+
+async function start() {
+  ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000, latencyHint: 'playback' });
+  const src = `const Trio=(${trioFactory.toString()})();const Piano=(${pianoEngineFactory.toString()})();const Bass=(${bassEngineFactory.toString()})();
+    const Leads=(${leadsFactory.toString()})((${saxEngineFactory.toString()})(),(${BrassEngineFactory.toString()})(),(${fluteEngineFactory.toString()})(),(${trumpetCal.toString()})());
+    class P extends AudioWorkletProcessor{
+      constructor(o){super();this.t=new Trio(Piano,Leads,Bass,sampleRate,o.processorOptions.lead);this.c=0;
+        this.port.onmessage=e=>{const d=e.data,t=this.t;if(d.type==='load')t.load(d.events,d.duration);else if(d.type==='play')t.play();else if(d.type==='pause')t.pause();else if(d.type==='seek')t.seek(d.t);else if(d.type==='mute')t.mute[d.i]=d.v;else if(d.type==='lead')t.setLead(d.name,d.events);};}
+      process(_,o){const L=o[0][0],R=o[0][1]||L;this.t.process(L,R,L.length);this.c+=L.length;
+        if(this.c>=1024){this.c=0;const t=this.t;this.port.postMessage({t:t.pos/sampleRate,playing:t.playing,ended:t.ended,lv:t.levels()});}return true;}
+    }
+    registerProcessor('fable-trio',P);`;
+  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([src], { type: 'application/javascript' })));
+  node = new AudioWorkletNode(ctx, 'fable-trio', { numberOfInputs: 0, outputChannelCount: [2], processorOptions: { lead } });
+  gain = ctx.createGain(); gain.gain.value = +$('vol').value; node.connect(gain).connect(ctx.destination);
+  node.port.onmessage = e => { state = e.data; stateAt = performance.now(); };
+  SONG = songOf(lead); node.port.postMessage({ type: 'load', events: SONG.events, duration: SONG.duration });
+  started = true;
+}
+async function toggle() {
+  if (!started) await start();
+  if (ctx.state !== 'running') await ctx.resume();
+  node.port.postMessage({ type: state.playing ? 'pause' : 'play' });
+}
+async function seekTo(t) {
+  if (!started) await start();
+  if (ctx.state !== 'running') await ctx.resume();
+  node.port.postMessage({ type: 'seek', t }); node.port.postMessage({ type: 'play' });
+}
+$('play').onclick = toggle;
+// ---- リード楽器の切り替え ----
+const leadsEl = $('leads');
+for (const k in LEADS) { const b = document.createElement('button'); b.textContent = LEADS[k].label; b.dataset.k = k; b.onclick = () => setLead(k); leadsEl.appendChild(b); }
+function setLead(k) {
+  lead = k; SONG = songOf(k); try { localStorage.setItem('trio-lead', k); } catch (e) {}
+  [...leadsEl.querySelectorAll('button')].forEach(b => b.classList.toggle('on', b.dataset.k === k));
+  $('leadName').textContent = LEADS[k].label; $('leadDesc').textContent = LEADS[k].desc;
+  [...formEl.children].forEach((d, i) => { d.title = SONG.sections[i].label; d.lastChild.textContent = SONG.sections[i].label.replace('Tenor ', ''); });
+  if (node) node.port.postMessage({ type: 'lead', name: k, events: SONG.events });
+}
+const labelOf = s => s.label;
+$('vol').oninput = () => { if (gain) gain.gain.value = +$('vol').value; };
+document.querySelectorAll('.mute').forEach(b => b.onclick = () => { const on = b.classList.toggle('on'); if (node) node.port.postMessage({ type: 'mute', i: +b.dataset.i, v: on }); });
+
+// ---- フォームと進行表 ----
+const formEl = $('form'), chartEl = $('chart');
+const total = SONG.bars[SONG.bars.length - 1].t + SONG.bars[SONG.bars.length - 1].dur;
+SONG.sections.forEach((s, i) => {
+  const d = document.createElement('div'); d.style.flex = s.nbars; d.title = s.label;
+  d.innerHTML = `<i></i><span>${s.label.replace('Tenor ', '')}</span>`; d.onclick = () => seekTo(s.t); formEl.appendChild(d);
+});
+let shownSec = -1;
+function showChart(si) {
+  if (si === shownSec) return; shownSec = si; chartEl.innerHTML = '';
+  const s = SONG.sections[si];
+  for (let k = 0; k < s.nbars; k++) {
+    const b = SONG.bars[s.bar + k], d = document.createElement('div');
+    d.innerHTML = b.chords.map(c => `<span>${c.replace('b', '♭').replace('dim7', '°7')}</span>`).join(''); d.onclick = () => seekTo(b.t); chartEl.appendChild(d);
+  }
+}
+showChart(0);
+setLead(lead);
+
+// ---- 表示 ----
+const cvs = [0, 1, 2].map(i => $('p' + i).querySelector('canvas')), hist = [[], [], []], sm = [0, 0, 0];
+const COL = ['#f2b24a', '#e9e2d2', '#c9784a'], NAME = { sax: 0, piano: 1, bass: 2 };
+function draw() {
+  requestAnimationFrame(draw);
+  const t = state.playing ? state.t + (performance.now() - stateAt) / 1000 : state.t;
+  $('time').textContent = `${fmt(Math.min(t, SONG.duration))} / ${fmt(SONG.duration)}`;
+  $('play').textContent = state.playing ? '❚❚ 一時停止' : (started && !state.ended && state.t > 0 ? '▶ 再開' : '▶ 演奏を始める');
+  let bi = 0; while (bi + 1 < SONG.bars.length && SONG.bars[bi + 1].t <= t) bi++;
+  const b = SONG.bars[bi], s = SONG.sections[b.sec];
+  $('now').textContent = started ? `${labelOf(s)} — ${Math.min(b.k + 1, s.nbars)} / ${s.nbars}` : '—';
+  showChart(b.sec);
+  [...chartEl.children].forEach((d, k) => d.classList.toggle('on', started && k === b.k));
+  [...formEl.children].forEach((d, k) => { d.classList.toggle('on', k === b.sec); const e = SONG.sections[k], te = k + 1 < SONG.sections.length ? SONG.sections[k + 1].t : total; d.firstChild.style.width = (100 * Math.max(0, Math.min(1, (t - e.t) / (te - e.t)))) + '%'; });
+  for (let i = 0; i < 3; i++) {
+    $('p' + i).classList.toggle('solo', state.playing && NAME[s.solo] === i);
+    const lv = Math.min(1, Math.sqrt(state.lv[i] * [3.2, 5, 3.2][i])); sm[i] += (lv - sm[i]) * 0.35;
+    const h = hist[i]; h.push(sm[i]); if (h.length > 140) h.shift();
+    const c = cvs[i], dpr = window.devicePixelRatio || 1, W = c.clientWidth * dpr, H = c.clientHeight * dpr;
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+    const g = c.getContext('2d'); g.clearRect(0, 0, W, H); g.fillStyle = COL[i];
+    const bw = W / 140;
+    h.forEach((v, k) => { const hh = Math.max(1 * dpr, v * H * 0.95); g.globalAlpha = 0.25 + 0.75 * (k / h.length); g.fillRect((k + 140 - h.length) * bw, (H - hh) / 2, Math.max(1, bw - dpr), hh); });
+    g.globalAlpha = 1;
+  }
+}
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="Fable Piano — 物理モデリング・ピアノ">
+<meta property="og:description" content="Fable 5.2での物理モデリングと作曲">
+<meta property="og:image" content="https://kishida.github.io/webdemos/instruments/piano-fable/ogp.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/instruments/piano-fable/index.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<title>Fable Piano — 物理モデリング・ピアノ</title>
+<style>
+  :root {
+    --bg: #0a0b10; --panel: #12141c; --line: #232632; --ink: #ece6d8; --dim: #8d8a82;
+    --gold: #e9b96a; --gold2: #f6dca6; --blue: #6fb2e8; --serif: "Cormorant Garamond", "Hoefler Text", "Yu Mincho", "Hiragino Mincho ProN", Georgia, serif;
+    --sans: system-ui, "Yu Gothic UI", "Hiragino Sans", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 13px; overflow: hidden;
+         display: grid; grid-template-rows: auto 1fr auto; }
+  header { display: flex; align-items: flex-end; gap: 28px; padding: 16px 24px 12px; border-bottom: 1px solid var(--line);
+           background: linear-gradient(180deg, #14161f, #0d0f15); flex-wrap: wrap; }
+  .title h1 { font-family: var(--serif); font-weight: 500; font-size: 30px; margin: 0; letter-spacing: .04em; line-height: 1.1; }
+  .title h1 em { font-style: normal; color: var(--gold); }
+  .title p { margin: 4px 0 0; color: var(--dim); font-family: var(--serif); font-style: italic; font-size: 15px; letter-spacing: .03em; }
+  .mvs { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  .mv { background: none; border: 1px solid var(--line); color: var(--dim); padding: 7px 14px; border-radius: 3px; cursor: pointer;
+        font-family: var(--serif); font-size: 15px; text-align: left; transition: .2s; }
+  .mv small { display: block; font-family: var(--sans); font-size: 10.5px; opacity: .75; margin-top: 2px; }
+  .mv:hover { color: var(--ink); border-color: #3a3e4d; }
+  .mv.on { color: var(--gold2); border-color: var(--gold); background: rgba(233,185,106,.07); }
+
+  main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
+  #stage { position: relative; min-width: 0; min-height: 0; }
+  #roll { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #now { position: absolute; left: 22px; top: 16px; pointer-events: none; }
+  #now .sec { font-family: var(--serif); font-size: 22px; color: var(--gold2); text-shadow: 0 2px 12px #000; }
+  #now .bar { color: var(--dim); font-size: 11.5px; margin-top: 3px; letter-spacing: .08em; font-variant-numeric: tabular-nums; }
+  #ped { position: absolute; right: 18px; top: 16px; font-family: var(--serif); font-style: italic; font-size: 17px; color: #3b3e4a; transition: .12s; pointer-events: none; }
+  #ped.on { color: var(--gold); text-shadow: 0 0 14px rgba(233,185,106,.7); }
+
+  aside { border-left: 1px solid var(--line); background: var(--panel); padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+  aside h2 { font-family: var(--serif); font-weight: 500; font-size: 16px; margin: 0 0 6px; color: var(--gold2); letter-spacing: .05em; display: flex; justify-content: space-between; align-items: baseline; }
+  aside h2 span { font-family: var(--sans); font-size: 10.5px; color: var(--dim); letter-spacing: 0; }
+  aside canvas { width: 100%; height: 108px; display: block; background: #0c0d13; border: 1px solid var(--line); border-radius: 3px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 6px; }
+  .stats div { text-align: center; }
+  .stats b { display: block; font-weight: 500; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .stats i { font-style: normal; font-size: 10px; color: var(--dim); }
+  .ctl { display: grid; grid-template-columns: 96px 1fr 38px; align-items: center; gap: 8px; margin: 7px 0; }
+  .ctl label { color: #bdb8ab; }
+  .ctl output { text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; font-size: 11.5px; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 3px; background: #2b2e3b; border-radius: 2px; outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%; background: var(--gold); cursor: pointer; border: 2px solid #12141c; box-shadow: 0 0 0 1px var(--gold); }
+  input[type=range]::-moz-range-thumb { width: 11px; height: 11px; border-radius: 50%; background: var(--gold); cursor: pointer; border: 2px solid #12141c; }
+  .note { color: var(--dim); font-size: 11.5px; line-height: 1.7; }
+  .note kbd { font-family: var(--sans); background: #1c1f2a; border: 1px solid #2c3040; border-radius: 3px; padding: 0 5px; color: #cfc9ba; font-size: 10.5px; }
+  #midiBtn { background: none; border: 1px solid var(--line); color: var(--dim); border-radius: 3px; padding: 6px 12px; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  #midiBtn:hover { color: var(--gold2); border-color: var(--gold); }
+  body.drop::after { content: 'MIDI ファイルをドロップ'; position: fixed; inset: 12px; border: 2px dashed var(--gold); border-radius: 8px; display: grid; place-items: center;
+    font-family: var(--serif); font-size: 26px; color: var(--gold2); background: rgba(8,9,13,.75); z-index: 50; pointer-events: none; }
+  .btns { display: flex; gap: 6px; flex-wrap: wrap; margin: 9px 0 7px; }
+  .btns button { background: #1a1d28; border: 1px solid #2c3040; color: #cfc9ba; border-radius: 3px; padding: 5px 9px; font: inherit; font-size: 11.5px; cursor: pointer; }
+  .btns button:hover { border-color: #4a4f63; }
+  .btns button.on { border-color: var(--gold); color: var(--gold2); background: rgba(233,185,106,.1); }
+  .model { font-size: 11.5px; line-height: 1.75; color: #a9a59a; }
+  .model b { color: var(--ink); font-weight: 500; }
+
+  footer { display: grid; grid-template-columns: auto auto 1fr auto auto; align-items: center; gap: 16px; padding: 10px 24px 12px; border-top: 1px solid var(--line); background: #0d0f15; }
+  #play { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--gold); background: rgba(233,185,106,.08); color: var(--gold2); cursor: pointer; display: grid; place-items: center; transition: .15s; }
+  #play:hover { background: rgba(233,185,106,.2); }
+  #play svg { width: 16px; height: 16px; fill: currentColor; }
+  #time { font-variant-numeric: tabular-nums; color: var(--dim); min-width: 92px; }
+  #time b { color: var(--ink); font-weight: 500; }
+  #map { width: 100%; height: 44px; display: block; cursor: pointer; border-radius: 3px; background: #0b0c12; border: 1px solid var(--line); }
+  #meter { color: var(--dim); font-size: 11px; text-align: right; min-width: 70px; font-variant-numeric: tabular-nums; }
+
+  #veil { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 40%, rgba(22,24,34,.86), rgba(6,7,10,.97)); transition: opacity .6s; }
+  #veil.off { opacity: 0; pointer-events: none; }
+  .card { text-align: center; max-width: 560px; padding: 24px; }
+  .card .op { color: var(--gold); letter-spacing: .4em; font-size: 11px; text-transform: uppercase; }
+  .card h2 { font-family: var(--serif); font-weight: 500; font-size: 44px; margin: 14px 0 6px; letter-spacing: .05em; }
+  .card p { color: var(--dim); line-height: 1.9; margin: 0 0 26px; }
+  .card .en { font-family: var(--serif); font-style: italic; font-size: 19px; color: #c9c2b0; margin-bottom: 18px; }
+  #start { font-family: var(--serif); font-size: 19px; letter-spacing: .12em; color: #171307; background: linear-gradient(180deg, #f6dca6, #e0aa55); border: 0; padding: 13px 38px; border-radius: 2px; cursor: pointer; box-shadow: 0 6px 30px rgba(233,185,106,.25); transition: .2s; }
+  #start:hover { transform: translateY(-1px); box-shadow: 0 8px 36px rgba(233,185,106,.4); }
+  #start:disabled { opacity: .6; cursor: wait; }
+
+  @media (max-width: 900px) {
+    body { overflow: auto; grid-template-rows: auto auto auto; height: auto; }
+    main { grid-template-columns: 1fr; }
+    #stage { height: 62vh; }
+    aside { border-left: 0; border-top: 1px solid var(--line); }
+    footer { position: sticky; bottom: 0; grid-template-columns: auto 1fr; }
+    #time, #meter { display: none; }
+    .title h1 { font-size: 23px; }
+    .mvs { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="title">
+    <h1 id="h1">ピアノソナタ ハ短調 <em>《寓話》</em></h1>
+    <p id="h1sub">Piano Sonata in C minor “Fable” — played on a physically modelled piano</p>
+  </div>
+  <div class="mvs" id="mvs"></div>
+</header>
+
+<main>
+  <div id="stage">
+    <canvas id="roll"></canvas>
+    <div id="now"><div class="sec" id="sec"></div><div class="bar" id="bar"></div></div>
+    <div id="ped">Ped.</div>
+  </div>
+  <aside>
+    <section>
+      <h2>ハンマーと弦の衝突 <span id="hname">—</span></h2>
+      <canvas id="hammer"></canvas>
+      <div class="stats">
+        <div><b id="hv">—</b><i>打鍵速度 m/s</i></div>
+        <div><b id="hf">—</b><i>最大力 N</i></div>
+        <div><b id="ht">—</b><i>接触 ms</i></div>
+        <div><b id="vc">0</b><i>鳴っている弦</i></div>
+      </div>
+    </section>
+    <section>
+      <h2>スペクトル <span>30 Hz – 12 kHz</span></h2>
+      <canvas id="spec"></canvas>
+    </section>
+    <section>
+      <h2>楽器の調整</h2>
+      <div class="ctl"><label>ハンマーの硬さ</label><input type="range" id="c_hard" min="-1.6" max="1.6" step="0.01" value="0"><output></output></div>
+      <div class="ctl"><label>弦のデチューン</label><input type="range" id="c_det" min="0" max="8" step="0.1" value="1"><output></output></div>
+      <div class="ctl"><label>明るさ</label><input type="range" id="c_bri" min="0" max="2" step="0.01" value="0.6"><output></output></div>
+      <div class="ctl"><label>ペダル共鳴</label><input type="range" id="c_sym" min="0" max="4" step="0.05" value="1"><output></output></div>
+      <div class="ctl"><label>ホール残響</label><input type="range" id="c_rev" min="0" max="0.7" step="0.01" value="0.22"><output></output></div>
+      <div class="ctl"><label>間とルバート</label><input type="range" id="c_expr" min="0" max="2" step="0.05" value="1"><output>×1.00</output></div>
+      <div class="ctl"><label>演奏者の体</label><input type="range" id="c_spread" min="0" max="2" step="0.05" value="1"><output>×1.00</output></div>
+      <div class="ctl"><label>テンポ</label><input type="range" id="c_tempo" min="0.5" max="1.4" step="0.01" value="1"><output></output></div>
+      <div class="ctl"><label>音量</label><input type="range" id="c_vol" min="0" max="1.5" step="0.01" value="1"><output></output></div>
+    </section>
+    <section class="note">
+      鍵盤をクリック、または <kbd>Z</kbd>–<kbd>M</kbd> / <kbd>Q</kbd>–<kbd>I</kbd> で演奏できます（クリック位置が下ほど強打）。<br>
+      <kbd>Space</kbd> 再生 / 停止　<kbd>Shift</kbd> ペダル
+      <div class="btns">
+        <button id="silent">無音で押さえる</button>
+        <button id="unlatch">保持を解除</button>
+        <button id="symdemo">共鳴を聴く</button>
+        <button id="symsw" class="on">弦の共鳴 ON</button>
+      </div>
+      「無音で押さえる」を点けて鍵を押すと、音を出さずにダンパーだけ上がります。消してから別の鍵を弾くと、押さえた弦が共鳴します。
+    </section>
+    <section class="model">
+      <b>音はすべて計算で作っています。</b>サンプル音源は使っていません。
+      弦は<b>双方向の導波路</b>、ハンマーは<b>質量＋非線形フェルト</b>（F = K·x<sup>p</sup>）として弦と連成させ、
+      衝突を毎サンプル解いています。強く叩くほど接触が短くなり、倍音が増えます。
+      1 鍵 1〜3 本の弦は少しずつ調律がずれ、駒を通じて結合するので、うなりと二段階の減衰が生まれます。
+      <b>全鍵の弦が同じ駒を共有</b>しているので、ダンパーの上がった弦は他の弦の倍音に共鳴します。
+    </section>
+  </aside>
+</main>
+
+<footer>
+  <button id="play" aria-label="再生 / 停止"><svg viewBox="0 0 16 16"><path id="playIcon" d="M3 1.5v13l11-6.5z"/></svg></button>
+  <div id="time"><b>0:00</b> / 0:00</div>
+  <canvas id="map"></canvas>
+  <button id="midiBtn" title="MIDI ファイルを開く（画面にドロップしても可）">MIDI を開く</button>
+  <input type="file" id="midiFile" accept=".mid,.midi,audio/midi" hidden>
+  <div id="meter"></div>
+</footer>
+
+<div id="veil">
+  <div class="card">
+    <div class="op">Physical Modelling Piano</div>
+    <h2>《寓話》</h2>
+    <div class="en">Piano Sonata in C minor — Allegro · Adagio · Presto</div>
+    <p>弦・ハンマー・響板を物理シミュレーションしたピアノが、<br>ベートーヴェン風の書き下ろしソナタを 3 楽章演奏します。</p>
+    <button id="start">演奏を始める</button>
+    <p style="margin-top:14px;font-size:12px;opacity:.7">MIDI ファイルをこの画面にドロップすると、その曲を演奏します。</p>
+  </div>
+</div>
+
+<script src="engine.js"></script>
+<script src="score.js"></script>
+<script src="midi.js"></script>
+<script>
+'use strict';
+let curMv = -1, curSec = '', curBar = '', wasPlaying = null;
+// ====================================================================
+//  ホスト: シーケンサ + エンジン。AudioWorklet の中でも外でも動く
+// ====================================================================
+function pianoHostFactory() {
+  return class Host {
+    constructor(Piano, sr, post) {
+      this.p = new Piano(sr); this.p.recordHammer = true; this.sr = sr; this.post = post;
+      this.ev = []; this.ei = 0; this.pos = 0; this.playing = false; this.rate = 1; this.end = 0; this.n = 0; this.lastH = null;
+    }
+    restorePedal() { let d = false; for (let i = 0; i < this.ei; i++) if (this.ev[i][1] >= 2) d = this.ev[i][1] === 3; this.p.pedal(d); }
+    seek(t) { this.pos = t; let i = 0; while (i < this.ev.length && this.ev[i][0] < t) i++; this.ei = i; }
+    msg(d) {
+      const p = this.p;
+      switch (d.type) {
+        case 'song': this.ev = d.ev; this.end = d.end; this.seek(0); break;
+        case 'play': if (this.pos >= this.end) this.seek(0); this.playing = true; this.restorePedal(); break;
+        case 'pause': this.playing = false; p.allOff(false); break;
+        case 'seek': p.allOff(true); this.seek(d.t); if (this.playing) this.restorePedal(); break;
+        case 'on': p.noteOn(d.m, d.v); break;
+        case 'off': p.noteOff(d.m); break;
+        case 'hold': p.hold(d.m); break;
+        case 'pedal': p.pedal(d.down); break;
+        case 'rate': this.rate = d.v; break;
+        case 'param': p.setParam(d.name, d.v); break;
+      }
+    }
+    block(L, R, off, cnt, now) {
+      const p = this.p;
+      // イベントはサンプル単位の時刻で発火させる（ブロック単位に丸めると数 ms のずらしが潰れる）
+      let done = 0; const ev = this.ev, spt = this.sr / this.rate;
+      while (done < cnt) {
+        let n = cnt - done;
+        if (this.playing) {
+          while (this.ei < ev.length && ev[this.ei][0] <= this.pos) {
+            const e = ev[this.ei++];
+            if (e[1] === 1) p.noteOn(e[2], e[3]); else if (e[1] === 0) p.noteOff(e[2]); else p.pedal(e[1] === 3);
+          }
+          if (this.ei < ev.length) n = Math.max(1, Math.min(n, Math.ceil((ev[this.ei][0] - this.pos) * spt)));
+        }
+        p.process(L, R, off + done, n); done += n;
+        if (this.playing) { this.pos += n / spt; if (this.pos >= this.end) { this.playing = false; p.allOff(false); } }
+      }
+      if (++this.n % 6 === 0) {
+        const m = { type: 'st', pos: this.pos, now, playing: this.playing, voices: p.voiceCount, ped: p.pedalDown, peak: p.peakOut };
+        p.peakOut = 0;
+        if (p.lastHammer && p.lastHammer !== this.lastH) { this.lastH = p.lastHammer; m.hammer = { midi: this.lastH.midi, vel: this.lastH.vel, v0: this.lastH.v0, force: this.lastH.force.slice() }; }
+        this.post(m);
+      }
+    }
+  };
+}
+
+// ====================================================================
+//  曲データ
+// ====================================================================
+let song, NOTES, events, END;
+function setSong(s) {
+  song = s; NOTES = s.notes; events = [];
+  for (const n of NOTES) { events.push([n.t, 1, n.m, n.v]); events.push([n.t + n.d, 0, n.m, 0]); }
+  for (const p of s.ped) events.push([p.t, p.down ? 3 : 2, 0, 0]);
+  events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  END = s.dur + 2.5;
+}
+setSong(buildSonata());
+
+// ====================================================================
+//  オーディオ
+// ====================================================================
+let ctx = null, send = () => {}, analyser = null, gainNode = null;
+let st = { pos: 0, now: 0, playing: false, voices: 0, ped: false, peak: 0 }, rate = 1, mode = '';
+const live = new Map(); // 手弾き中の鍵
+
+function onHostMsg(d) {
+  if (d.type !== 'st') return;
+  st = d;
+  if (d.hammer) showHammer(d.hammer);
+}
+async function initAudio() {
+  ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback' });
+  gainNode = ctx.createGain(); analyser = ctx.createAnalyser(); analyser.fftSize = 4096; analyser.smoothingTimeConstant = 0.72;
+  gainNode.connect(analyser); analyser.connect(ctx.destination);
+  try {
+    const src = `const Piano=(${pianoEngineFactory.toString()})();const Host=(${pianoHostFactory.toString()})();
+      class P extends AudioWorkletProcessor{constructor(){super();this.h=new Host(Piano,sampleRate,m=>this.port.postMessage(m));this.port.onmessage=e=>this.h.msg(e.data);}
+      process(i,o){const L=o[0][0],R=o[0][1]||new Float32Array(L.length);for(let f=0;f<L.length;f+=128)this.h.block(L,R,f,Math.min(128,L.length-f),currentTime);return true;}}
+      registerProcessor('fable-piano',P);`;
+    const url = URL.createObjectURL(new Blob([src], { type: 'application/javascript' }));
+    await ctx.audioWorklet.addModule(url);
+    const node = new AudioWorkletNode(ctx, 'fable-piano', { numberOfInputs: 0, outputChannelCount: [2] });
+    node.port.onmessage = e => onHostMsg(e.data);
+    node.connect(gainNode); send = m => node.port.postMessage(m); mode = 'AudioWorklet';
+  } catch (err) {
+    // フォールバック: メインスレッドで合成
+    console.warn('AudioWorklet が使えないため ScriptProcessor で動かします', err);
+    const Host = pianoHostFactory(), Piano = pianoEngineFactory();
+    const h = new Host(Piano, ctx.sampleRate, onHostMsg);
+    const sp = ctx.createScriptProcessor(2048, 0, 2);
+    sp.onaudioprocess = e => { const L = e.outputBuffer.getChannelData(0), R = e.outputBuffer.getChannelData(1); for (let f = 0; f < L.length; f += 128) h.block(L, R, f, 128, e.playbackTime + f / ctx.sampleRate); };
+    sp.connect(gainNode); send = m => h.msg(m); mode = 'ScriptProcessor';
+  }
+  send({ type: 'song', ev: events, end: END });
+  document.querySelectorAll('.ctl input').forEach(i => i.dispatchEvent(new Event('input')));
+}
+function position() {
+  if (!ctx) return 0;
+  const lat = (ctx.outputLatency || 0) + (ctx.baseLatency || 0);
+  return st.playing ? Math.max(0, st.pos + (ctx.currentTime - st.now - lat) * rate) : st.pos;
+}
+
+// ====================================================================
+//  UI
+// ====================================================================
+const $ = id => document.getElementById(id);
+const fmt = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+const noteName = m => NAMES[m % 12] + (Math.floor(m / 12) - 1);
+
+function buildMvButtons() {
+  $('mvs').innerHTML = '';
+  song.movements.forEach(mv => {
+    const b = document.createElement('button'); b.className = 'mv';
+    b.innerHTML = `${mv.title}<small>${mv.sub} · ${fmt(mv.dur)}</small>`;
+    b.onclick = () => { seekTo(mv.t - 0.4); if (!st.playing) togglePlay(); };
+    $('mvs').appendChild(b); mv.el = b;
+  });
+  curMv = -1;
+}
+buildMvButtons();
+
+// ---- 人間らしいタイミングの量（組み込みのソナタだけ。0 = 楽譜どおり） ----
+let isSonata = true;
+const interpChange = () => {
+  if (!isSonata) return;
+  // いまの位置を「小節 + 小節内の割合」で覚えて、作り直した曲の同じ場所へ移る
+  const pos = position(), i = lowerBar(pos), b0 = song.bars[i].t, b1 = i + 1 < song.bars.length ? song.bars[i + 1].t : song.dur;
+  const fr = pos < b0 ? 0 : Math.min(1, (pos - b0) / (b1 - b0));
+  setSong(buildSonata({ expr: parseFloat($('c_expr').value), spread: parseFloat($('c_spread').value) }));
+  const n0 = song.bars[i].t, n1 = i + 1 < song.bars.length ? song.bars[i + 1].t : song.dur, t = pos < b0 ? pos : n0 + fr * (n1 - n0);
+  buildMvButtons(); drawMapBase();
+  if (ctx) { send({ type: 'song', ev: events, end: END }); seekTo(t); }
+};
+for (const id of ['c_expr', 'c_spread']) {
+  $(id).addEventListener('input', e => { e.target.nextElementSibling.textContent = '×' + parseFloat(e.target.value).toFixed(2); });
+  $(id).addEventListener('change', interpChange);
+}
+
+// ---- MIDI ファイルの読み込み（ボタン / ドラッグ＆ドロップ） ----
+async function openMidi(file) {
+  if (!file) return;
+  let s;
+  try { s = parseMidi(await file.arrayBuffer(), file.name); }
+  catch (e) { alert('読み込めませんでした: ' + e.message); return; }
+  if (!s.notes.length) { alert('ピアノの音域 (A0–C8) のノートがありません'); return; }
+  if (!ctx) { $('veil').classList.add('off'); await initAudio(); }
+  if (st.playing) togglePlay();
+  isSonata = false; $('c_expr').disabled = $('c_spread').disabled = true;
+  setSong(s); send({ type: 'song', ev: events, end: END }); send({ type: 'seek', t: 0 });
+  st.pos = 0; st.now = ctx.currentTime; particles.length = 0;
+  $('h1').innerHTML = `<em>${s.title.replace(/[<&]/g, c => c === '<' ? '&lt;' : '&amp;')}</em>`;
+  $('h1sub').textContent = `${s.titleEn} — ${s.notes.length} notes, ${fmt(s.dur)}`;
+  buildMvButtons(); drawMapBase(); curSec = curBar = null;
+  await ctx.resume(); togglePlay();
+}
+$('midiBtn').onclick = () => $('midiFile').click();
+$('midiFile').onchange = e => { openMidi(e.target.files[0]); e.target.value = ''; };
+addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('drop'); });
+addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('drop'); });
+addEventListener('drop', e => { e.preventDefault(); document.body.classList.remove('drop'); openMidi(e.dataTransfer.files[0]); });
+
+function togglePlay() {
+  if (!ctx) return;
+  if (ctx.state === 'suspended') ctx.resume();
+  send({ type: st.playing ? 'pause' : 'play' }); st.playing = !st.playing; st.now = ctx.currentTime;
+}
+function seekTo(t) { t = Math.max(0, Math.min(END - 0.1, t)); send({ type: 'seek', t }); st.pos = t; st.now = ctx ? ctx.currentTime : 0; particles.length = 0; }
+$('play').onclick = togglePlay;
+$('start').onclick = async () => {
+  $('start').disabled = true; $('start').textContent = '弦を張っています…';
+  await new Promise(r => setTimeout(r, 30));
+  await initAudio(); await ctx.resume();
+  $('veil').classList.add('off'); togglePlay();
+};
+
+const ctlDef = {
+  c_hard: v => { send({ type: 'param', name: 'hardness', v: Math.pow(10, v) }); return '×' + Math.pow(10, v).toFixed(2); },
+  c_det: v => { send({ type: 'param', name: 'detune', v }); return '×' + v.toFixed(1); },
+  c_bri: v => { send({ type: 'param', name: 'brightness', v }); return v.toFixed(2); },
+  c_sym: v => { send({ type: 'param', name: 'sympAmt', v }); return v.toFixed(2); },
+  c_rev: v => { send({ type: 'param', name: 'reverbMix', v }); return Math.round(v * 100) + '%'; },
+  c_tempo: v => { rate = v; send({ type: 'rate', v }); return Math.round(v * 100) + '%'; },
+  c_vol: v => { if (gainNode) gainNode.gain.value = v; return Math.round(v * 100) + '%'; },
+};
+for (const id in ctlDef) { const el = $(id); el.oninput = () => { el.nextElementSibling.textContent = ctlDef[id](parseFloat(el.value)); }; el.oninput(); }
+
+// ---- 手弾き ----
+$('silent').onclick = () => { silentMode = !silentMode; $('silent').classList.toggle('on', silentMode); };
+$('unlatch').onclick = releaseLatched;
+let stringSymp = true; // 鍵どうしの弦の共鳴（共通の駒）
+$('symsw').onclick = () => {
+  stringSymp = !stringSymp; send({ type: 'param', name: 'stringSymp', v: stringSymp ? 1 : 0 });
+  $('symsw').classList.toggle('on', stringSymp); $('symsw').textContent = '弦の共鳴 ' + (stringSymp ? 'ON' : 'OFF');
+};
+$('symdemo').onclick = () => { // C4 を無音で押さえ、C3 を短く弾く → C4 の弦が鳴り続ける
+  if (!ctx) return; if (st.playing) togglePlay();
+  releaseLatched(); latched.add(60); live.set(60, 0); send({ type: 'hold', m: 60 });
+  setTimeout(() => { live.set(48, 100); send({ type: 'on', m: 48, v: 100 }); spawn(48, 100, 'U'); }, 500);
+  setTimeout(() => { live.delete(48); send({ type: 'off', m: 48 }); }, 1100);
+  setTimeout(() => { if (latched.has(60)) { latched.delete(60); live.delete(60); send({ type: 'off', m: 60 }); } }, 6000);
+};
+const latched = new Set(); let silentMode = false; // 無音で押さえたままの鍵
+function liveOn(m, v) {
+  if (!ctx) return;
+  if (silentMode) { // ダンパーだけ上げる。もう一度押すと離す
+    if (latched.has(m)) { latched.delete(m); live.delete(m); send({ type: 'off', m }); }
+    else { latched.add(m); live.set(m, 0); send({ type: 'hold', m }); }
+    return;
+  }
+  if (live.has(m) && !latched.has(m)) return;
+  live.set(m, v); send({ type: 'on', m, v }); spawn(m, v, 'U');
+}
+function liveOff(m) { if (!live.has(m) || latched.has(m)) return; live.delete(m); send({ type: 'off', m }); }
+function releaseLatched() { for (const m of latched) { live.delete(m); send({ type: 'off', m }); } latched.clear(); }
+const KEYMAP = {}; 'zsxdcvgbhnjm'.split('').forEach((k, i) => KEYMAP[k] = 48 + i); 'q2w3er5t6y7ui'.split('').forEach((k, i) => KEYMAP[k] = 60 + i);
+addEventListener('keydown', e => {
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.code === 'Space') { e.preventDefault(); if (ctx) togglePlay(); return; }
+  if (e.key === 'Shift') { send({ type: 'pedal', down: true }); return; }
+  const m = KEYMAP[e.key.toLowerCase()]; if (m) liveOn(m, 84);
+});
+addEventListener('keyup', e => {
+  if (e.key === 'Shift') { send({ type: 'pedal', down: false }); return; }
+  const m = KEYMAP[e.key.toLowerCase()]; if (m) liveOff(m);
+});
+
+// ====================================================================
+//  ピアノロール + 鍵盤
+// ====================================================================
+const roll = $('roll'), rc = roll.getContext('2d');
+let W = 0, H = 0, DPR = 1, KH = 110, WW = 10;
+const isBlack = m => [1, 3, 6, 8, 10].includes(m % 12);
+const keyX = new Float32Array(128), keyW = new Float32Array(128);
+function layout() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  const r = roll.getBoundingClientRect(); W = r.width; H = r.height;
+  roll.width = Math.round(W * DPR); roll.height = Math.round(H * DPR);
+  WW = W / 52; KH = Math.max(70, Math.min(128, H * 0.2));
+  let wi = 0;
+  for (let m = 21; m <= 108; m++) {
+    if (isBlack(m)) { keyW[m] = WW * 0.58; keyX[m] = wi * WW - keyW[m] / 2; }
+    else { keyW[m] = WW; keyX[m] = wi * WW; wi++; }
+  }
+  for (const c of [hc, sc, mapC]) { const b = c.getBoundingClientRect(); c.width = Math.round(b.width * DPR); c.height = Math.round(b.height * DPR); }
+  drawMapBase();
+}
+const COL = { R: [233, 185, 106], L: [111, 178, 232], U: [240, 236, 226] };
+const particles = [];
+function spawn(m, v, h) {
+  const x = keyX[m] + keyW[m] / 2, c = COL[h], n = 3 + Math.round(v / 18);
+  for (let i = 0; i < n; i++) particles.push({ x: x + (Math.random() - .5) * keyW[m], y: 0, vx: (Math.random() - .5) * 46, vy: -(40 + Math.random() * 130) * (0.5 + v / 127), life: 1, c, s: 1 + Math.random() * 1.8 });
+}
+function lowerBound(t) { let lo = 0, hi = NOTES.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (NOTES[mid].t < t) lo = mid + 1; else hi = mid; } return lo; }
+function rrect(c, x, y, w, h, r) { r = Math.min(r, w / 2, h / 2); c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+
+let lastPos = 0, lastFrame = performance.now();
+const pressed = new Array(128).fill(null), glow = new Float32Array(128);
+function drawRoll(pos, dt) {
+  const c = rc; c.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const top = H - KH, LOOK = 3.2, pps = top / LOOK;
+  const g = c.createLinearGradient(0, 0, 0, top); g.addColorStop(0, '#090a0f'); g.addColorStop(1, '#10121a');
+  c.fillStyle = g; c.fillRect(0, 0, W, top);
+  // オクターブの縦線
+  c.lineWidth = 1;
+  for (let m = 24; m <= 108; m += 12) { c.strokeStyle = 'rgba(255,255,255,.045)'; c.beginPath(); c.moveTo(keyX[m] + .5, 0); c.lineTo(keyX[m] + .5, top); c.stroke(); }
+  for (let m = 29; m <= 108; m += 12) { c.strokeStyle = 'rgba(255,255,255,.02)'; c.beginPath(); c.moveTo(keyX[m] + .5, 0); c.lineTo(keyX[m] + .5, top); c.stroke(); }
+  // 小節線
+  c.font = '10px system-ui'; c.textBaseline = 'bottom';
+  for (const b of song.bars) {
+    if (b.t < pos - 0.1) continue; if (b.t > pos + LOOK) break;
+    const y = top - (b.t - pos) * pps;
+    c.strokeStyle = 'rgba(255,255,255,.06)'; c.beginPath(); c.moveTo(0, y + .5); c.lineTo(W, y + .5); c.stroke();
+    c.fillStyle = 'rgba(255,255,255,.2)'; c.fillText(b.bar, 5, y - 2);
+  }
+  // 演奏解釈の印（息・間・ため・バス先行・アルペジオ）
+  if (song.marks) {
+    c.font = `${11}px Georgia, serif`; c.textAlign = 'right';
+    for (const k of song.marks) {
+      if (k.t < pos - 0.1) continue; if (k.t > pos + LOOK) break;
+      const y = top - (k.t - pos) * pps;
+      c.fillStyle = 'rgba(233,185,106,.55)'; c.fillText(k.text, W - 6, y - 2);
+      c.fillStyle = 'rgba(233,185,106,.25)'; c.fillRect(W - 46, y, 40, 1);
+    }
+    c.textAlign = 'left';
+  }
+  // 音符
+  pressed.fill(null);
+  for (let i = lowerBound(pos - 12); i < NOTES.length; i++) {
+    const n = NOTES[i]; if (n.t > pos + LOOK) break; if (n.t + n.d < pos - 0.05) continue;
+    const col = COL[n.h], on = n.t <= pos && pos < n.t + n.d;
+    const x = keyX[n.m] + keyW[n.m] * (isBlack(n.m) ? 0.08 : 0.16), w = keyW[n.m] * (isBlack(n.m) ? 0.84 : 0.68);
+    const y1 = top - (n.t - pos) * pps, y0 = top - (n.t + n.d - pos) * pps;
+    const yb = Math.min(y1, top), yt = Math.max(y0, -10);
+    if (yb - yt < 0.5) { if (on) pressed[n.m] = n; continue; }
+    const a = 0.45 + 0.55 * n.v / 127;
+    const gr = c.createLinearGradient(0, yt, 0, yb);
+    gr.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${a * 0.55})`); gr.addColorStop(1, `rgba(${col[0]},${col[1]},${col[2]},${a})`);
+    if (on) { c.shadowColor = `rgba(${col[0]},${col[1]},${col[2]},.9)`; c.shadowBlur = 16; pressed[n.m] = n; }
+    c.fillStyle = gr; rrect(c, x, yt, w, Math.max(3, yb - yt), 3); c.fill();
+    c.shadowBlur = 0;
+    if (lastPos < n.t && n.t <= pos && pos - lastPos < 0.25) { spawn(n.m, n.v, n.h); glow[n.m] = 1; }
+  }
+  // 打鍵ライン
+  const lg = c.createLinearGradient(0, top - 26, 0, top); lg.addColorStop(0, 'rgba(233,185,106,0)'); lg.addColorStop(1, 'rgba(233,185,106,.10)');
+  c.fillStyle = lg; c.fillRect(0, top - 26, W, 26);
+  c.globalCompositeOperation = 'lighter';
+  for (let m = 21; m <= 108; m++) {
+    const n = pressed[m], lv = live.has(m);
+    if (!n && !lv && glow[m] < 0.02) continue;
+    glow[m] = Math.max(glow[m] * Math.pow(0.02, dt), (n || lv) ? 0.35 : 0);
+    const col = n ? COL[n.h] : COL.U, cx = keyX[m] + keyW[m] / 2, r = 26 + glow[m] * 34;
+    const rg = c.createRadialGradient(cx, top, 0, cx, top, r);
+    rg.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${0.25 + glow[m] * 0.6})`); rg.addColorStop(1, `rgba(${col[0]},${col[1]},${col[2]},0)`);
+    c.fillStyle = rg; c.fillRect(cx - r, top - r, r * 2, r);
+  }
+  // 粒子
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i]; p.life -= dt * 1.5; if (p.life <= 0) { particles[i] = particles[particles.length - 1]; particles.pop(); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 60 * dt;
+    c.fillStyle = `rgba(${p.c[0]},${p.c[1]},${p.c[2]},${p.life * 0.8})`; c.beginPath(); c.arc(p.x, top + p.y, p.s * p.life, 0, 6.283); c.fill();
+  }
+  c.globalCompositeOperation = 'source-over';
+  // 鍵盤
+  c.fillStyle = '#050508'; c.fillRect(0, top, W, KH);
+  c.fillStyle = '#7b1f24'; c.fillRect(0, top, W, 3); // フェルト
+  const ky = top + 3, kh = KH - 3;
+  for (let m = 21; m <= 108; m++) {
+    if (isBlack(m)) continue;
+    const n = pressed[m], on = n || live.has(m), col = n ? COL[n.h] : COL.U;
+    const wg = c.createLinearGradient(0, ky, 0, ky + kh);
+    if (on) { wg.addColorStop(0, `rgb(${col[0]},${col[1]},${col[2]})`); wg.addColorStop(1, `rgb(${col[0] * .78 | 0},${col[1] * .78 | 0},${col[2] * .78 | 0})`); }
+    else { wg.addColorStop(0, '#d9d4c7'); wg.addColorStop(0.9, '#f3efe4'); wg.addColorStop(1, '#bdb8aa'); }
+    c.fillStyle = wg; rrect(c, keyX[m] + 0.6, ky, keyW[m] - 1.2, kh - (on ? 0 : 2), 2); c.fill();
+  }
+  for (let m = 21; m <= 108; m++) {
+    if (!isBlack(m)) continue;
+    const n = pressed[m], on = n || live.has(m), col = n ? COL[n.h] : COL.U, bh = kh * 0.62;
+    const bg = c.createLinearGradient(0, ky, 0, ky + bh);
+    if (on) { bg.addColorStop(0, `rgb(${col[0] * .7 | 0},${col[1] * .7 | 0},${col[2] * .7 | 0})`); bg.addColorStop(1, `rgb(${col[0]},${col[1]},${col[2]})`); }
+    else { bg.addColorStop(0, '#15161b'); bg.addColorStop(0.85, '#2b2d36'); bg.addColorStop(1, '#0c0c10'); }
+    c.fillStyle = bg; rrect(c, keyX[m], ky, keyW[m], bh, 2); c.fill();
+  }
+  if (WW > 14) { c.fillStyle = 'rgba(40,36,28,.5)'; c.font = '9px system-ui'; c.textAlign = 'center'; for (let m = 24; m <= 108; m += 12) c.fillText('C' + (m / 12 - 1), keyX[m] + WW / 2, H - 5); c.textAlign = 'left'; }
+  lastPos = pos;
+}
+
+// 鍵盤をマウス / タッチで弾く
+function keyAt(x, y) {
+  const top = H - KH; if (y < top) return null;
+  const rel = (y - top) / KH;
+  if (rel < 0.64) for (let m = 21; m <= 108; m++) if (isBlack(m) && x >= keyX[m] && x < keyX[m] + keyW[m]) return { m, v: 40 + rel / 0.64 * 80 };
+  for (let m = 21; m <= 108; m++) if (!isBlack(m) && x >= keyX[m] && x < keyX[m] + keyW[m]) return { m, v: 35 + rel * 88 };
+  return null;
+}
+const ptr = new Map();
+roll.addEventListener('pointerdown', e => { const r = roll.getBoundingClientRect(), k = keyAt(e.clientX - r.left, e.clientY - r.top); if (k && ctx) { roll.setPointerCapture(e.pointerId); ptr.set(e.pointerId, k.m); liveOn(k.m, Math.round(k.v)); } });
+roll.addEventListener('pointermove', e => { if (!ptr.has(e.pointerId)) return; const r = roll.getBoundingClientRect(), k = keyAt(e.clientX - r.left, e.clientY - r.top), cur = ptr.get(e.pointerId); if (k && k.m !== cur) { liveOff(cur); ptr.set(e.pointerId, k.m); liveOn(k.m, Math.round(k.v)); } });
+const pup = e => { if (ptr.has(e.pointerId)) { liveOff(ptr.get(e.pointerId)); ptr.delete(e.pointerId); } };
+roll.addEventListener('pointerup', pup); roll.addEventListener('pointercancel', pup);
+
+// ====================================================================
+//  ハンマー力のプロット
+// ====================================================================
+const hc = $('hammer'), hx = hc.getContext('2d'), pulses = [];
+function showHammer(h) {
+  let fm = 0, n = 0; for (let i = 0; i < h.force.length; i++) { if (h.force[i] > fm) fm = h.force[i]; if (h.force[i] > 0) n = i + 1; }
+  pulses.push({ f: h.force, fm, n, midi: h.midi, born: performance.now() }); if (pulses.length > 7) pulses.shift();
+  $('hname').textContent = `${noteName(h.midi)} · vel ${h.vel}`;
+  $('hv').textContent = h.v0.toFixed(2); $('hf').textContent = fm.toFixed(1); $('ht').textContent = (n / ctx.sampleRate * 1000).toFixed(2);
+}
+function drawHammer() {
+  const c = hx, w = hc.width, h = hc.height; c.clearRect(0, 0, w, h);
+  const ms = 6, sr = ctx ? ctx.sampleRate : 48000;
+  let top = 12; for (const p of pulses) top = Math.max(top, p.fm * 1.15);
+  c.strokeStyle = 'rgba(255,255,255,.06)'; c.lineWidth = 1; c.fillStyle = 'rgba(255,255,255,.28)'; c.font = `${9 * DPR}px system-ui`;
+  for (let t = 1; t < ms; t++) { const x = t / ms * w; c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke(); c.fillText(t + ' ms', x + 3 * DPR, h - 4 * DPR); }
+  c.fillText(top.toFixed(0) + ' N', 4 * DPR, 11 * DPR);
+  pulses.forEach((p, k) => {
+    const lastOne = k === pulses.length - 1, a = lastOne ? 1 : 0.12 + 0.3 * k / pulses.length;
+    c.beginPath(); c.moveTo(0, h);
+    for (let i = 0; i < p.f.length; i++) { const x = i / sr * 1000 / ms * w; if (x > w) break; c.lineTo(x, h - 2 - p.f[i] / top * (h - 8 * DPR)); }
+    c.strokeStyle = `rgba(233,185,106,${a})`; c.lineWidth = (lastOne ? 2 : 1) * DPR; c.stroke();
+    if (lastOne) { c.lineTo(w, h); c.closePath(); const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, 'rgba(233,185,106,.35)'); g.addColorStop(1, 'rgba(233,185,106,0)'); c.fillStyle = g; c.fill(); }
+  });
+}
+
+// ====================================================================
+//  スペクトル
+// ====================================================================
+const sc = $('spec'), sx = sc.getContext('2d'); let fbuf = null;
+function drawSpec() {
+  const c = sx, w = sc.width, h = sc.height; c.clearRect(0, 0, w, h);
+  const f0 = 30, f1 = 12000, lr = Math.log(f1 / f0);
+  c.fillStyle = 'rgba(255,255,255,.28)'; c.font = `${9 * DPR}px system-ui`; c.strokeStyle = 'rgba(255,255,255,.06)'; c.lineWidth = 1;
+  for (const f of [100, 1000, 10000]) { const x = Math.log(f / f0) / lr * w; c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke(); c.fillText(f >= 1000 ? f / 1000 + 'k' : f, x + 3 * DPR, 11 * DPR); }
+  if (!analyser) return;
+  if (!fbuf) fbuf = new Float32Array(analyser.frequencyBinCount);
+  analyser.getFloatFrequencyData(fbuf);
+  const hz = ctx.sampleRate / analyser.fftSize;
+  c.beginPath(); c.moveTo(0, h);
+  for (let x = 0; x <= w; x += 2) {
+    const fa = f0 * Math.exp(lr * x / w), fb = f0 * Math.exp(lr * (x + 2) / w);
+    let mx = -200; for (let k = Math.floor(fa / hz), e = Math.max(k + 1, Math.ceil(fb / hz)); k < e; k++) if (fbuf[k] > mx) mx = fbuf[k];
+    const tilt = 4.5 * Math.log2(fa / 200); // 見やすさのため高域を持ち上げて表示
+    c.lineTo(x, h - Math.max(0, Math.min(1, (mx + tilt + 105) / 85)) * h);
+  }
+  c.lineTo(w, h); c.closePath();
+  const g = c.createLinearGradient(0, 0, w, 0); g.addColorStop(0, 'rgba(111,178,232,.75)'); g.addColorStop(0.55, 'rgba(233,185,106,.8)'); g.addColorStop(1, 'rgba(246,220,166,.85)');
+  c.fillStyle = g; c.globalAlpha = 0.5; c.fill(); c.globalAlpha = 1; c.strokeStyle = g; c.lineWidth = 1.3 * DPR; c.stroke();
+}
+
+// ====================================================================
+//  ミニマップ（シークバー）
+// ====================================================================
+const mapC = $('map'), mx_ = mapC.getContext('2d'); let mapBase = null;
+function drawMapBase() {
+  const w = mapC.width, h = mapC.height; if (!w) return;
+  const o = document.createElement('canvas'); o.width = w; o.height = h; const c = o.getContext('2d');
+  for (const n of NOTES) {
+    const x = n.t / END * w, y = h - 3 - (n.m - 24) / 78 * (h - 6), col = COL[n.h];
+    c.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${0.35 + 0.5 * n.v / 127})`; c.fillRect(x, y, Math.max(1, n.d / END * w), 1.2 * DPR);
+  }
+  c.fillStyle = 'rgba(255,255,255,.16)'; for (const m of song.movements) c.fillRect(Math.round(m.t / END * w), 0, 1, h);
+  mapBase = o;
+}
+function drawMap(pos) {
+  const c = mx_, w = mapC.width, h = mapC.height; c.clearRect(0, 0, w, h); if (mapBase) c.drawImage(mapBase, 0, 0);
+  const x = pos / END * w;
+  c.fillStyle = 'rgba(8,9,13,.62)'; c.fillRect(x, 0, w - x, h);
+  c.fillStyle = '#f6dca6'; c.fillRect(x - DPR / 2, 0, DPR, h);
+}
+let dragging = false;
+const mapSeek = e => { const r = mapC.getBoundingClientRect(); if (ctx) seekTo((e.clientX - r.left) / r.width * END); };
+mapC.addEventListener('pointerdown', e => { dragging = true; mapC.setPointerCapture(e.pointerId); mapSeek(e); });
+mapC.addEventListener('pointermove', e => { if (dragging) mapSeek(e); });
+mapC.addEventListener('pointerup', () => dragging = false);
+
+// ====================================================================
+//  メインループ
+// ====================================================================
+function frame(now) {
+  const dt = Math.min(0.1, (now - lastFrame) / 1000); lastFrame = now;
+  const pos = Math.min(END, position());
+  drawRoll(pos, dt); drawHammer(); drawSpec(); drawMap(pos);
+  let mv = 0; for (const m of song.movements) if (pos >= m.t - 0.5) mv = m.index;
+  if (mv !== curMv) { curMv = mv; song.movements.forEach(m => m.el.classList.toggle('on', m.index === mv)); }
+  let sec = ''; for (const s of song.sections) { if (s.t > pos + 0.05) break; sec = s.name; }
+  if (sec !== curSec) { curSec = sec; $('sec').textContent = sec; }
+  let bar = ''; for (let i = lowerBar(pos); i >= 0; i--) { const b = song.bars[i]; if (b.t <= pos) { bar = song.movements.length > 1 ? `${['I', 'II', 'III'][b.mv]} · 第 ${b.bar} 小節` : `第 ${b.bar} 小節`; break; } }
+  if (bar !== curBar) { curBar = bar; $('bar').textContent = bar; }
+  $('time').innerHTML = `<b>${fmt(pos)}</b> / ${fmt(END)}`;
+  $('vc').textContent = st.voices;
+  $('ped').classList.toggle('on', !!st.ped);
+  if (st.playing !== wasPlaying) { wasPlaying = st.playing; $('playIcon').setAttribute('d', st.playing ? 'M3 1.5h3.5v13H3zM9.5 1.5H13v13H9.5z' : 'M3 1.5v13l11-6.5z'); }
+  $('meter').textContent = mode ? `${mode}` : '';
+  requestAnimationFrame(frame);
+}
+function lowerBar(t) { let lo = 0, hi = song.bars.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (song.bars[mid].t <= t) lo = mid; else hi = mid - 1; } return lo; }
+addEventListener('resize', layout);
+layout(); requestAnimationFrame(frame);
+</script>
+</body>
+</html>

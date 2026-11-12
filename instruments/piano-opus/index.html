@@ -1,0 +1,324 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2YMCH5GKYT');
+</script>
+
+<meta property="og:title" content="Grande Sonate in c-Moll">
+<meta property="og:description" content="Fable 5.2での物理モデリングと作曲">
+<meta property="og:image" content="https://kishida.github.io/webdemos/instruments/piano-opus/ogp.png">
+<meta property="og:url" content="https://kishida.github.io/webdemos/instruments/piano-opus/index.html"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@kis"/>
+
+<title>Grande Sonate in c-Moll</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..800;1,6..96,400..800&family=JetBrains+Mono:wght@400;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* Layout: one dark "inside the instrument" stage as the hero, with score form and physics panels beneath. */
+:root {
+  --lacquer: #0d0c0b;
+  --case: #161411;
+  --rule: #2d2925;
+  --spruce: #3b2a1a;
+  --brass: #c9a35e;
+  --gilt: #f2d48f;      /* right hand */
+  --ember: #e4814f;     /* left hand */
+  --steel: #c3cbd1;
+  --ink: #efe8dc;
+  --muted: #9b9285;
+  --display: "Bodoni Moda", "Didot", "Bodoni 72", Georgia, serif;
+  --body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { background: var(--lacquer); color: var(--ink); }
+body {
+  font-family: var(--body); font-size: 15px; line-height: 1.7;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+
+/* ---------- title block ---------- */
+header.title { display: grid; grid-template-columns: 1fr auto; gap: 20px 32px; align-items: end; }
+.eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass); }
+h1 {
+  font-family: var(--display); font-weight: 500; font-size: clamp(34px, 6vw, 68px);
+  line-height: 1.02; margin: 6px 0 8px; letter-spacing: -0.01em; text-wrap: balance;
+}
+h1 em { font-style: italic; font-weight: 400; color: var(--gilt); }
+.subtitle { margin: 0; color: var(--muted); max-width: 62ch; }
+.subtitle i { font-family: var(--display); font-size: 1.08em; color: var(--ink); }
+
+.transport { display: flex; align-items: center; gap: 16px; }
+#play {
+  width: 64px; height: 64px; border-radius: 50%; border: 1px solid var(--brass);
+  background: radial-gradient(circle at 35% 30%, #3a3127, #17130f 70%); color: var(--gilt);
+  cursor: pointer; display: grid; place-items: center; transition: transform .15s, box-shadow .2s;
+}
+#play:hover { box-shadow: 0 0 0 6px rgba(201,163,94,.12); }
+#play:active { transform: scale(.96); }
+#play:focus-visible, button:focus-visible, input:focus-visible, .seg:focus-visible { outline: 2px solid var(--gilt); outline-offset: 3px; }
+#play svg { width: 24px; height: 24px; fill: currentColor; }
+.clock { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; display: flex; flex-direction: column; gap: 2px; min-width: 9.5em; }
+.clock b { color: var(--ink); font-size: 20px; font-weight: 600; }
+#status { font-size: 11px; color: var(--brass); }
+
+/* ---------- stage ---------- */
+.stage-wrap {
+  position: relative; border-radius: 6px; overflow: hidden;
+  background: var(--case);
+  box-shadow: 0 0 0 1px #2a251f, 0 30px 80px -30px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.04);
+}
+#stage { display: block; width: 100%; touch-action: none; cursor: default; }
+.hud { position: absolute; pointer-events: none; inset: 0; }
+.hud .tl { position: absolute; left: 18px; top: 12px; display: flex; flex-direction: column; gap: 0; }
+.hud .sec { font-family: var(--display); font-size: clamp(18px, 2.6vw, 28px); font-style: italic; color: #2a1d10; line-height: 1.1; }
+.hud .sub { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: #3d2c18; }
+.hud .tr { position: absolute; right: 16px; top: 10px; display: flex; gap: 14px; align-items: flex-start; }
+.hud .dyn { font-family: var(--display); font-style: italic; font-weight: 700; font-size: clamp(26px, 3.6vw, 42px); color: #2a1d10; line-height: 1; min-width: 1.6em; text-align: right; }
+.hud .meta { font-family: var(--mono); font-size: 10.5px; color: #3d2c18; text-align: right; line-height: 1.5; font-variant-numeric: tabular-nums; }
+#scope { width: 150px; height: 44px; display: block; border-radius: 3px; background: rgba(20,14,8,.55); }
+.hud .mark { position: absolute; left: 18px; bottom: 0; transform: translateY(0); font-family: var(--display); font-style: italic; color: var(--gilt); font-size: 15px; opacity: .9; }
+.overlay-msg {
+  position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
+  font-family: var(--display); font-style: italic; font-size: clamp(18px, 2.4vw, 26px); color: var(--ink);
+  text-shadow: 0 2px 18px #000;
+}
+
+/* ---------- timeline ---------- */
+.timeline { display: flex; flex-direction: column; gap: 8px; }
+.tl-bar { position: relative; display: flex; height: 46px; border-radius: 4px; overflow: hidden; background: var(--case); box-shadow: inset 0 0 0 1px var(--rule); }
+.seg {
+  position: relative; border-right: 1px solid var(--rule); cursor: pointer; padding: 6px 8px; min-width: 0;
+  display: flex; flex-direction: column; justify-content: center; overflow: hidden; background: transparent; color: inherit; text-align: left; border-top: 0; border-bottom: 0; border-left: 0; font: inherit;
+}
+.seg:hover { background: rgba(201,163,94,.07); }
+.seg .n { font-family: var(--display); font-style: italic; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+.seg .k { font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.seg.on .n { color: var(--gilt); }
+#playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--gilt); box-shadow: 0 0 10px var(--gilt); pointer-events: none; left: 0; }
+#progress { position: absolute; top: 0; bottom: 0; left: 0; background: linear-gradient(90deg, rgba(242,212,143,.04), rgba(242,212,143,.10)); pointer-events: none; width: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 12.5px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 18px; height: 6px; border-radius: 3px; margin-right: 8px; vertical-align: middle; background: var(--c); }
+
+/* ---------- panels ---------- */
+.panels { display: grid; grid-template-columns: 1.05fr 1fr 1.15fr; gap: 1px; background: var(--rule); border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 1px var(--rule); }
+.panel { background: var(--case); padding: 22px 22px 24px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.panel h2 { font-family: var(--display); font-weight: 500; font-size: 22px; margin: 0; line-height: 1.2; }
+.panel h2 small { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--brass); margin-bottom: 4px; font-weight: 400; }
+.note-big { display: flex; align-items: baseline; gap: 14px; }
+.note-big b { font-family: var(--display); font-size: 46px; font-weight: 600; line-height: 1; color: var(--gilt); min-width: 2.2em; }
+.note-big b.L { color: var(--ember); }
+.note-big span { font-family: var(--mono); font-size: 14px; color: var(--ink); font-variant-numeric: tabular-nums; }
+dl.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; margin: 0; font-size: 13px; }
+dl.kv dt { color: var(--muted); }
+dl.kv dd { margin: 0; font-family: var(--mono); font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
+#force { width: 100%; height: 130px; display: block; border-top: 1px solid var(--rule); padding-top: 4px; }
+.cap { font-size: 12px; color: var(--muted); margin: 0; }
+
+.ctrl { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: center; }
+.ctrl label { font-size: 13.5px; }
+.ctrl label i { font-family: var(--display); color: var(--muted); font-size: 13px; margin-left: 6px; }
+.ctrl output { font-family: var(--mono); font-size: 12px; color: var(--gilt); font-variant-numeric: tabular-nums; }
+.ctrl input { grid-column: 1 / -1; width: 100%; accent-color: var(--brass); }
+.ctrl p { grid-column: 1 / -1; margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.btn { font: inherit; font-size: 12.5px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--rule); background: transparent; color: var(--ink); cursor: pointer; }
+.btn:hover { border-color: var(--brass); }
+
+table.form { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.form th { text-align: left; font-family: var(--mono); font-weight: 400; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); padding: 0 6px 6px 0; border-bottom: 1px solid var(--rule); }
+table.form td { padding: 6px 6px 6px 0; border-bottom: 1px solid #221f1b; vertical-align: top; }
+table.form td:first-child { font-family: var(--display); font-style: italic; font-size: 14.5px; }
+table.form td.num { font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
+table.form tr.on td:first-child { color: var(--gilt); }
+.table-scroll { overflow-x: auto; }
+
+/* ---------- how it works ---------- */
+.how { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 44px; padding-top: 8px; }
+.how h2 { font-family: var(--display); font-weight: 500; font-size: clamp(26px, 3.4vw, 36px); margin: 0 0 6px; grid-column: 1 / -1; text-wrap: balance; }
+.how h3 { font-family: var(--display); font-size: 19px; font-weight: 600; margin: 0 0 4px; }
+.how h3 span { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; color: var(--brass); font-weight: 400; margin-right: 8px; }
+.how p { margin: 0; color: #d5ccbf; max-width: 64ch; }
+.how code, .formula { font-family: var(--mono); font-size: 12.5px; color: var(--gilt); }
+.formula { display: block; margin: 8px 0 0; padding: 8px 12px; background: var(--case); border-left: 2px solid var(--brass); }
+.flow { grid-column: 1 / -1; overflow-x: auto; }
+.flow svg { display: block; min-width: 760px; width: 100%; height: auto; }
+.how .item { min-width: 0; }
+footer { color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--rule); padding-top: 16px; display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--ink); }
+
+@media (max-width: 980px) {
+  .panels { grid-template-columns: 1fr 1fr; }
+  .panel.form-panel { grid-column: 1 / -1; }
+}
+@media (max-width: 680px) {
+  header.title { grid-template-columns: 1fr; }
+  .panels { grid-template-columns: 1fr; }
+  .how { grid-template-columns: 1fr; }
+  .hud .tr .meta { display: none; }
+  #scope { width: 96px; height: 34px; }
+  .seg .k { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { #play { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="title">
+    <div>
+      <div class="eyebrow">Pianoforte · physikalisches Modell · 88 Saiten</div>
+      <h1>Grande Sonate <em>in c-Moll</em></h1>
+      <p class="subtitle"><i>Allegro con brio</i> — ハンマーのフェルト、弦の剛性、響板の共鳴を数式から鳴らす物理モデル・ピアノのために書いた、ベートーヴェン風ソナタ形式の一楽章。鍵盤をクリックすれば同じ楽器を自分でも弾けます。</p>
+    </div>
+    <div class="transport">
+      <button id="play" type="button" aria-label="再生">
+        <svg id="ico-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg>
+        <svg id="ico-pause" viewBox="0 0 24 24" hidden><path d="M6 4h4.5v16H6zM13.5 4H18v16h-4.5z"/></svg>
+      </button>
+      <div class="clock"><b id="time">0:00</b><span id="dur">/ 0:00</span><span id="status">クリックで演奏開始</span></div>
+    </div>
+  </header>
+
+  <div class="stage-wrap" id="stageWrap">
+    <canvas id="stage" aria-label="ピアノ内部の可視化。落ちてくる音符が弦に届くとハンマーが打ち、弦が振動します。下部の鍵盤はクリックで演奏できます。"></canvas>
+    <div class="hud">
+      <div class="tl"><div class="sec" id="hudSec">Introduzione</div><div class="sub" id="hudSub">Grave · c-Moll</div></div>
+      <div class="tr">
+        <div class="meta" id="hudMeta">Takt 1<br>Grave ♩ = 46<br>0 Tasten klingen</div>
+        <canvas id="scope" width="300" height="88"></canvas>
+        <div class="dyn" id="hudDyn">ff</div>
+      </div>
+    </div>
+    <div class="overlay-msg" id="overlay" hidden></div>
+  </div>
+
+  <section class="timeline" aria-label="楽曲の構成と再生位置">
+    <div class="tl-bar" id="tlbar"><div id="progress"></div><div id="playhead"></div></div>
+    <div class="legend">
+      <span style="--c: var(--gilt)">右手</span>
+      <span style="--c: var(--ember)">左手</span>
+      <span style="--c: var(--steel)">あなたの演奏（鍵盤クリック / <kbd>A</kbd>〜<kbd>K</kbd>、<kbd>Z</kbd><kbd>X</kbd> でオクターブ）</span>
+      <span style="--c: var(--brass)">区間クリックでその位置から再生</span>
+    </div>
+  </section>
+
+  <section class="panels">
+    <div class="panel">
+      <h2><small>Hammer → String</small>いま打たれた弦</h2>
+      <div class="note-big"><b id="nName">C4</b><span id="nFreq">261.46 Hz</span></div>
+      <dl class="kv">
+        <dt>弦の本数 · ユニゾン離調</dt><dd id="nStr">3 · ±0.95 ¢</dd>
+        <dt>非調和性係数 B</dt><dd id="nB">2.4 × 10⁻⁴</dd>
+        <dt>減衰時間 T₆₀（基音）</dt><dd id="nT60">10.0 s</dd>
+        <dt>ハンマー質量 · 打弦速度</dt><dd id="nHam">3.1 g · 1.6 m/s</dd>
+        <dt>フェルト指数 p · 接触時間</dt><dd id="nCon">2.5 · 1.5 ms</dd>
+        <dt>打弦点 β · 最大打力</dt><dd id="nPk">1/8.3 · 12 N</dd>
+      </dl>
+      <canvas id="force" width="640" height="260"></canvas>
+      <p class="cap">ハンマーが弦を押す力 F(t)。強く打つほどフェルトが硬く効き、パルスが短く鋭くなって音が明るくなります。</p>
+    </div>
+
+    <div class="panel">
+      <h2><small>Modell-Parameter</small>楽器を調律し直す</h2>
+      <div class="ctrl"><label for="pHard">フェルト硬度<i>hardness</i></label><output id="oHard">1.00</output>
+        <input type="range" id="pHard" min="0.5" max="1.6" step="0.01" value="1"><p>剛性 K をスケール。上げると打力パルスが短くなり、きらびやかに。</p></div>
+      <div class="ctrl"><label for="pInh">弦の剛性<i>inharmonicity B ×</i></label><output id="oInh">1.00</output>
+        <input type="range" id="pInh" min="0" max="4" step="0.01" value="1"><p>倍音が高めにずれる量。0 で理想弦、上げるとアップライトや古いピアノ風に。</p></div>
+      <div class="ctrl"><label for="pDet">ユニゾンの離調<i>detune ×</i></label><output id="oDet">1.00</output>
+        <input type="range" id="pDet" min="0" max="5" step="0.01" value="1"><p>同じ鍵の 2〜3 本の弦のずれ。うなりと二段階減衰を生みます。</p></div>
+      <div class="ctrl"><label for="pDec">余韻の長さ<i>decay ×</i></label><output id="oDec">1.00</output>
+        <input type="range" id="pDec" min="0.3" max="2" step="0.01" value="1"><p>弦の損失フィルタ。小さいほどフォルテピアノ風の短い響き。</p></div>
+      <div class="ctrl"><label for="pRev">ホールの残響<i>Saal</i></label><output id="oRev">0.35</output>
+        <input type="range" id="pRev" min="0" max="1" step="0.01" value="0.35"><p>響板を通った音にかける 2.4 秒のホール残響の量。</p></div>
+      <div class="btn-row"><button class="btn" type="button" id="pReset">標準に戻す</button><button class="btn" type="button" id="pFortepiano">1800年頃のフォルテピアノ風</button></div>
+      <p class="cap">変更は次に打たれる音から反映されます（数秒先まで先読みしているため、少し遅れて効きます）。</p>
+    </div>
+
+    <div class="panel form-panel">
+      <h2><small>Sonatenform</small>楽曲の構成</h2>
+      <div class="table-scroll">
+        <table class="form" id="formTable">
+          <thead><tr><th>部分</th><th>内容</th><th>調</th><th>小節</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="cap">全 90 小節。序奏の動機 C–E♭–G と減七の和音はコーダで回帰し、第 2 主題は再現部で C-Dur に、結尾群は c-Moll に転じます。</p>
+    </div>
+  </section>
+
+  <section class="how">
+    <h2>録音ではなく、物理から鳴らしている</h2>
+    <div class="flow">
+      <svg viewBox="0 0 1000 170" role="img" aria-label="信号の流れ：ハンマー、弦の導波管ループ、駒、響板、ホール">
+        <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#c9a35e"/></marker></defs>
+        <g font-family="JetBrains Mono, monospace" font-size="11" fill="#9b9285">
+          <rect x="10" y="50" width="150" height="70" rx="4" fill="#161411" stroke="#c9a35e"/>
+          <text x="85" y="78" text-anchor="middle" fill="#efe8dc" font-family="Bodoni Moda, serif" font-size="17" font-style="italic">Hammer</text>
+          <text x="85" y="100" text-anchor="middle">F = K·cᵖ·(1+α·ċ)</text>
+          <rect x="220" y="20" width="400" height="130" rx="4" fill="#161411" stroke="#c9a35e"/>
+          <text x="420" y="42" text-anchor="middle" fill="#efe8dc" font-family="Bodoni Moda, serif" font-size="17" font-style="italic">Saite × 1–3 (unison)</text>
+          <rect x="240" y="62" width="110" height="34" rx="3" fill="#0d0c0b" stroke="#2d2925"/><text x="295" y="83" text-anchor="middle">delay z⁻ᴺ</text>
+          <rect x="365" y="62" width="110" height="34" rx="3" fill="#0d0c0b" stroke="#2d2925"/><text x="420" y="83" text-anchor="middle">loss H(z)</text>
+          <rect x="490" y="62" width="115" height="34" rx="3" fill="#0d0c0b" stroke="#2d2925"/><text x="547" y="83" text-anchor="middle">allpass × M</text>
+          <path d="M350 79H363M475 79H488" stroke="#c9a35e" marker-end="url(#ar)"/>
+          <path d="M605 79H612V122H232V79H238" fill="none" stroke="#c9a35e" stroke-dasharray="3 3" marker-end="url(#ar)"/>
+          <text x="420" y="139" text-anchor="middle">feedback loop · 1 / f₀ round trip</text>
+          <path d="M160 85H218" stroke="#c9a35e" marker-end="url(#ar)"/>
+          <rect x="680" y="50" width="90" height="70" rx="4" fill="#161411" stroke="#c9a35e"/>
+          <text x="725" y="80" text-anchor="middle" fill="#efe8dc" font-family="Bodoni Moda, serif" font-size="17" font-style="italic">Steg</text>
+          <text x="725" y="100" text-anchor="middle">Σ Z·v</text>
+          <path d="M620 85H678" stroke="#c9a35e" marker-end="url(#ar)"/>
+          <rect x="820" y="22" width="170" height="56" rx="4" fill="#161411" stroke="#c9a35e"/>
+          <text x="905" y="46" text-anchor="middle" fill="#efe8dc" font-family="Bodoni Moda, serif" font-size="16" font-style="italic">Resonanzboden</text>
+          <text x="905" y="66" text-anchor="middle">160 modes · convolution</text>
+          <rect x="820" y="98" width="170" height="56" rx="4" fill="#161411" stroke="#c9a35e"/>
+          <text x="905" y="122" text-anchor="middle" fill="#efe8dc" font-family="Bodoni Moda, serif" font-size="16" font-style="italic">Saal</text>
+          <text x="905" y="142" text-anchor="middle">2.4 s · stereo</text>
+          <path d="M770 85H795V50H818" fill="none" stroke="#c9a35e" marker-end="url(#ar)"/>
+          <path d="M905 78V96" stroke="#c9a35e" marker-end="url(#ar)"/>
+        </g>
+      </svg>
+    </div>
+    <div class="item">
+      <h3><span>I</span>ハンマー</h3>
+      <p>フェルトは非線形のばねです。押し込み量 c に対して力が cᵖ（p ≈ 2.2〜3.1）で増えるため、強打ほど接触時間が短くなり高い倍音が増えます。ハンマーは弦の波動インピーダンスに押し返され、両端から戻ってくる反射波も受けます。高音部で一打のパルスが割れて見えるのはこの反射のためです。</p>
+      <span class="formula">m·ẍ = −F,  F = K·max(0, x − y)ᵖ·(1 + α·ċ)</span>
+    </div>
+    <div class="item">
+      <h3><span>II</span>弦</h3>
+      <p>弦はデジタル導波管でできています。遅延線を 1 周すると基本周期になり、損失フィルタが高い倍音ほど速く減衰させます。一次オールパスを最大 6 段つなぐと高域の波が速く進むようになり、ピアノ線の剛性による倍音のずれ fₙ = n·f₀·√(1 + B·n²) を再現します。打弦点 β ≈ 1/8 は第 8 倍音付近を抑えます。</p>
+      <span class="formula">yₙ = a·(xₙ − yₙ₋₁) + xₙ₋₁   (dispersion)</span>
+    </div>
+    <div class="item">
+      <h3><span>III</span>ユニゾンとダンパー</h3>
+      <p>中高音は 3 本、低音は 2 本、最低音域は 1 本の弦を、わずかに離調して並べています。弦どうしのうなりで、最初は速く減衰し、そのあと長く残る二段階の減衰が生まれます。鍵を離すかペダルを上げるとダンパーの損失が切り替わります。F6 より上にはダンパーがありません。</p>
+    </div>
+    <div class="item">
+      <h3><span>IV</span>響板とホール</h3>
+      <p>駒に伝わった力は、160 個の減衰モードで合成した響板の応答と畳み込まれ、さらにステレオのホール残響を通ります。演奏の 1,400 音あまりはすべてこのモデルが計算した波形で、Web Worker が実時間の約 60 倍の速さで先読みしています。</p>
+    </div>
+  </section>
+
+  <footer>
+    <span>Grande Sonate in c-Moll — Allegro con brio · 作曲・音響モデル：Claude</span>
+    <span>サンプル音源・録音は一切使っていません</span>
+  </footer>
+</div>
+
+<script src="engine.js"></script>
+<script src="score.js"></script>
+<script src="app.js"></script>
