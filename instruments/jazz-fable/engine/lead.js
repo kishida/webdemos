@@ -6,6 +6,7 @@
  *
  * 各音源の中身（物理モデル）には手を入れず、奏法の指示をそれぞれの音源の言葉に訳すだけ。
  *   sax     … engine/sax.js（このプロジェクト）
+ *   soprano … 同じ engine/sax.js を kind: 'soprano' で（管が半分の長さ、遮断周波数・リードの共振・フォルマントが高い）
  *   trumpet … trumpet-fable の BrassVoice（唇バルブ + 管 + ベル）
  *   flute   … engine/flute.js（このプロジェクトで作り直した、両端が開いた管 + ジェット）
  * 楽譜は score.js が楽器ごとに別のものを用意する（音域・奏法が違うため）。
@@ -16,7 +17,8 @@ function leadsFactory(Sax, Brass, Flute, cal) {
   const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
 
   const INFO = {
-    sax:     { label: 'Tenor Sax', desc: 'リード弁 + 円錐管の導波路', shift: 0,  gain: 0.72, pan: -0.22, send: 0.32 },
+    sax:     { label: 'Tenor Sax', desc: 'リード弁 + 円錐管の導波路', shift: 0,  gain: 1.0, pan: -0.22, send: 0.32 },
+    soprano: { label: 'Soprano Sax', desc: 'テナーと同じリード弁 + 円錐管。管が半分の長さ', shift: 0, gain: 0.8, pan: -0.22, send: 0.34 },
     trumpet: { label: 'Trumpet',   desc: '唇バルブ + 管 + ベル（trumpet-fable）', shift: 0, gain: 2.4, pan: -0.22, send: 0.3 },
     flute:   { label: 'Flute',     desc: 'ジェット + 両端が開いた管の導波路', shift: 0, gain: 0.66, pan: -0.22, send: 0.36 },
   };
@@ -91,6 +93,7 @@ function leadsFactory(Sax, Brass, Flute, cal) {
     make(name, fs) {
       if (name === 'trumpet') return new TrumpetLead(fs);
       if (name === 'flute') return new Flute(fs);
+      if (name === 'soprano') return new Sax(fs, { kind: 'soprano' });
       return new Sax(fs);
     },
   };

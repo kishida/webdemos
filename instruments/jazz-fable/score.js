@@ -1,8 +1,9 @@
 /*
  * "Waveguide Blues" — リード（テナーサックス / トランペット / フルート）・ピアノ・ウッドベースのための F のブルース（オリジナル）
  *
- * buildSong('sax' | 'trumpet' | 'flute') : リード楽器ごとに、音域と奏法に合わせた別の譜面を持つ。
+ * buildSong('sax' | 'soprano' | 'trumpet' | 'flute') : リード楽器ごとに、音域と奏法に合わせた別の譜面を持つ。
  *   サックス   … 中音域のビバップ。裏拍を軽くタンギングして表拍へスラー、しゃくり・フォール・グロウル
+ *   ソプラノ   … テナーの譜面を 1 オクターブ上で
  *   トランペット … 同音連打のリフ、倍音列をまたぐアルペジオ、ハイ C の山場。フレーズの中は息を切らず、裏拍を軽く突く
  *   フルート   … 1 オクターブ上。息継ぎのある短いフレーズ、走句はスラー、8 分は裏拍を突いて表拍へスラー、伸ばしてビブラート。フォールは使わない
  *
@@ -99,8 +100,10 @@ function buildSong(lead) {
       F6q. C6e A5q rq | !mf re D6e Bb5e G5e E5q G5q~`,
     out: plain(up8(SAX.out)), tagA: plain(up8(SAX.tagA)), tagB: plain(up8(SAX.tagB)), fin: plain(up8(SAX.fin)),
   };
-  const LEAD = { sax: SAX, trumpet: TRUMPET, flute: FLUTE }[lead];
-  const LEADNAME = { sax: 'Tenor Sax', trumpet: 'Trumpet', flute: 'Flute' }[lead];
+  // ソプラノサックス: テナーの譜面をそのまま 1 オクターブ上で（しゃくり・フォール・グロウルも同じ）
+  const SOPRANO = {}; for (const k in SAX) SOPRANO[k] = up8(SAX[k]);
+  const LEAD = { sax: SAX, soprano: SOPRANO, trumpet: TRUMPET, flute: FLUTE }[lead];
+  const LEADNAME = { sax: 'Tenor Sax', soprano: 'Soprano Sax', trumpet: 'Trumpet', flute: 'Flute' }[lead];
   const PIANO = {
     intro: `!mf rq [Bb4 D5]q. [A4 C5]e [Bb4 D5]q | rq [Bb4 E5]q. [A4 Eb5]e [Bb4 E5]q |
             [A4 C5 F5]q. [A4 C5 F5]e re [F#4 C5 Eb5]e rq | [F4 Bb4 D5]q' re [E4 Bb4 Db5]e rh`,
@@ -189,13 +192,18 @@ function buildSong(lead) {
   // リード専用の乱数（伴奏はどのリードでも同じになる）
   let lseed = 777; const lrnd = () => { lseed = lseed + 0x6D2B79F5 | 0; let t = Math.imul(lseed ^ lseed >>> 15, 1 | lseed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
   function leadPart(notes, off) {
-    const LAY = lead === 'sax' ? 0.016 : lead === 'trumpet' ? 0.008 : 0.006;   // 少し後ろに乗る
+    const LAY = lead === 'sax' || lead === 'soprano' ? 0.016 : lead === 'trumpet' ? 0.008 : 0.006;   // 少し後ろに乗る
+    // フレーズ（息継ぎから息継ぎまで）ごとに息の山を作る: 入りは控えめ、中ほどで膨らみ、終わりは抜く
+    let ps = 0;
+    notes.forEach((n, i) => { if (i === 0 || !adjacent(notes[i - 1], n)) ps = i; n.ps = ps; });
+    notes.forEach((n, i) => { let e = i; while (e + 1 < notes.length && notes[e + 1].ps === n.ps) e++; n.pn = e - n.ps + 1; n.pk = i - n.ps; });
     notes.forEach((n, i) => {
       const prev = notes[i - 1], next = notes[i + 1], m = n.notes[0], has = c => n.mods.includes(c);
       const stac = has("'"), prevStac = prev && prev.mods.includes("'");
       const gapBefore = !adjacent(prev, n) || prevStac, gapAfter = !adjacent(n, next);
+      const arc = n.pn >= 3 ? 0.07 * Math.sin(Math.PI * (n.pk + 0.5) / n.pn) - 0.035 - (n.pk === n.pn - 1 ? 0.03 : 0) : 0;
       const ob = offbeat(n.pos), fast = n.dur < 0.4, same = prev && prev.notes[0] === m;
-      let vel = n.dyn + (has('>') ? 0.14 : 0) + (ob && n.dur <= 0.5 ? 0.04 : 0) + (m - (lead === 'flute' ? 80 : lead === 'trumpet' ? 67 : 62)) * 0.004 + (lrnd() - 0.5) * 0.05;
+      let vel = n.dyn + arc + (has('>') ? 0.14 : 0) + (ob && n.dur <= 0.5 ? 0.04 : 0) + (m - (lead === 'flute' ? 80 : lead === 'soprano' ? 74 : lead === 'trumpet' ? 67 : 62)) * 0.004 + (lrnd() - 0.5) * 0.05;
       if (prev && next && !gapBefore && m > prev.notes[0] && m > next.notes[0]) vel += 0.05;
       if (fast) vel -= 0.04;
       if (has('?')) vel *= 0.5;

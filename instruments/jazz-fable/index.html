@@ -3,24 +3,6 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-2YMCH5GKYT"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-2YMCH5GKYT');
-</script>
-
-<meta property="og:title" content="Waveguide Blues">
-<meta property="og:description" content="Fable 5.2での物理モデリングと作曲">
-<meta property="og:image" content="https://kishida.github.io/webdemos/instruments/jazz-fable/ogp.png">
-<meta property="og:url" content="https://kishida.github.io/webdemos/instruments/jazz-fable/index.html"/>
-<meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:site" content="@kis"/>
-
 <title>Waveguide Blues</title>
 <style>
   :root { --bg:#0d0b0a; --panel:#17130f; --line:#2c241c; --ink:#efe6d8; --dim:#8f8272; --sax:#f2b24a; --pno:#e9e2d2; --bass:#c9784a; --serif: Georgia, "Yu Mincho", "Hiragino Mincho ProN", serif; }
@@ -83,6 +65,7 @@
   <div class="note">
     <b>リード楽器</b>は演奏中でも差し替えられる。テーマは共通で、ソロと奏法は楽器ごとに別の譜面（サックスは中音域のビバップ、トランペットは同音連打と倍音のアルペジオからハイ C へ、フルートは 1 オクターブ上のレガートと走句）。<br>
     <b>サックス</b>: 息の圧力と歌口内圧の差で開閉するリード（ベルヌーイ流 + リードの共振 + 叩き）を、円錐管を表す長短 2 本の導波路に接合。
+    <b>ソプラノサックス</b>: テナーと同じ音源を、管を半分の長さにして 1 オクターブ上で吹く。
     <b>トランペット</b>: trumpet-fable の音源（質量-バネの唇 + 管 + ベル。運指と倍音で音高を選ぶ）。
     <b>フルート</b>: 両端が開いた管（全部の倍音が共鳴する）を、歌口のエッジに当たる息のジェットで鳴らす。ジェットの揺れは半周期遅れて管へ吹き込まれ、エッジからのずれが偶数倍音を作る。<br>
     <b>ピアノ</b>: piano-fable のエンジンをそのまま使用。<b>ベース</b>: mozart-fable の弦モデルをコントラバスのピチカートに置き換えたもの。<br>
@@ -90,15 +73,15 @@
   </div>
 </main>
 
-<script src="engine/piano.js?v=18"></script>
-<script src="engine/sax.js?v=18"></script>
-<script src="engine/brass.js?v=18"></script>
-<script src="engine/flute.js?v=18"></script>
-<script src="engine/trumpet-cal.js?v=18"></script>
-<script src="engine/lead.js?v=18"></script>
-<script src="engine/bass.js?v=18"></script>
-<script src="engine/trio.js?v=18"></script>
-<script src="score.js?v=18"></script>
+<script src="engine/piano.js?v=22"></script>
+<script src="engine/sax.js?v=22"></script>
+<script src="engine/brass.js?v=22"></script>
+<script src="engine/flute.js?v=22"></script>
+<script src="engine/trumpet-cal.js?v=22"></script>
+<script src="engine/lead.js?v=22"></script>
+<script src="engine/bass.js?v=22"></script>
+<script src="engine/trio.js?v=22"></script>
+<script src="score.js?v=22"></script>
 <script>
 'use strict';
 const SONGS = {}; const songOf = k => SONGS[k] || (SONGS[k] = buildSong(k));
