@@ -55,7 +55,7 @@ function voiceEngineFactory() {
   // 調音位置（声門からの距離の割合）
   const PLACES = { lab: 1.0, alv: 0.87, pal: 0.79, vel: 0.62 };
   const PLACE_NAMES = ['lab', 'alv', 'pal', 'vel'];
-  const PARAMS = ['pitch', 'ps', 'abd', 'velum', 'vib', 'breath', 'gLab', 'gAlv', 'gPal', 'gVel', 'cLab', 'cAlv', 'cPal', 'cVel', 'air'];
+  const PARAMS = ['pitch', 'ps', 'abd', 'velum', 'vib', 'breath', 'gLab', 'gAlv', 'gPal', 'gVel', 'cLab', 'cAlv', 'cPal', 'cVel', 'air', 'nz', 'bmax', 'ng', 'nlp', 'reg'];
   const PI_ = {}; PARAMS.forEach((n, i) => PI_[n] = i);
 
   // 声の種類: 体の寸法だけが違う（声道の長さ、声帯の長さ・質量）。式は同じ。
@@ -89,7 +89,9 @@ function voiceEngineFactory() {
       this.jR = new Float64Array(N + 1); this.jL = new Float64Array(N + 1);
       this.k = new Float64Array(N); this.kT = new Float64Array(N); this.dk = new Float64Array(N);
       this.vA0 = new Float64Array(N); this.vA1 = new Float64Array(N); this.vCur = new Float64Array(N);
-      this.shapes = {}; for (const v in VOWELS) this.shapes[v] = VOWELS[v].map(o => ({ f1: o.f1 * 0.150 / len, s: sampleShape(o.pts, N, new Float64Array(N)) }));
+      // 母音の形の表: 既定のもの（15 cm の管で合わせた）か、録音した人の母音に合わせたもの（opts.vowels, その長さ opts.vowelsLen）
+      const VT = opts.vowels || VOWELS, vLen = opts.vowels ? (opts.vowelsLen || len) : 0.150; this.personal = !!opts.vowels;
+      this.shapes = {}; for (const v in VT) this.shapes[v] = VT[v].map(o => ({ f1: o.f1 * vLen / len, s: sampleShape(o.pts, N, new Float64Array(N)) }));
       this.f1Margin = opts.f1Margin || 1.3; this.freeze = false;
       this.vCur.set(this.shapes.x[0].s); this.vA0.set(this.vCur); this.vA1.set(this.vCur); this.vT = 1; this.vD = 1; this.vowel = 'x';
       this.fade = opts.fade || 0.9988;
@@ -110,11 +112,12 @@ function voiceEngineFactory() {
       const nl = sampleShape(NOSE, M, new Float64Array(M));
       for (let i = 0; i < M; i++) this.nA[i] = Math.exp(nl[i]);
       for (let i = 1; i < M; i++) this.nk[i] = (this.nA[i - 1] - this.nA[i]) / (this.nA[i - 1] + this.nA[i]);
-      this.nFade = 0.997;
+      this.nFade = opts.nFade || 0.991;
       this.J = Math.round(0.53 * N); this.tl = 1; this.tr = 1; this.tn = 0;
       this.lipLp = 0; this.noseLp = 0; this.lipA = 0.5; this.lipG = 0.995; this.Uprev = 0;
       const an = Math.sqrt(this.nA[M - 1] / PI); this.noseAl = 1 - Math.exp(-2 * PI * Math.min(0.3 * fs2, C / (2 * PI * an)) / fs2);
       this.yNose = this.nA[M - 1] / (RHO * C);
+      this.nz1 = 0; this.nz2 = 0; this.noseGain = opts.noseGain === undefined ? 0.8 : opts.noseGain; this.nLpA = 1 - Math.exp(-2 * PI * (opts.noseLp || 500) / fs2);
 
       // 声帯（Steinecke–Herzel, SI 単位）
       const f = opts.fold || {};
@@ -124,6 +127,7 @@ function voiceEngineFactory() {
       this.d1 = f.d1 || 0.25e-2; this.d2 = f.d2 || 0.05e-2; this.lg = f.lg || 1.4e-2;
       this.aScale = f.aScale || 1; this.fBase = f.fBase || 135; this.qa = f.qa === undefined ? 1.5 : f.qa;       // Q=1 のときのおよその基本周波数
       this.x1 = 0; this.x2 = 0; this.v1 = 0; this.v2 = 0;
+      this.regK = Object.assign({ mass: 0.35, thin: 0, kc: 0, damp: 0, f1: 1, cq0: 0.30, cqM: 0.165, cqE: 0.13, op0: 0.12, op1: 0.2, rate: 0.02e-4, max: 0.12e-4, min: 0.08e-4 }, opts.reg || {}); this._ld1 = this.lg * this.d1; this.gap = 0; this.aLo = 1; this.aHi = 0; this.opn = 0; this.cqN = 0; this.cq = 0; this._kcx = 1;
       this.Q = 1; this.corr = 1; this.pitchFb = opts.pitchFb === undefined ? 0.25 : opts.pitchFb;
       this.xm = 0; this.xPrev = 0; this.cyc = 0; this.fMeas = 0; this.fTarget = 0; this.voiced = 0; this.lastCycAge = 0;
       this.Ug = 0; this.ga = 0; this.inj = 0;
@@ -135,7 +139,7 @@ function voiceEngineFactory() {
       const P = PARAMS.length;
       this.cur = new Float64Array(P); this.from = new Float64Array(P); this.to = new Float64Array(P);
       this.rt = new Float64Array(P); this.rd = new Float64Array(P);
-      this.set('pitch', 60); this.set('ps', 0); this.set('abd', 0.05e-4); this.set('velum', 0); this.set('vib', 0); this.set('breath', 0.01e-4); this.set('air', 1);
+      this.set('pitch', 60); this.set('ps', 0); this.set('abd', 0.05e-4); this.set('velum', 0); this.set('vib', 0); this.set('breath', 0.01e-4); this.set('air', 1); this.set('nz', 1); this.set('bmax', 1); this.set('reg', 0); this.set('ng', 0); this.ngG = 1; this.ngV = 0; this.ngVf = 0; this.ngN = 0; this.ngPrev = 0; this.ngL = 0; this.nlp0 = opts.noseLp || 500; this.nlpHz = this.nlp0; this.set('nlp', this.nlp0); this.smp = [];
       this.vibPh = 0; this.vibRate = 5.4; this.drift = 0; this.driftT = 0; this.flutter = 2.5; // cent
       this.stepCount = 0; this.dec = 0;
       this.gain = opts.gain || 0.11;
@@ -162,12 +166,20 @@ function voiceEngineFactory() {
     get(name) { return this.cur[PI_[name]]; }
     // 母音の形へ d 秒で移る。midi を渡すと、基本周波数が第 1 フォルマントを追い越さないように
     // 口を開いた変種へ寄せる（歌手のフォルマント同調。F1 < f0 では声帯が声道に負けて鳴らなくなる）
-    setVowel(v, d, midi) {
+    // mix: いまの形から目標の形へどこまで寄るか（半母音は「い」「う」まで寄り切らない）。省略で 1
+    setVowel(v, d, midi, mix) {
+      this.setVowel1(v, d, midi);
+      if (mix !== undefined && mix < 1 && this.shapes[v]) { const o = this.vA1, a = this.vA0; for (let i = 0; i < this.N; i++) o[i] = a[i] + (o[i] - a[i]) * mix; }
+    }
+    setVowel1(v, d, midi) {
       const vs = this.shapes[v]; if (!vs) return;
       this.vowel = v; this.vA0.set(this.vCur); this.vT = 0; this.vD = Math.max(1e-4, d || 0.06);
-      const need = midi ? this.f1Margin * 440 * Math.pow(2, (midi - 69) / 12) : 0;
+      const need = midi ? this.f1Margin * (1 + this.regK.f1 * (this.regHint !== undefined ? this.regHint : this.to[19])) * 440 * Math.pow(2, (midi - 69) / 12) : 0; // F1NOTE
       let j = 0; while (j < vs.length - 2 && need > vs[j + 1].f1) j++;
       if (vs.length === 1 || need <= vs[0].f1) { this.vA1.set(vs[0].s); return; }
+      // 用意した中でいちばん開いた形でも足りないほど高い音: 「あ」の形へ寄せる（口をさらに開ける。母音はあいまいになるが声は出る）
+      const top = vs[vs.length - 1], av = this.shapes.a && this.shapes.a[this.shapes.a.length - 1];
+      if (need > top.f1 && av && av.f1 > top.f1 && v !== 'a') { let t = (need - top.f1) / (av.f1 - top.f1); if (t > 1) t = 1; const o = this.vA1; for (let i = 0; i < this.N; i++) o[i] = top.s[i] + (av.s[i] - top.s[i]) * t; return; }
       let t = (need - vs[j].f1) / (vs[j + 1].f1 - vs[j].f1); if (t > 1) t = 1; if (t < 0) t = 0;
       const a = vs[j].s, b = vs[j + 1].s, o = this.vA1; for (let i = 0; i < this.N; i++) o[i] = a[i] + (b[i] - a[i]) * t;
     }
@@ -177,9 +189,20 @@ function voiceEngineFactory() {
     release(place, d) { const n = place[0].toUpperCase() + place.slice(1); this.ramp('g' + n, 0, d); }
     reset() {
       this.R.fill(0); this.L.fill(0); this.nR.fill(0); this.nL.fill(0); this.x1 = this.x2 = this.v1 = this.v2 = 0;
-      this.lipLp = this.noseLp = this.Uprev = 0; this.corr = 1; this.voiced = 0;
+      this.lipLp = this.noseLp = this.Uprev = 0; this.nz1 = this.nz2 = 0; this.corr = 1; this.voiced = 0;
       for (const n of ['gLab', 'gAlv', 'gPal', 'gVel', 'ps', 'velum', 'vib']) this.set(n, 0);
-      this.set('abd', 0.05e-4); this.set('air', 1); this.setVowel('x', 0.01);
+      this.set('abd', 0.05e-4); this.set('air', 1); this.set('nz', 1); this.set('bmax', 1); this.set('ng', 0); this.ngG = 1; this.ngN = 0; this.ngPrev = 0; this.ngL = 0; this.set('nlp', this.nlp0); this.smp.length = 0; this.setVowel('x', 0.01);
+    }
+    // 録音した子音を重ねる。data は「母音の大きさ = 1」にそろえた波形、skip は頭を飛ばすサンプル数
+    playSample(data, gain, skip, rate) { this.smp.push({ d: data, p: skip || 0, g: gain, r: rate || 1, f: 0, fn: skip > 0 ? Math.round(this.fs * 0.004) : 0 }); }
+    sampleOut() {
+      let s = 0; const a = this.smp;
+      for (let q = a.length - 1; q >= 0; q--) {
+        const o = a[q], i = o.p | 0; if (i >= o.d.length - 1) { a.splice(q, 1); continue; }
+        let v = o.d[i] + (o.d[i + 1] - o.d[i]) * (o.p - i); if (o.f < o.fn) v *= o.f++ / o.fn;
+        s += v * o.g; o.p += o.r;
+      }
+      return s;
     }
     rand() { let s = this.seed; s ^= s << 13; s ^= s >>> 17; s ^= s << 5; this.seed = s; return (s >>> 0) / 2147483648 - 1; }
 
@@ -252,7 +275,7 @@ function voiceEngineFactory() {
         // 音の変わり目と歌い出しは音程が動いて当然なので、落ち着くまで判定しない
         if (!this.voiced || this.rt[0] < this.rd[0]) this.bHold = 0.09; else if (this.bHold > 0) this.bHold -= tick;
         const strain = want && this.voiced && this.bHold <= 0 && this.bErr > 60;
-        let cap = this.bCap[vw] || (narrow ? Math.min(1, (high ? 0.015e-4 : 0.03e-4) / ck) : 1); // 口の狭い母音は初めから控えめに、高い音ではさらに控えめに
+        let cap = this.bCap[vw] || (narrow ? Math.min(1, (high ? 0.012e-4 : 0.018e-4) / ck) : 1); // 口の狭い母音は初めから控えめに、高い音ではさらに控えめに
         if ((want && !this.voiced) || strain) {
           this.bWait += tick;
           if (this.bWait > (strain ? 0.05 : 0.04)) { this.bLim = Math.max(floor, this.bLim - tick / 0.06); this.bCut = true; }
@@ -269,14 +292,20 @@ function voiceEngineFactory() {
       this.driftT += (this.rand() - this.driftT) * 0.004; this.drift += (this.driftT - this.drift) * 0.02;
       const cents = cur[4] * Math.sin(this.vibPh) + this.flutter * 40 * this.drift;
       const ft = this.fTarget = 440 * Math.pow(2, (cur[0] + cents / 100 - 69) / 12);
+      // 声区（reg: 0 = 地声, 0.5 = ミドル, 1 = 裏声）: 裏声に近づくほど、声帯の振動する部分が薄く軽くなり（表面の粘膜だけがふるえる）、
+      // 左右の声帯はわずかに離れる。軽いぶん、同じ高さを弱い張りで出せる。
+      const rg = cur[19], RG = this.regK, mf = 1 - RG.mass * rg;
+      this._ld1 = this.lg * this.d1 * (1 - RG.thin * rg); this._kcx = 1 + RG.kc * rg;
+      if (rg < 0.01) this.gap = 0; else if (!this.voiced && cur[1] > 300) this.gap *= 0.98; // 鳴りやんだら開きを戻す（閉じ気味にしないと鳴り出せない）
       this.Q = ft / this.fBase * this.corr;
       const Q = this.Q, dt = this.dt;
       // 張り方: 質量 ∝ Q^-qa, ばね ∝ Q^(2-qa), 減衰 ∝ Q^(1-qa)（qa=1 は張力のみ、qa=2 は伸びて軽くなるのみ）
       const qm = Math.pow(Q, this.qa), qk = Q * Q / qm, qr = Q / qm;
-      this._m1 = dt * qm / this.m1; this._m2 = dt * qm / this.m2;
-      this._k1 = this.k1 * qk; this._k2 = this.k2 * qk; this._kc = this.kc * qk;
-      this._r1 = this.r1 * qr; this._r2 = this.r2 * qr;
+      this._m1 = dt * qm / (this.m1 * mf); this._m2 = dt * qm / (this.m2 * mf);
+      this._k1 = this.k1 * qk; this._k2 = this.k2 * qk; this._kc = this.kc * qk * this._kcx;
+      { const rx = 1 + RG.damp * rg; this._r1 = this.r1 * qr * rx; this._r2 = this.r2 * qr * rx; }
       this.lastCycAge += tick; if (this.lastCycAge > 0.03) this.voiced = 0;
+
     }
 
     // outL/outR の [off, off+cnt) を埋める
@@ -291,10 +320,10 @@ function voiceEngineFactory() {
         for (let h = 0; h < 2; h++) {
           if (this.stepCount === 0) { this.x1 = x1; this.control(false); }
           if (++this.stepCount >= this.STEPS) this.stepCount = 0;
-          const ps = cur[1], a0 = cur[2] * this.aScale, chink = cur[5] * this.aScale * this.bLim;
+          const ps = cur[1], a0 = (cur[2] + this.gap) * this.aScale, chink = cur[5] * this.aScale * (this.bLim < cur[16] ? this.bLim : cur[16]); // bmax: 濁音の閉鎖の間など、歌い手が声帯を寄せて息まじりを抑える
           // ---- 声門 ----
           const a1 = a0 + two_l * x1, a2 = a0 + two_l * x2;
-          const amin = a1 < a2 ? a1 : a2;
+          const amin = a1 < a2 ? a1 : a2; if (amin <= 0) this.cqN++; if (amin < this.aLo) this.aLo = amin; if (amin > this.aHi) this.aHi = amin;
           const Af = (amin > 0 ? amin : 0) + chink;
           const L0 = L[0], Z0 = this.Z0;
           const D = ps - 2 * L0, aD = D < 0 ? -D : D;
@@ -304,7 +333,7 @@ function voiceEngineFactory() {
           let P1 = 0, P2 = 0;
           if (a1 > 0) { if (amin > 0) { const r = amin / a1; P1 = ps - dP * r * r; } else P1 = ps; }
           if (a2 > 0) P2 = psup;
-          let F1 = ld1 * P1 - this._k1 * x1 - this._r1 * v1 - this._kc * (x1 - x2);
+          let F1 = this._ld1 * P1 - this._k1 * x1 - this._r1 * v1 - this._kc * (x1 - x2);
           let F2 = ld2 * P2 - this._k2 * x2 - this._r2 * v2 - this._kc * (x2 - x1);
           if (a1 < 0) F1 -= 3 * this._k1 * (a1 / two_l);
           if (a2 < 0) F2 -= 3 * this._k2 * (a2 / two_l);
@@ -316,11 +345,18 @@ function voiceEngineFactory() {
           if (xc > 0 && this.xPrev <= 0) {
             const T = this.cyc - xc / (xc - this.xPrev); this.cyc = xc / (xc - this.xPrev);
             const fm = fs2 / T, ft = this.fTarget;
+            { // 声区の開き: 1 周期のうち声門が閉じていた時間の割合を測り、それが声区ごとの目標（地声 30% → 裏声 3%）になるよう、声帯の離し具合を少しずつ変える。
+              // （二質量モデルは「毎回しっかり閉じる」か「鳴らない」かに分かれやすく、決まった開きでは裏声の状態を保てない。歌い手も耳と感覚でこの釣り合いを保っている）
+              const cq = this.cq = this.cqN / T, rg = cur[19], RG = this.regK; this.cqN = 0;
+              if (rg >= 0.01 && fm > ft * 0.6 && fm < ft * 1.6) { const opn = this.opn = cq <= 0 && this.aHi > 0 ? this.aLo / this.aHi : 0; this.aLo = 1; this.aHi = 0; /* 目標: 地声〜ミドルは「閉じている割合」（cq0 → cqM）。裏声は声帯が触れない鳴り方にして、「いちばん狭い瞬間の開き ÷ いちばん広い瞬間の開き」（opn）を op0〜op1 に保つ。
+                 触れるか触れないかの境目（閉じている割合 数%）を目標にすると、ビブラートのたびに「強くぶつかる ⇄ 触れない」を行き来して音量が波打つので、境目は飛び越す */ const u = rg * 2, tgt = u <= 1 ? RG.cq0 + (RG.cqM - RG.cq0) * u : u < 1.5 ? RG.cqM + (RG.cqE - RG.cqM) * (u - 1) * 2 : -(RG.op0 + (RG.op1 - RG.op0) * (u - 1.5) * 2); let g = this.gap + (opn > 0.6 ? 0 : RG.rate * (cq - opn - tgt)); /* opn が大きい = ほとんど振動していない（子音で閉じている間など）: 測定に意味がないので動かさない */ const mx = RG.max * rg, mn = -RG.min * rg; /* 下限は負: 閉じが足りないときは声帯を寄せる（0 で止めると、閉じない鳴り方に落ちたまま戻れない） */ this.gap = g < mn ? mn : g > mx ? mx : g; } }
             if (fm > ft * 0.6 && fm < ft * 1.6 && ps > 100) {
               this.fMeas = fm; this.voiced = 1; this.lastCycAge = 0;
-              let c = this.corr * Math.exp(this.pitchFb * Math.log(ft / fm));
+              // ずれが大きいときは強く直す（声道に引きこまれていると、張りを変えても音程が動きにくい）
+              const lr = Math.log(ft / fm), ac = lr < 0 ? -lr : lr;
+              let c = this.corr * Math.exp(this.pitchFb * (ac > 0.15 ? 1 : 1 + 2 * (ac > 0.045 ? 1 : ac / 0.045)) * lr); // 2 半音を超えるずれ（鳴り始めの測り違いなど）は強めない
               this.corr = c < 0.5 ? 0.5 : c > 2.5 ? 2.5 : c;
-            }
+            } else if (ps > 100 && fm >= ft * 1.6 && fm < ft * 5 && this.corr > 0.6) this.corr *= 0.97; // 目標よりずっと高い所で鳴っている（張りすぎたまま声道の引きこみが外れた）: 張りをゆるめて戻る
           }
           this.xPrev = xc;
           // 気息雑音（声門のジェット）
@@ -329,8 +365,8 @@ function voiceEngineFactory() {
           // 声門を大きく開くと（息継ぎ、歌い終わりの息）流れ全体が乱流になり、息の音がはっきり聞こえる
           const wide = cur[2] > 0.36e-4 ? 1 + this.wideGain * (cur[2] - 0.36e-4) / 0.1e-4 : 1;
           // air（歌い終わりの息）は、もともと息まじりの強い声では足さない: 息の量はすでに十分ある
-          const bs = this.aspGain / 0.012, air = 1 + (cur[14] - 1) / (bs * bs * bs);
-          const pn = nz * this.aspGain * wide * air * jet * Math.sqrt(Af < 0.3e-4 ? Af / 0.1e-4 : 3);
+          const bs = Math.max(0.1, this.aspGain / 0.012), air = 1 + (cur[14] - 1) / (bs * bs * bs);
+          const pn = nz * cur[15] * this.aspGain * wide * air * jet * Math.sqrt(Af < 0.3e-4 ? Af / 0.1e-4 : 3);
           // ---- 声道 ----
           jR[0] = L0 + Z0 * U + pn + this.inj; this.inj = 0;
           for (let i = 1; i < N; i++) { const ki = k[i] += dk[i]; const w2 = ki * (R[i - 1] - L[i]); jR[i] = R[i - 1] + w2; jL[i] = L[i] + w2; }
@@ -346,12 +382,20 @@ function voiceEngineFactory() {
           jL[N] = -this.lipG * lp;
           let Uo = (R[N - 1] - jL[N]) * this.yLip;
           for (let i = 0; i < N; i++) { R[i] = jR[i] * fade; L[i] = jL[i + 1] * fade; }
-          if (this.fricAmp > 0) { const f = this.rand() * this.fricAmp; R[this.fricPos] += f; if (this.fricPos > 0) L[this.fricPos - 1] -= f; }
+          if (this.fricAmp > 0) { const f = this.rand() * this.fricAmp * cur[15]; R[this.fricPos] += f; if (this.fricPos > 0) L[this.fricPos - 1] -= f; }
           // ---- 鼻腔 ----
           for (let i = 1; i < M; i++) { const w2 = nk[i] * (nR[i - 1] - nL[i]); njR[i] = nR[i - 1] + w2; njL[i] = nL[i] + w2; }
           const nlp = this.noseLp += (nR[M - 1] - this.noseLp) * this.noseAl;
           njL[M] = -0.95 * nlp;
-          Uo += (nR[M - 1] - njL[M]) * this.yNose;
+          // 鼻腔は粘膜のひだと副鼻腔で高い音をよく吸う: 鼻から出る流れに 2 段の低域通過をかける（鼻音が「こもった低い音」になる）
+          if (cur[18] !== this.nlpHz) { this.nlpHz = cur[18]; this.nLpA = 1 - Math.exp(-2 * PI * this.nlpHz / fs2); }
+          const un = (nR[M - 1] - njL[M]) * this.yNose; this.nz1 += (un - this.nz1) * this.nLpA; this.nz2 += (this.nz1 - this.nz2) * this.nLpA; { // 鼻音の大きさ: 口を閉じた鼻音（ng > 0）の間は、鼻から出る音が「直前の母音の大きさ × ng」になるように大きさを自動で合わせる。
+            // （鼻腔の共鳴を粗く作っているので、そのままでは前後の母音や音の高さによって鼻音の大きさが 10 dB 以上ばらつく）
+            const un2 = this.nz2 * this.noseGain, dn = (un2 - this.ngPrev) * fs2, dl = (Uo - this.ngL) * fs2, ng = cur[17]; this.ngPrev = un2; this.ngL = Uo;
+            { const d2 = dn * dn; this.ngN += (d2 - this.ngN) * (d2 > this.ngN ? 0.01 : 0.0012); }
+            if (ng > 0) { if (this.ngV > 0) { let g = ng * Math.sqrt(this.ngV / (this.ngN + 1e-30)); if (g > 8) g = 8; else if (g < 0.25) g = 0.25; this.ngG += (g - this.ngG) * 0.002; } }
+            else { this.ngVf += (dl * dl - this.ngVf) * 0.0004; this.ngV = this.ngVf > this.ngV ? this.ngVf : this.ngV * 0.999998; this.ngG += (1 - this.ngG) * 0.0004; }
+            Uo += un2 * this.ngG; }
           for (let i = 0; i < M; i++) { nR[i] = njR[i] * nFade; nL[i] = njL[i + 1] * nFade; }
           // ---- 放射 ----
           acc += (Uo - this.Uprev) * fs2; this.Uprev = Uo;
@@ -359,13 +403,13 @@ function voiceEngineFactory() {
         }
         const ri = this.ringI; this.ugRing[ri] = this.Ug; this.gaRing[ri] = this.ga; this.x1Ring[ri] = x1; this.x2Ring[ri] = x2; this.ringI = (ri + 1) & (this.ringN - 1);
         let s = acc * 0.5 * this.gain;
-        // 高域の損失（管壁の粘性・熱伝導、やわらかい壁、声帯のやわらかい閉じ方）をまとめた 2 段の低域通過
         this.t1 += (s - this.t1) * this.tA1; this.t2 += (this.t1 - this.t2) * this.tA2; s = this.t2 * 1.5;
         const y = s - this.hp[0] + 0.997 * this.hp[1]; this.hp[0] = s; this.hp[1] = y; s = y;
         // マイクの後のコンプレッサ（母音による音量差をならす）
         const ab = s < 0 ? -s : s; this.env += (ab - this.env) * (ab > this.env ? this.cAtk : this.cRel);
         if (this.env > 0.06) s *= Math.pow(0.06 / this.env, 0.55);
         s *= 1.6;
+        if (this.smp.length) s += this.sampleOut(); // 録音した子音（残響の手前で混ぜる）
         // 残響
         let sum = 0, vL = 0, vR = 0; const rb = this.rvBuf, ri2 = this.rvIdx, rl = this.rvLp, ro = this.rvO, rg = this.rvG;
         for (let q = 0; q < 8; q++) { const o = rb[q][ri2[q]]; const l = rl[q] = o + (rl[q] - o) * 0.3; const v = l * rg[q]; ro[q] = v; sum += v; if (q & 1) vR += (q & 2) ? -o : o; else vL += (q & 2) ? -o : o; }

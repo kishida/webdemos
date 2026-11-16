@@ -60,9 +60,27 @@
   const ADD = 0.05e-4, OPEN = 0.30e-4;
   // フレーズ終わりの消え方（声 → 息まじり → 息）
   const TAIL = { fo: 0.8, fo0: 0.1, abd: 0.1e-4, air: 12, psAt: 0.35, over: 0.15 };
+  // 鼻音（m・n）: gain = 鼻から出る音の大きさ（直前の母音に対する比）, lp = こもり具合（鼻から出る音に残す高さの上限 [Hz]）
+  const NAS = { gain: 0.5, lp: 500 };
+  if (typeof process !== 'undefined' && process.env && process.env.NAS) Object.assign(NAS, JSON.parse(process.env.NAS));
+  // ら行（はじき音）: 舌先が一瞬触れるときに残すすき間 [m²]
+  const TAP = { area: 0.12e-4 };
+  if (typeof process !== 'undefined' && process.env && process.env.TAP) Object.assign(TAP, JSON.parse(process.env.TAP));
+  // 濁音の破裂音（b・d・g）: velum = 閉じている間の軟口蓋の開き [m²]（鼻音は 0.7e-4）, pre = 閉じ始めの何秒前から開くか, back = 開放の何秒前に閉じ始めるか
+  const VB = { velum: 0.3e-4, velK: 1.2, pre: 0.01, back: 0.03, bmax: 0.25, rel: 0.045 }; // velK: 軟口蓋で閉じる g は鼻への口のすぐそばなので、大きめに開く（鼻濁音に近い）
+  if (typeof process !== 'undefined' && process.env && process.env.VB) Object.assign(VB, JSON.parse(process.env.VB));
+  // 半母音（y・w）の動き [秒]: lead = 音符の頭の何秒前から寄り始めるか, in = 寄る時間, hold = とどまる時間, out = 母音へ開く時間
+  const GL = { lead: 0.10, in: 0.05, hold: 0, out: 0.18, amt: 1 }; // amt: 「い」「う」の形へどこまで寄るか（1 = 寄り切る）
+  if (typeof process !== 'undefined' && process.env && process.env.GL) Object.assign(GL, JSON.parse(process.env.GL));
+  // 録音した子音の重ね方: align = 録音の声の始まりを音符の頭から何秒ずらすか, soft = 破裂音で残すすき間
+  const SMP = { align: 0, alignStop: 0.03, maxLead: 0.25, soft: 0.5e-4, nzBack: -0.01 };
+  if (typeof process !== 'undefined' && process.env && process.env.SMP) Object.assign(SMP, JSON.parse(process.env.SMP));
   if (typeof process !== 'undefined' && process.env && process.env.TAIL) Object.assign(TAIL, JSON.parse(process.env.TAIL));
 
-  function compileVoice(notes, ev, tr) {
+  // 鼻音・ら行・半母音の動きの既定値（合成音声の「あな」「あま」「あら」「あや」「あわ」に合わせたもの。録音があればその人の値で上書きする）
+  const SON0 = { n: { hold: 0.07, gain: 0.5, lp: 2400 }, m: { hold: 0.07, gain: 0.8, lp: 2400 }, r: { hold: 0.047, area: 0.22e-4 }, y: { amt: 0.9, out: 0.12 }, w: { amt: 0.73, out: 0.085 } };
+  function compileVoice(notes, ev, tr, smp, son) {
+    son = son || {};
     const R = (t, name, v, d) => ev.push([t, 10, name, v, d]);
     const VPS = { a: 0.8, o: 0.9, e: 0.92, i: 1.08, u: 1.08 }; // 母音ごとの息の強さ（開いた母音は軽く）
     const psFor = (m, dyn, v) => (880 + 30 * (m - tr - 55)) * dyn * (VPS[v] || 1);
@@ -70,31 +88,49 @@
       const n = notes[i], prev = notes[i - 1], next = notes[i + 1], t0 = n.t;
       const gapBefore = prev ? t0 - (prev.t + prev.d) : 9, gapAfter = next ? next.t - (t0 + n.d) : 9;
       const phraseStart = gapBefore > 0.12, phraseEnd = gapAfter > 0.12;
-      const vowel = n.syl === '-' ? null : n.syl.slice(-1), c = n.syl === '-' ? null : CONS[n.syl.slice(0, -1)];
-      let lead = 0.03; // 子音が始まるのは拍の何秒前か
+      const vowel = n.syl === '-' ? null : n.syl.slice(-1), c = n.syl === '-' ? null : CONS[n.syl.slice(0, -1)], sn = n.syl === '-' ? {} : Object.assign({}, SON0[n.syl.slice(0, -1)], son[n.syl.slice(0, -1)]); // sn: 録音に合わせた、その人の子音の動き（鼻音・ら行・半母音）
+      let lead = 0.03, gIn = GL.in, gOut = GL.out; // 子音が始まるのは拍の何秒前か
+      // 録音した子音があれば（無声の子音だけ）、息の雑音は録音に任せ、モデルは舌と声帯の動きだけを受け持つ
+      const sLead = c && c.pl && (c.vl || c.k !== 'nas' && c.k !== 'tap') && smp && smp[n.syl] !== undefined ? smp[n.syl] : -1, S = sLead >= 0; // 清音と濁音（鼻音・ら行は対象外）
+      let x = 0; // 録音の子音が長いとき、調音を早く始める分
+      if (S) {
+        const base = { stop: 0.085, fric: 0.14, aff: 0.14, h: 0.11 }[c.k];
+        const Lc = Math.min(sLead, SMP.maxLead, phraseStart ? 9 : prev.d * 0.6); // 前の音を食いすぎない
+        x = Math.max(0, Lc + 0.02 - base);
+        ev.push([t0 - Lc + (c.k === 'stop' ? SMP.alignStop : SMP.align), 20, n.syl, sLead - Lc]);            // 録音の「声の始まり」を音符の頭に合わせる
+        R(t0 - base - x - 0.035, 'nz', 0, 0.025); R(t0 + SMP.nzBack, 'nz', 1, 0.03); // その間、モデルの乱流と気息の雑音は消す
+      }
       if (c) {
         const pl = c.pl;
         if (c.k === 'stop') {
-          lead = 0.085; ev.push([t0 - 0.085, 12, pl, 0, 0.03]); ev.push([t0 - 0.014, 13, pl, 0.022]);
-          if (c.vl) { R(t0 - 0.09, 'abd', 0.22e-4, 0.035); R(t0 - 0.002, 'abd', ADD, 0.04); }
+          lead = 0.085 + x; ev.push([t0 - lead, 12, pl, S && c.vl ? SMP.soft : 0, 0.03]);
+          if (!c.vl) { R(t0 - lead - 0.03, 'bmax', VB.bmax, 0.03); R(t0 + 0.01, 'bmax', 1, 0.08); R(t0 - lead - VB.pre, 'velum', VB.velum * (pl === 'vel' ? VB.velK : 1), 0.03); R(t0 - VB.back, 'velum', 0, 0.02); } // 濁音: 閉じている間、軟口蓋をわずかにゆるめて息を鼻へ逃がす → 声帯が鳴り続け、低い「声の帯」が出る
+          // 録音を使うときは閉じ切らない（破裂が二重にならないように）
+          ev.push([t0 - 0.014, 13, pl, c.vl ? 0.022 : VB.rel]);
+          if (c.vl) { R(t0 - lead - 0.005, 'abd', 0.22e-4, 0.035); R(t0 - 0.002, 'abd', ADD, 0.04); }
         } else if (c.k === 'fric') {
-          lead = 0.14; ev.push([t0 - 0.14, 12, pl, c.a, 0.04]); ev.push([t0 - 0.022, 13, pl, 0.035]);
-          if (c.vl) { R(t0 - 0.15, 'abd', OPEN, 0.045); R(t0 - 0.04, 'abd', ADD, 0.045); } else { R(t0 - 0.14, 'abd', 0.09e-4, 0.04); R(t0 - 0.03, 'abd', ADD, 0.04); }
+          lead = 0.14 + x; ev.push([t0 - lead, 12, pl, c.a, 0.04]); ev.push([t0 - 0.022, 13, pl, 0.035]);
+          if (c.vl) { R(t0 - lead - 0.01, 'abd', OPEN, 0.045); R(t0 - 0.04, 'abd', ADD, 0.045); } else { R(t0 - 0.14, 'abd', 0.09e-4, 0.04); R(t0 - 0.03, 'abd', ADD, 0.04); }
         } else if (c.k === 'aff') {
-          lead = 0.14; ev.push([t0 - 0.14, 12, pl, 0, 0.03]); R(t0 - 0.075, 'c' + pl[0].toUpperCase() + pl.slice(1), c.a, 0.012); ev.push([t0 - 0.018, 13, pl, 0.03]);
-          if (c.vl) { R(t0 - 0.145, 'abd', OPEN, 0.04); R(t0 - 0.035, 'abd', ADD, 0.045); }
+          lead = 0.14 + x; ev.push([t0 - lead, 12, pl, S && c.vl ? c.a : 0, 0.03]); R(t0 - 0.075, 'c' + pl[0].toUpperCase() + pl.slice(1), c.a, 0.012); ev.push([t0 - 0.018, 13, pl, 0.03]);
+          if (c.vl) { R(t0 - lead - 0.005, 'abd', OPEN, 0.04); R(t0 - 0.035, 'abd', ADD, 0.045); }
         } else if (c.k === 'h') {
-          lead = 0.11; R(t0 - 0.11, 'abd', 0.34e-4, 0.045); R(t0 - 0.025, 'abd', ADD, 0.05);
+          lead = 0.11 + x; R(t0 - lead, 'abd', 0.34e-4, 0.045); R(t0 - 0.025, 'abd', ADD, 0.05);
         } else if (c.k === 'nas') {
-          lead = 0.10; R(t0 - 0.105, 'velum', 0.7e-4, 0.035); ev.push([t0 - 0.095, 12, pl, 0, 0.03]); ev.push([t0 - 0.012, 13, pl, 0.025]); R(t0 - 0.005, 'velum', 0, 0.045);
+          const dh = (sn.hold !== undefined ? sn.hold : 0.07) - 0.07; // 唇や舌で閉じている時間
+          lead = 0.085 + dh; R(t0 - 0.09 - dh, 'velum', sn.velum !== undefined ? sn.velum : 0.7e-4, 0.035); ev.push([t0 - 0.08 - dh, 12, pl, 0, 0.03]); ev.push([t0 - 0.012, 13, pl, 0.025]); R(t0 - 0.005, 'velum', 0, 0.045);
+          R(t0 - 0.055 - dh, 'ng', sn.gain !== undefined ? sn.gain : NAS.gain, 0); R(t0 - 0.012, 'ng', 0, 0); // 閉じている間、鼻から出る音の大きさを母音に対する比で保つ
+          R(t0 - 0.1 - dh, 'nlp', sn.lp !== undefined ? sn.lp : NAS.lp, 0.02); R(t0 + 0.04, 'nlp', 500, 0.05);
         } else if (c.k === 'tap') {
-          lead = 0.045; ev.push([t0 - 0.045, 12, pl, 0.02e-4, 0.018]); ev.push([t0 - 0.02, 13, pl, 0.022]);
+          const th = sn.hold !== undefined ? sn.hold : 0.025; // 舌先が触れている時間
+          lead = 0.02 + th; ev.push([t0 - lead, 12, pl, sn.area !== undefined ? sn.area : TAP.area, 0.018]); ev.push([t0 - 0.02, 13, pl, 0.022]);
+          R(t0 - lead - 0.015, 'nz', 0, 0.012); R(t0 - 0.004, 'nz', 1, 0.02); // ら行は舌先が一瞬はじくだけ: 摩擦の雑音は出ない
         } else if (c.k === 'gl') {
-          lead = 0.12; ev.push([t0 - 0.12, 11, c.v, 0.05, n.m]);
+          gIn = sn.in !== undefined ? sn.in : GL.in; gOut = sn.out !== undefined ? sn.out : GL.out; lead = GL.lead - GL.in + gIn; ev.push([t0 - lead, 11, c.v, gIn, n.m, sn.amt !== undefined ? sn.amt : GL.amt]);
         }
       }
       // 母音: 子音の間に舌は次の母音へ向かう（調音結合）
-      if (vowel) { if (c && c.k === 'gl') ev.push([t0 - 0.035, 11, vowel, 0.1, n.m]); else ev.push([t0 - Math.min(lead, 0.07), 11, vowel, 0.09, n.m]); }
+      if (vowel) { if (c && c.k === 'gl') ev.push([t0 - lead + gIn + GL.hold, 11, vowel, gOut, n.m]); else ev.push([t0 - Math.min(lead, 0.07), 11, vowel, 0.09, n.m]); }
       else ev.push([t0 - 0.03, 11, n.vowel, 0.08, n.m]); // 伸ばし: 音高に合わせて口の開きを直す
       // 音高
       if (phraseStart) R(t0 - lead - 0.12, 'pitch', n.m - 0.6, 0); // 下からすくい上げて入る
@@ -132,15 +168,15 @@
 
   // opt.voice: 'male'（ハ長調, G3–G4）/ 'female'（ト長調へ 7 半音上げ, D4–D5）
   function buildSong(opt) {
-    opt = opt || {}; const voiceType = opt.voice || 'male', tr = opt.transpose !== undefined ? opt.transpose : voiceType === 'female' ? 7 : 0;
+    opt = opt || {}; const voiceType = opt.voice || 'male', tr = (opt.transpose !== undefined ? opt.transpose : voiceType === 'female' ? 7 : 0) + (opt.shift || 0); // shift: 声道の長い人に合わせて下げる分（0 以下）
     const voice = [], piano = [], ped = [], bars = [];
     // テンポ（終わりで少しゆるめる）
-    const nb = SCORE.length, e8 = [];
-    for (let b = 0; b < nb; b++) for (let k = 0; k < 8; k++) { let f = 1; if (b >= nb - 5) f = 1 + 0.035 * ((b - (nb - 5)) * 8 + k) / 8; if (b >= nb - 2) f = 1.25; e8.push(E8 * f); }
+    const SC = opt.score || SCORE, nb = SC.length, e8 = []; // opt.score: 別の楽譜（子音を合わせるときの短い試し歌い）
+    for (let b = 0; b < nb; b++) for (let k = 0; k < 8; k++) { let f = 1; if (!opt.score && b >= nb - 5) f = 1 + 0.035 * ((b - (nb - 5)) * 8 + k) / 8; if (!opt.score && b >= nb - 2) f = 1.25; e8.push(E8 * f); }
     const T = [LEAD]; for (let i = 0; i < e8.length; i++) T.push(T[i] + e8[i]);
     const at = (bar, k) => { const i = bar * 8 + k, j = Math.floor(i); return j >= T.length - 1 ? T[T.length - 1] : T[j] + (T[j + 1] - T[j]) * (i - j); };
     let lastVowel = 'a';
-    SCORE.forEach(([ch, mel], b) => {
+    SC.forEach(([ch, mel], b) => {
       bars.push({ t: at(b, 0), chord: trName(ch.replace('|', ' ').replace('Cend', 'C'), tr) });
       // ---- 歌 ----
       let k = 0;
@@ -185,10 +221,10 @@
     const ev = [];
     for (const n of piano) { ev.push([n.t, 1, n.m, n.v]); ev.push([n.t + n.d, 0, n.m]); }
     for (const p of ped) ev.push([p.t, p.down ? 3 : 2]);
-    compileVoice(voice, ev, tr);
+    compileVoice(voice, ev, tr, opt.samples || null, opt.son || null);
     ev.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
     const dur = T[T.length - 1] + 4.5;
-    return { title: 'なみのかたち', voiceType, transpose: tr, key: PCN[tr % 12], bpm: BPM, dur, voice, piano, ped, bars, lines: LINES, events: ev };
+    return { title: 'なみのかたち', samples: opt.samples || null, voiceType, transpose: tr, key: PCN[((tr % 12) + 12) % 12], bpm: BPM, dur, voice, piano, ped, bars, lines: LINES, events: ev };
   }
 
   const api = { buildSong, CONS };

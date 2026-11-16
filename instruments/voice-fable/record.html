@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>自分の声を録音する — なみのかたち</title>
+<style>
+  :root { --bg: #080b14; --line: #1e2740; --ink: #e8ecf6; --dim: #7f8aa8; --voice: #ff8463; --air: #62d6ff; --ok: #8ef0b4; --bad: #ff6b81; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif; }
+  body { min-height: 100vh; background: radial-gradient(1200px 700px at 30% 0%, #141c36 0%, var(--bg) 60%); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 18px 20px 40px; }
+  header { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; margin-bottom: 14px; }
+  h1 { font-family: "Yu Mincho", "Hiragino Mincho ProN", serif; font-weight: 600; font-size: 28px; letter-spacing: .1em; margin: 0; }
+  h1 small { display: block; font-family: "Yu Gothic UI", sans-serif; font-size: 12.5px; letter-spacing: .06em; color: var(--dim); font-weight: 400; margin-top: 6px; }
+  header a { margin-left: auto; color: var(--air); text-decoration: none; font-size: 13px; }
+  .panel { background: linear-gradient(180deg, #111830cc, #0b101dcc); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 14px; }
+  .panel h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: .14em; color: var(--dim); font-weight: 500; }
+  ol.guide { margin: 0; padding-left: 1.4em; font-size: 13.5px; line-height: 1.9; color: #c5cde4; }
+  ol.guide b { color: var(--ink); } ol.guide i { font-style: normal; color: var(--voice); }
+  button { font-family: inherit; }
+  .btn { appearance: none; cursor: pointer; border: 1px solid var(--line); background: #131a2e; color: var(--ink); border-radius: 999px; font-size: 13px; padding: 8px 16px; }
+  .btn:hover { border-color: var(--air); } .btn:disabled { opacity: .4; cursor: default; }
+  .btn.main { background: linear-gradient(145deg, #ffa07f, #ff6a4a); color: #1b0d08; border: 0; font-weight: 600; }
+  .mic { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--dim); }
+  .meter { flex: 1; min-width: 160px; height: 10px; background: #1a2238; border-radius: 5px; overflow: hidden; position: relative; }
+  .meter i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, var(--ok), #f3cd7a 75%, var(--bad)); }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tabs button { appearance: none; cursor: pointer; border: 1px solid var(--line); background: #131a2e; color: var(--dim); border-radius: 10px; padding: 8px 14px; font-size: 13px; text-align: left; }
+  .tabs button.on { border-color: var(--voice); color: var(--ink); }
+  .tabs button span { display: block; font-size: 11px; color: var(--dim); margin-top: 2px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+  .card { appearance: none; cursor: pointer; border: 1px solid var(--line); background: #0f1526; color: var(--ink); border-radius: 12px; padding: 10px 6px 8px; text-align: center; }
+  .card b { display: block; font-family: "Yu Mincho", serif; font-size: 30px; font-weight: 500; line-height: 1.2; }
+  .card span { display: block; font-size: 10.5px; color: var(--dim); margin-top: 4px; min-height: 14px; }
+  .card.sel { border-color: var(--voice); box-shadow: 0 0 0 1px var(--voice) inset; }
+  .card.ok span { color: var(--ok); } .card.bad span { color: var(--bad); }
+  .stage { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 18px; align-items: center; }
+  .say { text-align: center; }
+  .say b { display: block; font-family: "Yu Mincho", serif; font-size: 84px; font-weight: 500; line-height: 1.1; }
+  .say span { font-size: 12.5px; color: var(--dim); }
+  .say.rec b { color: var(--voice); text-shadow: 0 0 30px #ff846388; }
+  canvas { display: block; width: 100%; height: 150px; background: #070a13; border-radius: 10px; }
+  .res { font-size: 13px; margin: 8px 0 10px; min-height: 20px; }
+  .res.ok { color: var(--ok); } .res.bad { color: var(--bad); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .legend { font-size: 11px; color: var(--dim); margin-left: auto; } .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 4px 0 10px; vertical-align: -1px; }
+  .foot { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 12.5px; color: var(--dim); }
+  .foot .sp { margin-left: auto; }
+  .fitbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 12px; font-size: 12.5px; color: var(--dim); }
+  .fitbar .meter { max-width: 260px; }
+  .fitbar b { color: var(--ink); font-weight: 600; }
+  .test { background: #3a2a10; border: 1px solid #6b4d1a; color: #f3cd7a; border-radius: 10px; padding: 8px 14px; font-size: 12.5px; margin-bottom: 14px; }
+  @media (max-width: 700px) { .stage { grid-template-columns: 1fr; } .say b { font-size: 60px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>自分の声を録音する<small>子音は「息の音」を録音に置き換え、母音は共鳴を、な・ま・ら・や・わ行は動きの長さと深さを測ってモデルを合わせます。歌うのは物理モデルのままです。</small></h1>
+    <a href="index.html">← デモに戻る</a>
+  </header>
+  <div class="test" id="testBar" hidden>動作テスト中：マイクの代わりに、合成音声の録音（samples/tts）を読み込みます。結果は保存されません。</div>
+  <div class="test" id="oldBar" hidden>以前の版が、このブラウザに録音を保存していました。今の版はブラウザに保存しません。
+    <button class="btn" id="oldLoad" style="margin-left:8px">この画面に読み込んで、ブラウザからは消す</button>
+    <button class="btn" id="oldDrop">読み込まずに消す</button></div>
+
+  <div class="panel">
+    <h2>録り方</h2>
+    <ol class="guide">
+      <li><b>静かな部屋で、マイクから 15 cm ほど。</b>息が直接マイクに当たらないよう、少し斜めに向けます。</li>
+      <li>字を選んで「録音」を押し、<i>「さー」</i>のように<b>子音をはっきり、母音を少し伸ばして</b> 1 回言います。高さは普通の話し声で構いません（1.6 秒で自動的に止まります）。</li>
+      <li>波形の<b style="color:var(--voice)">オレンジの部分が切り出した子音</b>です。「聞く」で確かめ、おかしければ録り直します。</li>
+      <li><b>段階ごとに試せます。</b>まず「さ行」だけ録ってデモで聞き、よければ次の段階へ進んでください。</li>
+      <li><b>濁音（段階 5）</b>も同じように<i>「がー」</i>と言います。声と一緒に鳴っている雑音だけを取り出すので、切り出した部分は「シャッ」「プツッ」という小さな音になります。</li>
+      <li><b>な・ま・ら・や・わ行（段階 6）</b>は、<i>「あなー」</i>のように<b>前に「あ」をつけて</b>、ふつうの速さで言います。声のまま舌や唇が動く音なので録音は重ねず、子音の長さと深さを測って、モデルの舌・唇・鼻の動きをそれに合わせます。録れたら「子音の動きを合わせる」を押します（1〜2 分ほど）。</li>
+      <li><b>母音（段階 4）</b>は<i>「あー」</i>と 1 秒ほど、低めの楽な高さでまっすぐ伸ばします。3 つ以上録れたら「母音を合わせる」を押すと、あなたの共鳴に合う声道の形を計算します（1〜2 分ほど）。</li>
+    </ol>
+  </div>
+
+  <div class="panel">
+    <div class="mic">
+      <button class="btn main" id="micBtn">マイクを使う</button>
+      <span id="micState">まだマイクにつないでいません</span>
+      <div class="meter"><i id="level"></i></div>
+      <span id="floor"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="tabs" id="tabs"></div>
+    <div class="cards" id="cards"></div>
+    <div class="fitbar" id="fitbar" hidden>
+      <button class="btn main" id="fitBtn" disabled>母音を合わせる</button>
+      <div class="meter"><i id="fitProg" style="background:var(--air)"></i></div>
+      <span id="fitState"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="stage">
+      <div class="say" id="say"><b id="sayK">さー</b><span id="sayS">字を選んで「録音」を押してください</span></div>
+      <div>
+        <canvas id="wave"></canvas>
+        <div class="res" id="res"></div>
+        <div class="row">
+          <button class="btn main" id="recBtn" disabled>録音（スペース）</button>
+          <button class="btn" id="playAll" disabled>聞く（全体）</button>
+          <button class="btn" id="playCut" disabled>聞く（子音だけ）</button>
+          <button class="btn" id="delBtn" disabled>この字を消す</button>
+          <span class="legend"><i style="background:#ff8463"></i>子音<i style="background:#62d6ff"></i>声（母音）</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="foot">
+      <span id="summary">まだ何も録音していません</span>
+      <a class="btn main sp" href="index.html" id="toDemo" style="text-decoration:none">デモで聞く →</a>
+      <button class="btn" id="exportBtn">ファイルに保存</button>
+      <button class="btn" id="importBtn">ファイルから読み込む</button><input type="file" id="importFile" accept=".json" hidden>
+      <button class="btn" id="clearBtn">全部消す</button>
+    </div>
+    <div id="keepNote" style="font-size:12px;opacity:.7;margin-top:8px"></div>
+  </div>
+</div>
+
+<script src="voice-engine.js"></script>
+<script src="vowelfit.js"></script>
+<script src="host.js"></script>
+<script src="song.js"></script>
+<script src="sonfit.js"></script>
+<script src="sampler.js"></script>
+<script>
+'use strict';
+const S = FableSampler, $ = id => document.getElementById(id);
+const TEST = new URLSearchParams(location.search).has('test');
+const FS = 48000, REC_SEC = 1.6;
+let ctx = null, micNode = null, recording = false, chunks = [], recN = 0;
+const items = {};   // 音節 → 切り出した子音（歌に重ねる素材）
+const raws = {};    // 音節 → { x: 録音そのもの, a: 解析結果 }（録り直さずに解析をやり直したり、母音を調べたりするために残す）
+const vmeas = {};   // 母音 → 測ったフォルマント [F1, F2, F3]
+let vfit = null, vstale = false, fitting = false; // 母音を合わせた結果 { len, table, measured, report }
+const smeas = {};   // 子音の字（n m r y w）→ 録音「あな」などから測った長さと深さ
+let sfit = null, sstale = false; // それに合わせたモデルの動き { table, measured, report }
+const isV = () => S.STAGES[stageI].kind === 'vowel', isS = () => S.STAGES[stageI].kind === 'son';
+const has = (st, it) => st.kind === 'vowel' ? !!vmeas[it.syl] : st.kind === 'son' ? !!smeas[it.cons] : !!items[it.syl];
+let stageI = 0, sel = S.STAGES[0].items[0];
+
+// ---------- デモへの受け渡し ----------
+// 録音はブラウザに保存しない。デモで使えるよう、このタブの中だけに置く（タブを閉じると消える）。元の録音（波形）はこの画面を離れると消える
+const NOTE0 = '録音はブラウザに保存されません。このタブを閉じると消えます。残したいときは「ファイルに保存」を使ってください。';
+const NOTE_FULL = '録音が大きく、デモへ受け渡せませんでした。「ファイルに保存」してから、デモの「ファイルから読み込む」で読み込んでください。';
+const MSG_OLD = '読み込めませんでした: ', MSG_DROP = '以前の録音をブラウザから消します。元に戻せません。よろしいですか？';
+const anyRec = () => !!(Object.keys(items).length || Object.keys(vmeas).length || Object.keys(smeas).length || vfit || sfit);
+// 受け渡し・保存する中身。測った値（母音の共鳴、な・ま・ら・や・わ行の長さと深さ）は「合わせる」を押す前でも入れておく（押す前に画面を離れても消えないように）
+const packNow = () => S.encodePack('自分の声', FS, items, vfit, sfit, { v: vmeas, s: smeas });
+const same = (a, b) => JSON.stringify(Object.keys(a).sort().map(k => [k, a[k]])) === JSON.stringify(Object.keys(b).sort().map(k => [k, b[k]]));
+async function persist() {
+  if (TEST) return;
+  const n = anyRec();
+  try { await S.savePack('mine', n ? packNow() : null); $('keepNote').textContent = NOTE0; }
+  catch (e) { try { await S.savePack('mine', null); } catch (e2) {} $('keepNote').textContent = NOTE_FULL; }
+}
+const consOf = syl => S.STAGES.find(s => s.id === 'son').items.find(it => it.syl === syl).cons;
+function takeIn(p, raw) {
+    if (raw && raw.raws) for (const k in raw.raws) { const q = raw.raws[k], x = new Float32Array(q.length); for (let i = 0; i < q.length; i++) x[i] = q[i] / 32767;
+      if (S.STAGE_OF[k] === 'v') { const a = S.analyzeVowel(x, raw.fs); raws[k] = { x, a }; if (a.ok) vmeas[k] = a.F; continue; }
+      if (S.STAGE_OF[k] === 'son') { const a = S.analyzeSon(x, raw.fs); raws[k] = { x, a }; if (a.ok) smeas[consOf(k)] = S.sonMeas(a); continue; }
+      const a = S.analyzeCons(k, x, raw.fs); raws[k] = { x, a }; if (a.ok) items[k] = S.makeItem(x, raw.fs, a); }
+    if (p) { const d = S.decodePack(p); if (!raw || !raw.raws) Object.assign(items, d.items); if (d.vowels) { vfit = d.vowels; if (vfit.ver !== FableVowelFit.FIT_VERSION) vstale = true; /* 合わせ方が新しくなった */ for (const k in vfit.measured) if (!vmeas[k]) vmeas[k] = vfit.measured[k]; }
+      if (d.son) { sfit = d.son; if (sfit.ver !== FableSonFit.SON_VERSION) sstale = true; for (const k in sfit.measured) if (!smeas[k]) smeas[k] = sfit.measured[k]; }
+      if (d.meas) { Object.assign(vmeas, d.meas.v); Object.assign(smeas, d.meas.s); }
+      if (vfit && !same(vfit.measured || {}, vmeas)) vstale = true; if (sfit && !same(sfit.measured || {}, smeas)) sstale = true; }
+}
+async function restore() {
+  if (TEST) return;
+  try { takeIn(await S.loadPack('mine'), null); } catch (e) { console.warn(e); }
+  try { if (await S.oldExists()) { if (await S.oldLoad()) $('oldBar').hidden = false; else await S.oldDrop(); } } catch (e) { console.warn(e); }
+}
+
+// ---------- 画面 ----------
+function drawTabs() {
+  $('tabs').innerHTML = '';
+  S.STAGES.forEach((st, i) => {
+    const b = document.createElement('button'), n = st.items.filter(it => has(st, it)).length;
+    b.className = i === stageI ? 'on' : ''; b.innerHTML = `${st.title}<span>${n} / ${st.items.length} 録音済み　${st.note}</span>`;
+    b.onclick = () => { stageI = i; sel = st.items.find(it => !has(st, it)) || st.items[0]; refresh(); };
+    $('tabs').appendChild(b);
+  });
+}
+function drawCards() {
+  $('cards').innerHTML = '';
+  for (const it of S.STAGES[stageI].items) {
+    const b = document.createElement('button'), r = raws[it.syl], ok = has(S.STAGES[stageI], it);
+    b.className = 'card' + (it === sel ? ' sel' : '') + (ok ? ' ok' : r ? ' bad' : '');
+    b.innerHTML = `<b>${it.kana}</b><span>${ok ? (isV() ? '✓ F1 ' + vmeas[it.syl][0] + ' Hz' : isS() ? '✓ ' + Math.round(smeas[it.cons].dur * 1000) + ' ms' : '✓ 子音 ' + Math.round(items[it.syl].lead * 1000) + ' ms') : r ? '✗ 録り直し' : '未録音'}</span>`;
+    b.onclick = () => { sel = it; refresh(); };
+    $('cards').appendChild(b);
+  }
+}
+function drawWave() {
+  const cv = $('wave'), r = cv.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1); cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+  const g = cv.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); const w = r.width, h = r.height; g.clearRect(0, 0, w, h);
+  const rec = raws[sel.syl]; if (!rec) { g.fillStyle = '#3c4767'; g.font = '12px "Yu Gothic UI", sans-serif'; g.textAlign = 'center'; g.fillText('録音するとここに波形が出ます', w / 2, h / 2); return; }
+  const x = rec.x, a = rec.a, n = x.length, X = i => i / n * w;
+  if (a.v1 > 0) { g.fillStyle = '#8ef0b433'; g.fillRect(X(a.v0), 0, X(a.v1) - X(a.v0), h); g.fillStyle = '#8ef0b4'; g.font = '10.5px "Yu Gothic UI", sans-serif'; g.textAlign = 'left'; g.fillText('測った区間', X(a.v0) + 4, 12); }
+  if (a.on > 0) { g.fillStyle = '#ff846333'; g.fillRect(X(a.start), 0, X(a.on) - X(a.start), h); }
+  if (a.voiced && a.voiced.length) { g.fillStyle = '#62d6ff22'; for (let f = 0; f < a.voiced.length; f++) if (a.voiced[f]) g.fillRect(X(f * a.hop), 0, Math.max(1, X(a.hop)), h); }
+  let pk = 0.02; for (let i = 0; i < n; i++) pk = Math.max(pk, Math.abs(x[i]));
+  for (let px = 0; px < w; px++) {
+    const i0 = Math.floor(px / w * n), i1 = Math.floor((px + 1) / w * n); let lo = 1, hi = -1; for (let i = i0; i < i1; i++) { if (x[i] < lo) lo = x[i]; if (x[i] > hi) hi = x[i]; }
+    const inC = a.on > 0 && i0 >= a.start && i0 < a.on; g.fillStyle = inC ? '#ff8463' : '#8fa0cf';
+    g.fillRect(px, h / 2 - hi / pk * h * 0.45, 1, Math.max(1, (hi - lo) / pk * h * 0.45));
+  }
+  if (a.on > 0) { g.strokeStyle = '#fff'; g.lineWidth = 1; g.beginPath(); g.moveTo(X(a.on), 0); g.lineTo(X(a.on), h); g.stroke(); g.fillStyle = '#fff'; g.font = '10.5px "Yu Gothic UI", sans-serif'; g.textAlign = 'left'; g.fillText(a.dur ? '母音' : '声の始まり', X(a.on) + 4, 12); }
+}
+function refresh() {
+  drawTabs(); drawCards(); drawWave();
+  $('sayK').textContent = sel.kana + 'ー';
+  const rec = raws[sel.syl], it = items[sel.syl], res = $('res');
+  if (isV()) {
+    const F = vmeas[sel.syl];
+    if (rec && !rec.a.ok) { res.className = 'res bad'; res.textContent = '✗ ' + rec.a.reason; }
+    else if (F) { res.className = 'res ok'; res.textContent = `✓ 共鳴 F1 ${F[0]} Hz　F2 ${F[1]} Hz　F3 ${F[2]} Hz` + (rec && rec.a.f0 ? `　（声の高さ ${Math.round(rec.a.f0)} Hz）` : ''); }
+    else { res.className = 'res'; res.textContent = ''; }
+  }
+  else if (isS()) {
+    const m = smeas[sel.cons];
+    if (rec && !rec.a.ok) { res.className = 'res bad'; res.textContent = '✗ ' + rec.a.reason; }
+    else if (m) { res.className = 'res ok'; res.textContent = `✓ 子音の長さ ${Math.round(m.dur * 1000)} ms　沈みの深さ ${m.depth.toFixed(0)} dB　（子音の間の音量: 低い帯域 ${m.lo.toFixed(0)} dB、高い帯域 ${m.hi.toFixed(0)} dB）`; }
+    else { res.className = 'res'; res.textContent = ''; }
+  }
+  else if (!rec && it) { res.className = 'res ok'; res.textContent = `✓ 読み込み済み（子音 ${Math.round(it.lead * 1000)} ms）`; }
+  else if (!rec) { res.className = 'res'; res.textContent = ''; }
+  else if (rec.a.ok) { res.className = 'res ok'; res.textContent = `✓ 子音 ${Math.round((rec.a.on - rec.a.start) / FS * 1000)} ms　母音に対する大きさ ${it.ratioDb.toFixed(0)} dB　雑音との差 ${Math.round(rec.a.peakDb - rec.a.floorDb)} dB`; }
+  else { res.className = 'res bad'; res.textContent = '✗ ' + rec.a.reason; }
+  $('recBtn').disabled = !(micNode || TEST) || recording || fitting; $('playAll').disabled = !rec; $('playCut').disabled = !it || isV() || isS(); $('delBtn').disabled = !rec && !it && !vmeas[sel.syl] && !(sel.cons && smeas[sel.cons]);
+  // 母音を合わせる
+  const nv = Object.keys(vmeas).length, ns = Object.keys(smeas).length; $('fitbar').hidden = !isV() && !isS(); $('fitBtn').disabled = fitting || (isS() ? ns < 1 : nv < 3); $('fitBtn').textContent = isS() ? '子音の動きを合わせる' : '母音を合わせる';
+  if (!fitting && isS()) $('fitState').innerHTML = sfit && !sstale ? `<b>合わせ済み</b>　${sfit.report.map(q => ['な', 'ま', 'ら', 'や', 'わ']['nmryw'.indexOf(q.c)] + '行 ' + Math.round(q.target.dur * 1000) + ' ms').join('、')}` : sstale ? '録り直したか、母音や合わせ方が変わりました。もう一度「子音の動きを合わせる」を押してください（録り直しは不要です）' : ns < 1 ? '1 つ録ると合わせられます（録っていない行は既定の動きのままです）' : '「子音の動きを合わせる」を押すと、モデルに同じ言葉を歌わせて、長さと深さを録音に近づけます（1〜2 分ほど）';
+  else if (!fitting) $('fitState').innerHTML = vfit && !vstale ? `<b>合わせ済み</b>　声道の長さ ${(vfit.len * 100).toFixed(1)} cm、測った母音 ${Object.keys(vfit.measured).length} 個（録っていない母音は長さから推定）${vfit.dropped && vfit.dropped.length ? `<br><b style="color:#f3cd7a">「${vfit.dropped.map(v => ({ a: 'あ', i: 'い', u: 'う', e: 'え', o: 'お' })[v]).join('」「')}」は測った値がほかの母音と合わないので使っていません（長さから推定した形で歌います）。録り直すと直ることがあります。</b>` : ''}` : vstale ? '母音を録り直したか、合わせ方が新しくなりました。もう一度「母音を合わせる」を押してください（録り直しは不要です）' : nv < 3 ? `あと ${3 - nv} 個録ると合わせられます` : '「母音を合わせる」を押すと、声道の形を計算します';
+  const n = Object.keys(items).length;
+  $('summary').textContent = n || nv || ns ? `録音済み: ${S.STAGES.map(st => st.title.split('　')[1] + ' ' + st.items.filter(i => has(st, i)).length + '/' + st.items.length).join('、')}${vfit && !vstale ? '　母音は合わせ済み' : ''}${sfit && !sstale ? '　子音の動きは合わせ済み' : ''}` : 'まだ何も録音していません';
+}
+
+// ---------- マイク ----------
+async function ensureCtx() { if (!ctx) ctx = new AudioContext({ sampleRate: FS }); await ctx.resume(); }
+async function openMic() {
+  await ensureCtx();
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+  const src = `class C extends AudioWorkletProcessor { process(inp) { const c = inp[0] && inp[0][0]; if (c) this.port.postMessage(c.slice(0)); return true; } } registerProcessor('cap', C);`;
+  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([src], { type: 'application/javascript' })));
+  micNode = new AudioWorkletNode(ctx, 'cap', { numberOfInputs: 1, numberOfOutputs: 0 });
+  ctx.createMediaStreamSource(stream).connect(micNode);
+  let lv = 0, fl = 1;
+  micNode.port.onmessage = e => {
+    const c = e.data; let pk = 0; for (let i = 0; i < c.length; i++) pk = Math.max(pk, Math.abs(c[i]));
+    lv = Math.max(pk, lv * 0.9); fl += (Math.min(fl, pk + 1e-5) - fl) * 0.2 + (pk - fl) * 0.002;
+    $('level').style.width = Math.max(0, Math.min(100, (20 * Math.log10(lv + 1e-6) + 60) / 60 * 100)) + '%';
+    $('floor').textContent = `静かなとき ${Math.round(20 * Math.log10(fl + 1e-6))} dB`;
+    if (recording) { chunks.push(c); recN += c.length; if (recN >= (isV() ? 2.2 : REC_SEC) * FS) finish(); }
+  };
+  $('micState').textContent = 'マイクにつながりました'; $('micBtn').disabled = true; refresh();
+}
+$('micBtn').onclick = () => openMic().catch(e => { $('micState').textContent = 'マイクを使えません: ' + e.message; });
+
+// ---------- 録音 → 解析 ----------
+async function record() {
+  if (recording) return;
+  if (TEST) { // 合成音声の WAV をマイクの代わりに使う
+    try { await ensureCtx(); const r = await fetch(`samples/tts/${sel.syl}.wav`); if (!r.ok) throw new Error('no file'); const buf = await ctx.decodeAudioData(await r.arrayBuffer()); accept(Float32Array.from(buf.getChannelData(0))); }
+    catch (e) { $('sayS').textContent = '動作テスト用の音声ファイル（samples/tts）がありません'; } // samples/ は開発用で、公開物には含めない
+    return;
+  }
+  chunks = []; recN = 0; recording = true; $('say').classList.add('rec'); $('sayS').textContent = 'どうぞ！'; refresh();
+}
+function finish() {
+  recording = false; $('say').classList.remove('rec'); $('sayS').textContent = '';
+  const x = new Float32Array(recN); let o = 0; for (const c of chunks) { x.set(c, o); o += c.length; }
+  accept(x);
+}
+function accept(x) {
+  if (isV()) { // 母音: 共鳴を測る
+    const a = S.analyzeVowel(x, FS); raws[sel.syl] = { x, a };
+    if (a.ok) { vmeas[sel.syl] = a.F; if (vfit) vstale = true; } else delete vmeas[sel.syl];
+    persist(); refresh(); $('sayS').textContent = a.ok ? '測れました' : 'もう一度どうぞ'; return;
+  }
+  if (isS()) { // 鼻音・ら行・半母音: 子音の長さと深さを測る
+    const a = S.analyzeSon(x, FS); raws[sel.syl] = { x, a };
+    if (a.ok) { smeas[sel.cons] = S.sonMeas(a); if (sfit) sstale = true; } else delete smeas[sel.cons];
+    persist(); refresh(); $('sayS').textContent = a.ok ? '測れました' : 'もう一度どうぞ'; return;
+  }
+  const a = S.analyzeCons(sel.syl, x, FS); raws[sel.syl] = { x, a };
+  if (a.ok) items[sel.syl] = S.makeItem(x, FS, a); else delete items[sel.syl];
+  persist(); refresh();
+  $('sayS').textContent = a.ok ? 'よさそうです。「聞く」で確かめてください' : 'もう一度どうぞ';
+}
+function playBuf(d, gain) { ensureCtx().then(() => { const b = ctx.createBuffer(1, d.length, FS); const c = b.getChannelData(0); for (let i = 0; i < d.length; i++) c[i] = d[i] * gain; const s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(); }); }
+$('recBtn').onclick = record;
+$('playAll').onclick = () => { const r = raws[sel.syl]; if (r) playBuf(r.x, 1); };
+$('playCut').onclick = () => { const it = items[sel.syl]; if (!it) return; let pk = 1e-6; for (const v of it.data) pk = Math.max(pk, Math.abs(v)); playBuf(it.data, 0.5 / pk); };
+$('delBtn').onclick = () => { delete raws[sel.syl]; delete items[sel.syl]; if (vmeas[sel.syl]) { delete vmeas[sel.syl]; if (vfit) vstale = true; } if (sel.cons && smeas[sel.cons]) { delete smeas[sel.cons]; if (sfit) sstale = true; } persist(); refresh(); };
+// 母音を合わせる: 測った共鳴に合う声道の形を計算する（歌うときと同じ声道モデルで共鳴を確かめながら形を変えていく）
+$('fitBtn').onclick = async () => {
+  fitting = true; refresh(); $('fitState').textContent = '計算中…';
+  if (isS()) { // 子音の動きを合わせる: モデルに「あな」などを歌わせ、録音と同じ測り方で比べながら動きを変えていく
+    try {
+      const F = FableSonFit.makeFitter({ voiceEngineFactory, hostFactory, buildSong: FableSong.buildSong, analyzeSon: S.analyzeSon, keyShift: S.keyShift });
+      const r = await F.fit(Object.assign({}, smeas), { vowels: vfit && !vstale ? vfit : null }, p => { $('fitProg').style.width = Math.round(p * 100) + '%'; $('fitState').textContent = `計算中… ${Math.round(p * 100)}%`; });
+      sfit = { table: r.table, measured: Object.assign({}, smeas), report: r.report, ver: r.ver }; sstale = false; await persist();
+    } catch (e) { console.error(e); $('fitState').textContent = '計算に失敗しました: ' + e.message; }
+    fitting = false; refresh(); return;
+  }
+  try {
+    const r = await FableVowelFit.makeFitter(voiceEngineFactory).fit(Object.assign({}, vmeas), (p, name) => { $('fitProg').style.width = Math.round(p * 100) + '%'; $('fitState').textContent = `計算中… ${Math.round(p * 100)}%`; }, { iters: 1000, itersVar: 500 });
+    vfit = { len: +r.len.toFixed(4), table: r.table, measured: Object.assign({}, vmeas), report: r.report, dropped: r.dropped, ver: r.ver }; vstale = false; if (sfit) sstale = true; await persist(); // 母音が変わると子音の動きも合わせ直しになる
+  } catch (e) { console.error(e); $('fitState').textContent = '計算に失敗しました: ' + e.message; }
+  fitting = false; refresh();
+};
+document.addEventListener('keydown', e => { if (e.code === 'Space' && !$('recBtn').disabled) { e.preventDefault(); record(); } });
+window.addEventListener('resize', drawWave);
+
+// ---------- ファイル ----------
+$('exportBtn').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(packNow())], { type: 'application/json' })); a.download = 'my-voice-pack.json'; a.click(); };
+$('importBtn').onclick = () => $('importFile').click();
+$('importFile').onchange = async e => { const f = e.target.files[0]; if (!f) return; try { e.target.value = ''; const pj = JSON.parse(await f.text()), p = S.decodePack(pj); if (!Object.keys(p.items).length && !p.vowels && !p.son && !p.meas) throw new Error('声のファイルではありません');
+  /* プレイ画面と同じ: すでに声があるときは、置き換える前に確かめる */
+  if ((Object.keys(items).length || Object.keys(vmeas).length || Object.keys(smeas).length) && !confirm(`いまの録音を、${f.name} の声で置き換えます。\nいまの録音は、ファイルに保存していなければ消えます。よろしいですか？`)) return;
+  for (const k in items) delete items[k]; for (const k in raws) delete raws[k]; for (const k in vmeas) delete vmeas[k]; for (const k in smeas) delete smeas[k]; vfit = null; vstale = false; sfit = null; sstale = false;
+  takeIn(pj, null); await persist(); refresh(); } catch (err) { alert('読み込めませんでした: ' + err.message); } };
+$('clearBtn').onclick = async () => { if (!confirm('録音をすべて消します。よろしいですか？')) return; for (const k in items) delete items[k]; for (const k in raws) delete raws[k]; for (const k in vmeas) delete vmeas[k]; for (const k in smeas) delete smeas[k]; vfit = null; vstale = false; sfit = null; sstale = false; await persist(); refresh(); };
+// 録っただけで「合わせる」をまだ押していないものは、デモの歌には使われない。離れる前に知らせる
+const unfit = () => { const u = []; if (Object.keys(vmeas).length >= 3 && (!vfit || vstale)) u.push('母音'); if (Object.keys(smeas).length && (!sfit || sstale)) u.push('な・ま・ら・や・わ行'); return u; };
+$('toDemo').onclick = e => { const u = TEST ? [] : unfit();
+  if (u.length && !confirm(`${u.join(' と ')}は録音しましたが、まだ合わせていません。\nこのままだと、デモの歌には反映されません（録音は残ります）。\n\nデモへ移りますか？　合わせるには「キャンセル」を押して、その段階の「${u[0] === '母音' ? '母音を合わせる' : '子音の動きを合わせる'}」を押してください。`)) { e.preventDefault(); return; }
+  try { if (!TEST && anyRec()) sessionStorage.setItem('fable-pack', 'mine'); } catch (e) {} };
+$('oldLoad').onclick = async () => { try { const o = await S.oldLoad(); if (o) takeIn(o.pack, o.raw); await S.oldDrop(); $('oldBar').hidden = true; await persist(); refresh(); } catch (err) { alert(MSG_OLD + err.message); } };
+$('oldDrop').onclick =async () => { if (!confirm(MSG_DROP)) return; await S.oldDrop(); $('oldBar').hidden = true; };
+
+if (TEST) $('testBar').hidden = false;
+$('keepNote').textContent = NOTE0;
+restore().then(refresh);
+// 動作テスト用: いまの段階の字をすべて「録音」する
+window.testFillStage = async () => { for (const it of S.STAGES[stageI].items) { sel = it; await record(); } };
+</script>
+</body>
+</html>

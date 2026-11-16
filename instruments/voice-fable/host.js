@@ -9,7 +9,8 @@ function hostFactory() {
       this.fs = fs; this.post = post || (() => {});
       this.Voice = Voice; this.piano = new Piano(fs); this.voice = new Voice(fs);
       this.piano.setParam('reverbMix', 0.26);
-      this.pianoVol = 1.5; this.voiceVol = 1.0; this.vibScale = 1; this.breathScale = 1;
+      this.pianoVol = 1.5; this.voiceVol = 1.0; this.vibScale = 1; this.breathScale = 1; this.smpGain = 1; this.samples = null;
+      this.regCur = 0; this.regPs = 0.42; this.regMode = 'mix'; // 高い声の出し方（既定はミドル）: chest = 地声のまま, mix = 高い音はミドル, falsetto = 高い音は裏声, all = ずっと裏声
       this.ev = []; this.ei = 0; this.t = 0; this.playing = false; this.dur = 0;
       this.pl = new Float32Array(128); this.pr = new Float32Array(128); this.vl = new Float32Array(128); this.vr = new Float32Array(128);
       this.sinceSnap = 0; this.snapEvery = Math.round(fs / 40);
@@ -18,19 +19,27 @@ function hostFactory() {
     msg(d) {
       const v = this.voice, p = this.piano;
       switch (d.type) {
-        case 'voice': this.playing = false; p.allOff(true); this.voice = new this.Voice(this.fs, { type: d.kind }); break; // 歌い手を替える（体の寸法が変わる）
+        case 'voice': this.playing = false; p.allOff(true); this.voice = new this.Voice(this.fs, d.vowels ? { type: d.kind, vowels: d.vowels.table, vowelsLen: d.vowels.len, tractLength: d.vowels.len } : { type: d.kind }); break; // 歌い手を替える（体の寸法が変わる）
+        case 'samples': this.samples = d.items || null; break; // 録音した子音 { 音節: { data, on, fs } }
         case 'load': this.ev = d.events; this.dur = d.dur; break;
         case 'play': this.seek(d.t || 0); this.playing = true; break;
         case 'seek': if (!this.playing) this.seek(d.t || 0); break; // 停止中に再生位置だけ動かす（音は出さない）
-        case 'stop': this.playing = false; p.allOff(false); v.ramp('ps', 0, 0.15); v.ramp('vib', 0, 0.1); v.ramp('air', 1, 0.05); for (const q of ['lab', 'alv', 'pal', 'vel']) v.release(q, 0.05); v.ramp('velum', 0, 0.05); v.ramp('abd', 0.05e-4, 0.05); break;
-        case 'param': if (d.name in this) this[d.name] = d.value; else if (d.target === 'voice') v[d.name] = d.value; break;
+        case 'stop': this.playing = false; p.allOff(false); v.ramp('ps', 0, 0.15); v.ramp('vib', 0, 0.1); v.ramp('air', 1, 0.05); v.ramp('nz', 1, 0.05); v.ramp('bmax', 1, 0.05); v.ramp('ng', 0, 0); v.ramp('nlp', v.nlp0, 0.05); for (const q of ['lab', 'alv', 'pal', 'vel']) v.release(q, 0.05); v.ramp('velum', 0, 0.05); v.ramp('abd', 0.05e-4, 0.05); break;
+        case 'param': if (d.name in this) this[d.name] = d.value; else if (d.target === 'voice') v[d.name] = d.value;
+          if (d.name === 'regMode') v.ramp('reg', this.regFor(v.to[0]), 0.15); break; // v.to[0]: いま向かっている高さ
         // 自由演奏: 母音と音高を直接指定
         case 'breath': v.ramp('breath', 0.01e-4 * d.value, 0.1); v.aspGain = 0.012 * (0.5 + 0.5 * d.value); break;
-        case 'sing': v.setVowel(d.vowel, 0.08, d.midi); v.ramp('pitch', d.midi, 0.06); v.ramp('ps', d.ps || 950, 0.06); v.ramp('vib', 30 * this.vibScale, 0.6); break;
+        case 'sing': v.regHint = this.regCur = this.regFor(d.midi); v.setVowel(d.vowel, 0.08, d.midi); v.ramp('pitch', d.midi, 0.06); v.ramp('reg', this.regCur, 0.08); v.ramp('ps', (d.ps || 950) * (1 - this.regPs * this.regCur), 0.06); v.ramp('vib', 30 * this.vibScale, 0.6); break;
         case 'hush': v.ramp('ps', 0, 0.15); v.ramp('vib', 0, 0.1); break;
         case 'pianoOn': p.noteOn(d.m, d.v); break;
         case 'pianoOff': p.noteOff(d.m); break;
       }
+    }
+    // 音の高さ → 声区（0 = 地声 … 1 = 裏声）。換声点（男声 C4–F4、女声 G4–C5）をまたいで少しずつ切り替える
+    regFor(m) {
+      const md = this.regMode; if (md === 'all') return 1; if (md !== 'mix' && md !== 'falsetto') return 0;
+      const lo = this.voice.type === 'female' ? 67 : 60, s = Math.max(0, Math.min(1, (m - lo) / 5));
+      return (md === 'mix' ? 0.5 : 1) * s * s * (3 - 2 * s);
     }
     seek(t) {
       this.piano.allOff(true); this.voice.reset(); this.t = t; this.ei = 0;
@@ -43,10 +52,12 @@ function hostFactory() {
         case 1: p.noteOn(e[2], e[3]); break;
         case 2: p.pedal(false); break;
         case 3: p.pedal(true); break;
-        case 10: v.ramp(e[2], e[2] === 'vib' ? e[3] * this.vibScale : e[2] === 'breath' ? e[3] * this.breathScale : e[3], e[4]); break;
-        case 11: v.setVowel(e[2], e[3], e[4]); break;
+        case 10: if (e[2] === 'pitch') { this.regCur = this.regFor(e[3]); v.ramp('reg', this.regCur, Math.max(0.08, e[4])); }
+          v.ramp(e[2], e[2] === 'vib' ? e[3] * this.vibScale : e[2] === 'breath' ? e[3] * this.breathScale : e[2] === 'ps' && e[3] > 0 ? e[3] * (1 - this.regPs * this.regCur) : e[3], e[4]); break; // 高さに合わせて声区も変える
+        case 11: if (e[4]) v.regHint = this.regCur = this.regFor(e[4]); v.setVowel(e[2], e[3], e[4], e[5]); break;
         case 12: v.constrict(e[2], e[3], e[4]); break;
         case 13: v.release(e[2], e[3]); break;
+        case 20: { const it = this.samples && this.samples[e[2]]; if (it) v.playSample(it.data, this.smpGain * 0.1, Math.round(e[3] * it.fs), it.fs / this.fs); break; } // 録音の子音を重ねる
       }
     }
     // L, R (Float32Array) の [0, n) を埋める。V があれば歌だけの信号も書く（スペクトル表示用）

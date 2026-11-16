@@ -78,19 +78,29 @@
   .note b { color: var(--ink); font-weight: 600; }
   .note i { font-style: normal; color: var(--air); }
   .controls a { color: var(--air); text-decoration: none; }
+  .smp { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  .smp .smpT { color: var(--ink); font-weight: 600; }
+  .smp select, .controls label select { background: #131a2e; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font-family: inherit; font-size: 12.5px; max-width: 100%; }
+  .smp .stg { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .smp .stg label { flex-direction: row !important; align-items: center !important; gap: 5px !important; cursor: pointer; }
+  .smp .stg input { accent-color: var(--voice); }
+  .smp .stg label.off { opacity: .4; }
   /* 横に広い画面: コントロールを右端に縦に並べる */
   @media (min-width: 1100px) {
     .wrap { max-width: 1640px; display: grid; grid-template-columns: minmax(0, 1fr) clamp(190px, 16vw, 250px); column-gap: 16px; }
     .wrap > * { grid-column: 1 / -1; }
     .wrap > .grid { grid-column: 1; }
     .wrap > .controls { grid-column: 2; grid-row: 2; align-self: stretch; margin-top: 0;
-      flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 16px; padding: 18px 16px;
+      flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 12px; padding: 14px 16px; height: 520px; overflow-y: auto;
       background: linear-gradient(180deg, #111830cc, #0b101dcc); border: 1px solid var(--line); border-radius: 14px; }
     .controls label { flex-direction: column; align-items: stretch; gap: 6px; }
     .controls input[type=range] { width: 100%; }
     .controls .vowels { margin-left: 0; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid var(--line); }
     .controls .vowels input[type=range] { flex-basis: 100%; }
-    .controls a { padding-top: 14px; border-top: 1px solid var(--line); }
+    .controls a { padding-top: 12px; border-top: 1px solid var(--line); }
+    .controls .smp { flex-direction: column; align-items: stretch; padding-top: 12px; border-top: 1px solid var(--line); }
+    .controls .smp a { padding-top: 0; border-top: 0; }
+    .controls .vowels { padding-top: 12px; }
   }
   @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .right { height: auto; } .right .panel { height: 170px; } h1 { font-size: 26px; } .lyrics { font-size: 24px; } }
 </style>
@@ -126,6 +136,16 @@
     <label>ピアノ <input type="range" id="pVol" min="0" max="3" step="0.01" value="1.5"></label>
     <label>ビブラート <input type="range" id="vib" min="0" max="2.5" step="0.01" value="1"></label>
     <label>息まじり <input type="range" id="breath" min="0" max="6" step="0.01" value="6"></label>
+    <label title="高い音での声の出し方。ミドルと裏声は、男声は C4 から F4、女声は G4 から C5 にかけて少しずつ切り替わります">高い声 <select id="reg"><option value="chest">地声のまま</option><option value="mix" selected>ミドル</option><option value="falsetto">裏声</option><option value="all">ずっと裏声</option></select></label>
+    <label title="曲全体の高さ。元の調（男声のハ長調）から半音いくつ上げ下げするか。声を切り替えると、その声の標準の高さへ自動で動きます。ダブルクリックで標準に戻ります">キー<input type="range" id="key" min="-8" max="14" step="1" value="0"><span id="keyV" style="min-width:2.2em">±0</span></label>
+    <div class="smp">
+      <span class="smpT">録音した声</span>
+      <select id="pack" title="子音の息の音を録音に置き換え、母音は録音の共鳴に声道の形を合わせる"><option value="none">使わない（モデルだけ）</option><option value="mine" disabled>自分の声（未録音）</option></select>
+      <div class="stg" id="stages"></div>
+      <label>子音の強さ <input type="range" id="smpGain" min="0" max="3" step="0.01" value="1"></label>
+      <a href="#" id="packFileBtn" title="録音画面で書き出した声のファイル（.json）を読み込む。録音画面の「自分の声」は書き換えません">ファイルから読み込む</a><input type="file" id="packFile" accept=".json,application/json" hidden>
+      <a href="record.html">自分の声を録音する →</a>
+    </div>
     <a id="wav" href="out/song.wav" download="naminokatachi.wav">WAV（書き出し済み）</a>
     <div class="vowels">自分で鳴らす
       <input type="range" id="freeP" min="50" max="67" step="1" value="60" title="音の高さ">
@@ -134,7 +154,7 @@
   </div>
 
   <div class="note">
-    <div><b>録音もサンプルも使っていません。</b>声帯は 2 つの質量とばねでできていて、肺からの空気に押されて自分で震えはじめます（二質量モデル）。波形はどこにも書かれていません。</div>
+    <div><b>もとは録音もサンプルも使っていません。</b>（「録音した声」を選んだときだけ、無声子音の息の音を録音に置き換え、母音は録音から測った共鳴に声道の形を合わせます。）声帯は 2 つの質量とばねでできていて、肺からの空気に押されて自分で震えはじめます（二質量モデル）。波形はどこにも書かれていません。</div>
     <div><b>音程は耳で合わせています。</b>声帯の張りを決めても、出る高さは息の強さや口の形で変わります。1 周期ごとに高さを測って張りを直す——人と同じやり方です。</div>
     <div><b>母音は管の形です。</b>声道を約 40 個の短い管に分け、空気の圧力波の反射を計算します。<i>あ・い・う・え・お</i> の違いは舌と唇が作る断面積だけ。</div>
     <div><b>女声は体の寸法が違うだけです。</b>声帯を相似形のまま 0.72 倍に、声道を 15 cm から 13 cm に縮めています。式は男声と同じで、曲は 7 半音上げて歌います。</div>
@@ -146,9 +166,18 @@
 <script src="voice-engine.js"></script>
 <script src="host.js"></script>
 <script src="song.js"></script>
+<script src="sampler.js"></script>
 <script>
 'use strict';
-let voiceType = 'male', song = FableSong.buildSong({ voice: voiceType });
+let voiceType = 'male';
+// 録音した子音: どのパックを使うか、どの段階まで使うか
+let packSel = 'none'; const packs = {}, stageOn = {}; for (const st of FableSampler.STAGES) stageOn[st.id] = true;
+const curPack = () => packSel === 'none' ? null : packs[packSel] || null;
+const curVowels = () => { const p = curPack(); return p && p.vowels && stageOn.v ? p.vowels : null; }; // 母音もその人に合わせるか
+function sendVoice() { if (!node) return; node.port.postMessage({ type: 'voice', kind: voiceType, vowels: curVowels() }); node.port.postMessage({ type: 'breath', value: +$('breath').value }); }
+let keyOfs = 0; // キーを、いまの声の標準から自分で動かした分（半音）
+function makeSong() { const p = curPack(); return FableSong.buildSong({ voice: voiceType, samples: p ? FableSampler.leads(p, Object.keys(stageOn).filter(k => stageOn[k])) : null, shift: FableSampler.keyShift(curVowels()) + keyOfs, son: p && p.son && stageOn.son ? p.son.table : null }); } // 声道の長い人は、その分だけ曲を下げる
+let song = makeSong();
 const $ = id => document.getElementById(id);
 const C_SOUND = 350, RHO = 1.14;
 const COL = { voice: '#ff8463', air: '#62d6ff', piano: '#f3cd7a', dim: '#7f8aa8', ink: '#e8ecf6', line: '#1e2740' };
@@ -181,7 +210,7 @@ async function initAudio() {
       snap = d; snapAt = performance.now(); songT = d.t; if (d.playing) { f0Hist.push({ t: d.t, f: d.f0 }); if (f0Hist.length > 4000) f0Hist.splice(0, 1000); }
     } else if (d.type === 'end') { playing = false; setIcon('▶'); }
   };
-  node.port.postMessage({ type: 'voice', kind: voiceType });
+  sendVoice(); sendSamples();
   node.port.postMessage({ type: 'load', events: song.events, dur: song.dur });
   sendParams(); node.port.postMessage({ type: 'breath', value: +$('breath').value }); // 再生前に動かしたスライダーも反映する
 }
@@ -191,8 +220,64 @@ function sendParams() {
   node.port.postMessage({ type: 'param', name: 'pianoVol', value: +$('pVol').value });
   node.port.postMessage({ type: 'param', name: 'vibScale', value: +$('vib').value });
   node.port.postMessage({ type: 'param', name: 'breathScale', value: +$('breath').value });
+  node.port.postMessage({ type: 'param', name: 'smpGain', value: +$('smpGain').value });
+  node.port.postMessage({ type: 'param', name: 'regMode', value: $('reg').value });
 }
-for (const id of ['vVol', 'pVol', 'vib', 'breath']) $(id).addEventListener('input', () => {
+function sendSamples() { if (node) { const p = curPack(); node.port.postMessage({ type: 'samples', items: p ? p.items : null }); } }
+// パックや段階を切り替える: 曲を組み立て直す（子音の長さに合わせて舌と声帯の動きの時刻が変わる）
+function applyPack() {
+  const was = playing, t = songT; if (playing) stop();
+  song = makeSong(); setSong();
+  if (node) { sendVoice(); sendSamples(); node.port.postMessage({ type: 'load', events: song.events, dur: song.dur }); }
+  { const fp = $('freeP'), d = song.transpose; fp.min = 50 + d; fp.max = 72 + d; if (+fp.value < 50 + d || +fp.value > 72 + d) fp.value = 60 + d; } // 「自分で鳴らす」の音域も調に合わせる
+  const p = curPack();
+  for (const st of FableSampler.STAGES) { const el = $('stg-' + st.id), n = !p ? 0 : st.kind === 'vowel' ? (p.vowels ? Object.keys(p.vowels.measured).length : 0) : st.kind === 'son' ? (p.son ? Object.keys(p.son.table).length : 0) : st.items.filter(it => p.items[it.syl]).length; el.disabled = !n; el.parentNode.className = n ? '' : 'off'; el.parentNode.title = !p ? '' : st.kind === 'vowel' ? (p.vowels ? `声道の長さ ${(p.vowels.len * 100).toFixed(1)} cm、測った母音 ${n} 個` : '母音は未録音') : st.kind === 'son' ? `${n} 個の子音の動き` : `${n} / ${st.items.length} 音節`; }
+  showKey();
+  try { sessionStorage.setItem('fable-pack', packSel); sessionStorage.setItem('fable-stages', JSON.stringify(stageOn)); } catch (e) {}
+  if (was) play(t);
+}
+$('reg').onchange = () => { try { sessionStorage.setItem('fable-reg', $('reg').value); } catch (e) {} sendParams(); };
+// キーのスライダーは、実際に歌う調そのもの（元の調 = 男声のハ長調からの半音数）を指す。
+// 声を切り替えると、その声の標準（女声は +7、声道の長い録音の声はその分だけ低く）へスライダーごと動く。そこから自分で動かした分（keyOfs）は、声を切り替えても保つ。
+const KEY_NAMES = ['ハ', '変ニ', 'ニ', '変ホ', 'ホ', 'ヘ', '嬰ヘ', 'ト', '変イ', 'イ', '変ロ', 'ロ'];
+const keyAuto = () => song.transpose - keyOfs; // いまの声の標準
+function showKey(drag) {
+  const f = n => n > 0 ? '+' + n : n < 0 ? '−' + (-n) : '±0', auto = keyAuto(); if (!drag) $('key').value = song.transpose;
+  const tot = +$('key').value;
+  $('keyV').textContent = `${KEY_NAMES[((tot % 12) + 12) % 12]}長調 ${f(tot)}${tot !== auto ? `（この声の標準は ${f(auto)}）` : auto ? '（この声の標準）' : ''}`;
+}
+$('key').oninput = () => showKey(true);
+$('key').onchange = () => { keyOfs = +$('key').value - keyAuto(); applyPack(); }; // 曲を組み立て直す
+$('key').ondblclick = () => { keyOfs = 0; applyPack(); };                          // ダブルクリックで標準へ戻す
+try { for (const k of ['fable-pack', 'fable-stages', 'fable-reg']) localStorage.removeItem(k); } catch (e) {} // 以前の版が残した設定を消す（今はタブの中だけに置く）
+try { const r = sessionStorage.getItem('fable-reg'); if (r) $('reg').value = r; } catch (e) {}
+// 「自分の声」は 1 つだけ。録音画面で録ったものも、ファイルから読み込んだものも同じ場所に入り、録音画面とこの画面で共有する
+function setMine(j) {
+  const p = FableSampler.decodePack(j), n = Object.keys(p.items).length; if (!n && !p.vowels && !p.son && !p.meas) throw new Error('empty');
+  packs.mine = p; const o = $('pack').querySelector('[value=mine]'); o.disabled = false; o.textContent = `自分の声（子音 ${n}${p.vowels ? '＋母音' : ''}${p.son ? '＋な行ほかの動き' : ''}）`;
+}
+// 声のファイルを読み込む。すでに自分の声があるときは、置き換える前にここで確かめる
+async function loadVoiceFile(f) {
+  let j; try { j = JSON.parse(await f.text()); FableSampler.decodePack(j); if (!Object.keys(j.items || {}).length && !j.vowels && !j.son && !j.meas) throw new Error('empty'); }
+  catch (er) { alert('このファイルは声のファイルとして読み込めませんでした: ' + f.name); return; }
+  if (packs.mine && !confirm(`いまの「自分の声」を、${f.name} の声で置き換えます。\nいまの声は、ファイルに保存していなければ消えます。よろしいですか？`)) return;
+  setMine(j); packSel = $('pack').value = 'mine'; applyPack();
+  try { await FableSampler.savePack('mine', j); } catch (er) { alert('声が大きく、録音画面へは受け渡せませんでした。この画面ではそのまま使えます。'); }
+}
+async function loadPacks() {
+  for (const st of FableSampler.STAGES) { const l = document.createElement('label'); l.innerHTML = `<input type="checkbox" id="stg-${st.id}" checked>${st.title.split('　')[1]}`; $('stages').appendChild(l); l.firstChild.onchange = e => { stageOn[st.id] = e.target.checked; applyPack(); }; }
+  // 合成音声（Windows の読み上げ音声）から作った素材は、開発時の確認用。再配布してよいか確かめられていないので、公開物には含めない（samples/ は配らない）。
+  // 手元で試すときだけ、URL に ?tts を付けると選択肢に出る。ファイルがなければ何も起きない。
+  if (new URLSearchParams(location.search).has('tts')) try { const r = await fetch('samples/tts-pack.json'); if (r.ok) { packs.tts = FableSampler.decodePack(await r.json()); const o = document.createElement('option'); o.value = 'tts'; o.textContent = '合成音声（テスト）'; $('pack').insertBefore(o, $('pack').querySelector('[value=mine]')); } } catch (e) {}
+  try { const j = await FableSampler.loadPack('mine'); if (j) setMine(j); } catch (e) {}
+  $('packFileBtn').onclick = e => { e.preventDefault(); $('packFile').click(); };
+  $('packFile').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) loadVoiceFile(f); };
+  try { const s = sessionStorage.getItem('fable-pack'); if (s && (s === 'none' || packs[s])) packSel = s; Object.assign(stageOn, JSON.parse(sessionStorage.getItem('fable-stages') || '{}')); } catch (e) {}
+  $('pack').value = packSel; for (const st of FableSampler.STAGES) $('stg-' + st.id).checked = stageOn[st.id];
+  $('pack').onchange = () => { packSel = $('pack').value; applyPack(); };
+  applyPack();
+}
+for (const id of ['vVol', 'pVol', 'vib', 'breath', 'smpGain']) $(id).addEventListener('input', () => {
   sendParams();
   if (id === 'breath' && node) node.port.postMessage({ type: 'breath', value: +$('breath').value });
 });
@@ -233,12 +318,12 @@ var shownLine = -2; setSong();
 function setVoice(type) {
   if (type === voiceType) return;
   if (playing) stop();
-  voiceType = type; song = FableSong.buildSong({ voice: type }); setSong();
+  voiceType = type; song = makeSong(); setSong(); showKey();
   for (const b of $('voiceSeg').children) b.classList.toggle('on', b.dataset.t === type);
   playing = false; started = false; songT = 0; rollT = 0; rollFollow = true; f0Hist.length = 0; setIcon('▶');
   const fp = $('freeP'), d = song.transpose; fp.min = 50 + d; fp.max = 67 + d; fp.value = 60 + d;
   $('wav').href = type === 'female' ? 'out/song-female.wav' : 'out/song.wav'; $('wav').download = type === 'female' ? 'naminokatachi-female.wav' : 'naminokatachi.wav';
-  if (node) { node.port.postMessage({ type: 'voice', kind: type }); node.port.postMessage({ type: 'load', events: song.events, dur: song.dur }); sendParams(); node.port.postMessage({ type: 'breath', value: +$('breath').value }); }
+  if (node) { sendVoice(); node.port.postMessage({ type: 'load', events: song.events, dur: song.dur }); sendParams(); node.port.postMessage({ type: 'breath', value: +$('breath').value }); }
 }
 for (const b of $('voiceSeg').children) b.onclick = () => setVoice(b.dataset.t);
 function drawLyrics(t) {
@@ -587,6 +672,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+loadPacks();
 </script>
 </body>
 </html>
