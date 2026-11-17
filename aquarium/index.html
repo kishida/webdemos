@@ -1342,6 +1342,7 @@ if (new URLSearchParams(location.search).has('xremu')) {
 navigator.xr?.isSessionSupported('immersive-vr')
   .then((ok) => { if (ok) document.body.appendChild(VRButton.createButton(renderer)); })
   .catch(() => {});
+const VR_SNOW_SCALE = 0.3;
 const vrStart = { pos: new THREE.Vector3(0, HALL_FLOOR, 2.4) };
 renderer.xr.addEventListener('sessionstart', () => {
   rig.position.copy(vrStart.pos); rig.rotation.set(0, 0, 0);
@@ -1349,7 +1350,9 @@ renderer.xr.addEventListener('sessionstart', () => {
   // 点の大きさ：片目の解像度と、ヘッドセットの広い視野（投影の倍率がおよそ半分）に合わせる
   const layer = renderer.xr.getSession().renderState.baseLayer;
   const h = layer ? layer.framebufferHeight : 1600;
-  for (const p of [snow, bubbles]) p.material.uniforms.uPx.value = h * 0.5;
+  bubbles.material.uniforms.uPx.value = h * 0.5;
+  // マリンスノーは画面では遠目なので粒を大きめにしているが、VR では実物大に見えてゴミのように目立つ。ずっと小さくする
+  snow.material.uniforms.uPx.value = h * 0.5 * VR_SNOW_SCALE;
   renderer.xr.setFoveation?.(1);
   sun.shadow.mapSize.set(1024, 1024); sun.shadow.map?.dispose(); sun.shadow.map = null;
   document.getElementById('plate').style.display = 'none';
